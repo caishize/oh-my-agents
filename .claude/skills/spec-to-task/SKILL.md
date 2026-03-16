@@ -15,13 +15,17 @@ context-rich task definitions.
 
 ## Key Insight from OpenAI
 
-Their team found two critical patterns:
+Their team found three critical patterns:
 
 1. **Separate planning and execution phases** — Never let agents start implementing
    before the task is fully specified with failing tests
 2. **Slack-to-codebase pattern** — When technical decisions happen in chat, immediately
    encode them: "When someone had a technical decision in Slack, they would tag Codex:
    '@codex please add guardrails to our codebase' and get 4 PRs in 15 minutes"
+3. **JSON > Markdown for progress tracking** — Anthropic found that JSON feature tracking
+   is superior to Markdown because agents less frequently overwrite structured data.
+   Use JSON progress files to enable "shift handoff" where new sessions quickly understand
+   prior work state
 
 ## Task
 

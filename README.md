@@ -194,17 +194,34 @@ OpenAI's key throughput multiplier: **3.5 PRs per engineer per day**, increasing
 > "When someone had a technical decision in Slack, they would tag Codex:
 > '@codex please add guardrails to our codebase' and get 4 PRs in 15 minutes"
 
+### Delegate-Review-Own (across the SDLC)
+
+OpenAI defines clear human/agent responsibilities at each phase:
+
+| Phase | Agent Handles | Human Owns |
+|-------|--------------|------------|
+| **Plan** | Read specs, cross-reference codebase, flag ambiguities | Strategic prioritization |
+| **Design** | Scaffold boilerplate, translate mockups | Architecture decisions |
+| **Build** | Multi-step implementation (models, APIs, tests, docs) | Trade-offs, intent |
+| **Test** | Suggest edge cases, generate test cases | Coverage alignment with specs |
+| **Review** | Execute code, trace logic, find P0/P1 bugs | Final merge decision |
+| **Docs** | Summarize functionality, generate diagrams | Structure, accuracy |
+| **Deploy** | Parse logs, surface anomalies | Production responsibility |
+
 ## Key Principles from OpenAI
 
 - **"Agents have no tacit knowledge; until it is made explicit, it doesn't exist"**
 - **"If you can articulate what code you dislike, write that down"** as a lint rule
 - **"Say No to Slop"** — never lower review standards, even to ship faster
 - **"When the agent struggles, treat it as an environment design problem"**
+- **"Every agent mistake becomes a permanent guardrail, not a one-time fix"** (Mitchell Hashimoto)
 - **Progressive disclosure** — CLAUDE.md is the TOC, docs/ is the encyclopedia
 - **Structured formats > prose** — agents comply better with JSON/YAML rules
 - **Error messages are context** — lint errors must include remediation instructions
+- **JSON > Markdown for tracking** — agents less frequently overwrite structured data
 - **Build rippable harnesses** — keep constraints easy to update as models improve
 - **Encode taste, not just rules** — each expert's knowledge multiplies across all agents
+- **Speed increases communication need** — faster AI output requires more human check-ins, not fewer
 
 ## References
 

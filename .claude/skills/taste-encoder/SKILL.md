@@ -15,6 +15,9 @@ lint rule, structural test, or automated reviewer.
 > When a front-end expert joined OpenAI's team, they encoded React component architecture
 > patterns (single-file hooks, small testable components). All agents immediately benefited.
 
+> Mitchell Hashimoto's principle: **"Anytime you find an agent makes a mistake, you take
+> the time to engineer a solution such that the agent never makes that mistake again."**
+
 ## Why This Matters
 
 Without encoding, agents will:
