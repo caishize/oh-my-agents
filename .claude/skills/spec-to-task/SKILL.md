@@ -120,7 +120,91 @@ Each task must include everything an agent needs — no tacit knowledge:
 3. `docs/CONVENTIONS.md#[relevant-rules]`
 ```
 
-### Step 5: Create Execution Plan
+### Step 5: Create Progress Tracking File (JSON)
+
+Anthropic found that **JSON progress files are superior to Markdown** because agents
+less frequently overwrite structured data. Create a `progress.json` for shift handoff:
+
+```json
+{
+  "feature": "[Feature Name]",
+  "status": "in_progress",
+  "created": "YYYY-MM-DD",
+  "updated": "YYYY-MM-DD",
+  "overview": "[1-2 sentences]",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Define types in src/types/[feature].ts",
+      "layer": "types",
+      "phase": 1,
+      "status": "pending",
+      "files": ["src/types/[feature].ts"],
+      "depends_on": [],
+      "acceptance": ["test_[feature]_types passes", "lint passes"]
+    },
+    {
+      "id": 2,
+      "title": "Add config in src/config/[feature].ts",
+      "layer": "config",
+      "phase": 1,
+      "status": "pending",
+      "files": ["src/config/[feature].ts"],
+      "depends_on": [],
+      "acceptance": ["test_[feature]_config passes"]
+    },
+    {
+      "id": 3,
+      "title": "Repository layer src/repo/[feature].ts",
+      "layer": "repo",
+      "phase": 2,
+      "status": "pending",
+      "files": ["src/repo/[feature].ts"],
+      "depends_on": [1],
+      "acceptance": ["test_[feature]_repo passes"]
+    },
+    {
+      "id": 4,
+      "title": "Service logic src/services/[feature].ts",
+      "layer": "service",
+      "phase": 2,
+      "status": "pending",
+      "files": ["src/services/[feature].ts"],
+      "depends_on": [1, 3],
+      "acceptance": ["test_[feature]_service passes"]
+    },
+    {
+      "id": 5,
+      "title": "API endpoint src/api/[feature].ts",
+      "layer": "runtime",
+      "phase": 3,
+      "status": "pending",
+      "files": ["src/api/[feature].ts"],
+      "depends_on": [4],
+      "acceptance": ["test_[feature]_api passes", "no layer violations"]
+    },
+    {
+      "id": 6,
+      "title": "Verification: all tests pass, docs updated",
+      "layer": "cross-cutting",
+      "phase": 4,
+      "status": "pending",
+      "files": [],
+      "depends_on": [1, 2, 3, 4, 5],
+      "acceptance": ["all tests pass", "docs updated", "lint clean"]
+    }
+  ],
+  "decisions": [],
+  "risks": []
+}
+```
+
+Each task `status` transitions: `pending` → `in_progress` → `done` (or `blocked`).
+New sessions read this file to understand prior work state ("shift handoff").
+
+### Step 6: Create Execution Plan (Markdown Summary)
+
+Also create a human-readable summary:
 
 ```markdown
 # Implementation Plan: [Feature Name]
@@ -143,12 +227,9 @@ Each task must include everything an agent needs — no tacit knowledge:
 
 ### Phase 3: Integration
 - [ ] Task 5: API endpoint `src/api/[feature].ts`
-- [ ] Task 6: UI component `src/ui/[feature]/`
 
 ### Phase 4: Verification
-- [ ] Task 7: Run all tests, verify passing
-- [ ] Task 8: Update docs (CLAUDE.md if needed, docs/API-CONTRACTS.md)
-- [ ] Task 9: Add observability (logging, metrics via Providers)
+- [ ] Task 6: Run all tests, update docs, add observability
 
 ## ADR (if needed)
 If this feature introduces a new pattern or technology choice, add an ADR to

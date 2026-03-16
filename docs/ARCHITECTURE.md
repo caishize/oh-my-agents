@@ -88,7 +88,7 @@ This plugin leverages specific Claude Code capabilities:
 | Feature | Where Used | Why |
 |---------|-----------|-----|
 | `allowed-tools` | legibility-score, harness-review, entropy-sweep | Enforce read-only behavior for review/scan skills |
-| `context: fork` + `agent` | legibility-score | Run assessment in isolated subagent context |
+| `allowed-tools` (read-only) | legibility-score | Restrict to Read/Glob/Grep/Bash for safe assessment |
 | `memory: project` | All agents | Accumulate findings across sessions |
 | `background: true` | arch-guard-agent, entropy-sweep-agent | Run scans without blocking the main conversation |
 | `disallowedTools` | All agents | Prevent agents from modifying code |

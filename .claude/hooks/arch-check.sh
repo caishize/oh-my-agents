@@ -16,8 +16,23 @@ set -euo pipefail
 # Read JSON input from stdin
 INPUT=$(cat)
 
+# JSON parser: prefer jq, fallback to python3
+json_get() {
+    local jq_expr="$1"
+    local py_expr="$2"
+    if command -v jq >/dev/null 2>&1; then
+        echo "$INPUT" | jq -r "$jq_expr" 2>/dev/null || echo ""
+    elif command -v python3 >/dev/null 2>&1; then
+        echo "$INPUT" | python3 -c "$py_expr" 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
 # Parse the file path from tool input
-FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo "")
+FILE_PATH=$(json_get \
+    '.tool_input.file_path // ""' \
+    "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))")
 
 if [ -z "$FILE_PATH" ]; then
     exit 0  # Can't determine file, allow
@@ -58,11 +73,9 @@ if [ "$FILE_LAYER" = "-1" ]; then
 fi
 
 # Check if the file content (for Write) or new_string (for Edit) imports from higher layers
-CONTENT=$(echo "$INPUT" | python3 -c "
-import sys, json
-data = json.load(sys.stdin).get('tool_input', {})
-print(data.get('content', '') or data.get('new_string', ''))
-" 2>/dev/null || echo "")
+CONTENT=$(json_get \
+    '(.tool_input.content // "") + (.tool_input.new_string // "")' \
+    "import sys,json; d=json.load(sys.stdin).get('tool_input',{}); print((d.get('content','') or '')+(d.get('new_string','') or ''))")
 
 if [ -z "$CONTENT" ]; then
     exit 0
