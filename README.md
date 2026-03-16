@@ -1,113 +1,155 @@
 # oh-my-agents
 
-Claude Code skills, agents, and hooks implementing OpenAI's **Harness Engineering** — the
-discipline of designing environments, constraints, and feedback loops that make AI coding
-agents work reliably.
+Claude Code skills, agents, and hooks implementing OpenAI's **Harness Engineering** —
+the discipline of designing environments, constraints, and feedback loops that make AI
+coding agents work reliably.
 
-## Background
+Based on OpenAI's experiment: 3 engineers shipped ~1M lines of production code via
+~1,500 PRs in 5 months with zero hand-written code.
 
-OpenAI's harness engineering framework identifies three pillars:
+## The Three Pillars
 
-1. **Context Engineering** — Structured documentation giving agents the right info at the right time
-2. **Architectural Constraints** — Mechanical enforcement of boundaries via linters, tests, and CI
-3. **Entropy Management** — Continuous detection and repair of documentation drift and violations
+| Pillar | What It Means | This Plugin |
+|--------|---------------|-------------|
+| **Context Engineering** | Structured docs that give agents the right info | `/harness-init`, `/legibility-score` |
+| **Architectural Constraints** | Mechanical enforcement of boundaries | `/arch-guard`, `/taste-encoder`, agents, hooks |
+| **Entropy Management** | Continuous detection of codebase degradation | `/entropy-sweep`, `/harness-review` |
 
 ## Project Structure
 
 ```
 .claude/
 ├── settings.json              # Hook event bindings
-├── skills/                    # User-invocable slash commands (/skill-name)
-│   ├── context-engineer/      # Set up CLAUDE.md + docs/ structure
-│   ├── arch-guard/            # Enforce architectural constraints
-│   ├── entropy-sweep/         # Detect docs drift and dead code
-│   ├── harness-review/        # Code review with harness analysis
+├── skills/                    # User-invocable slash commands
+│   ├── harness-init/          # Initialize: CLAUDE.md, docs/, bootstrap, entry points
+│   ├── legibility-score/      # 7-metric Agent Legibility Score assessment
+│   ├── taste-encoder/         # Encode expertise into lint rules & structural tests
+│   ├── arch-guard/            # Set up layer enforcement + Providers pattern
+│   ├── entropy-sweep/         # Scan for slop, doc drift, dead code, violations
+│   ├── harness-review/        # Code review with "Say No to Slop"
 │   └── spec-to-task/          # Convert specs into agent-friendly tasks
-├── agents/                    # Background subagents (auto-dispatched)
-│   ├── arch-guard-agent/      # Read-only architectural compliance checker
-│   ├── entropy-sweep-agent/   # Read-only entropy scanner
-│   └── harness-reviewer/      # Read-only code review agent
+├── agents/                    # Read-only background subagents
+│   ├── arch-guard-agent/      # Architectural compliance checker
+│   ├── entropy-sweep-agent/   # Entropy scanner
+│   └── harness-reviewer/      # Code review agent
 └── hooks/                     # Event hook scripts
     ├── arch-check.sh          # Block Edit/Write on layer violations
-    └── doc-drift-check.sh     # Warn about documentation drift
+    └── doc-drift-check.sh     # Warn about documentation drift after changes
 ```
 
 ## Installation
 
-### Option 1: Copy entire .claude/ directory
+### Copy entire .claude/ directory
 
 ```bash
-# Clone this repo
 git clone https://github.com/caishize/oh-my-agents.git
-
-# Copy .claude/ into your project
 cp -r oh-my-agents/.claude/ /path/to/your-project/
 ```
 
-### Option 2: Cherry-pick specific components
+### Cherry-pick specific components
 
 ```bash
-# Copy just one skill
+# One skill
 mkdir -p .claude/skills/entropy-sweep
 cp oh-my-agents/.claude/skills/entropy-sweep/SKILL.md .claude/skills/entropy-sweep/
 
-# Copy just one agent
+# One agent
 mkdir -p .claude/agents/arch-guard-agent
 cp oh-my-agents/.claude/agents/arch-guard-agent/AGENT.md .claude/agents/arch-guard-agent/
 
-# Copy hooks (remember to chmod +x)
+# Hooks (remember chmod +x)
 mkdir -p .claude/hooks
 cp oh-my-agents/.claude/hooks/arch-check.sh .claude/hooks/
 chmod +x .claude/hooks/arch-check.sh
 ```
 
-### Option 3: Use as reference
+## Skills
 
-Read the SKILL.md and AGENT.md files for inspiration and adapt to your project's needs.
+### `/harness-init` — Initialize the Harness
 
-## Skills (Slash Commands)
+Set up the full harness environment: CLAUDE.md as table of contents (~100 lines),
+structured docs/ directory, bootstrap script, and task entry points (build/test/lint/run).
 
-| Command | When to Use |
-|---------|-------------|
-| `/context-engineer` | Starting a new project or improving docs for AI agents |
-| `/arch-guard` | Setting up or auditing architectural constraint enforcement |
-| `/entropy-sweep` | Periodic codebase health check (weekly or pre-release) |
-| `/harness-review` | Reviewing PRs or staged changes |
-| `/spec-to-task` | Before implementing a feature — decompose specs into tasks |
+### `/legibility-score` — Agent Legibility Score
 
-## Agents (Auto-dispatched)
+Assess the 7-metric readiness score from OpenAI's framework:
+1. Bootstrap self-sufficiency (single setup command)
+2. Task entry points (build, test, lint, run)
+3. Validation harness (can agent verify its own changes?)
+4. Linting & formatting (with auto-fix)
+5. Codebase map (CLAUDE.md as progressive-disclosure TOC)
+6. Documentation structure (docs/ as system of record)
+7. Decision records (ADRs with rationale)
 
-| Agent | What It Does |
-|-------|--------------|
-| `arch-guard-agent` | Read-only scan for layer violations, naming issues, boundary breaks |
-| `entropy-sweep-agent` | Read-only scan for doc drift, dead code, inconsistencies |
-| `harness-reviewer` | Read-only code review focused on harness impact |
+Score 0-21. Tells you exactly where to invest in your harness.
 
-All agents are **read-only** (Write/Edit disabled) — they report findings but never modify code.
+### `/taste-encoder` — Encode Your Taste
+
+OpenAI's key insight: **"If you can articulate what code you dislike, write that down."**
+Turn team expertise into custom lint rules, structural tests, or pre-commit hooks.
+Each expert's knowledge becomes a multiplier for the entire agent fleet.
+
+Real example: Codex kept creating duplicate concurrency helpers, but only one version
+had OpenTelemetry. Fix: a custom ESLint rule banning that function outside the approved
+location.
+
+### `/arch-guard` — Architectural Constraints
+
+Set up the rigid layered architecture: Types → Config → Repo → Service → Runtime → UI.
+Plus the Providers pattern for cross-cutting concerns (auth, telemetry, feature flags).
+Creates custom linters with **remediation instructions in error messages** (error messages
+are agent context).
+
+### `/entropy-sweep` — Garbage Collection
+
+Evolved from OpenAI's manual Friday "slop cleanup" to automated agent scanning. Detects:
+- **Slop**: duplicates, pattern drift, copy-paste artifacts
+- **Doc drift**: commands that don't work, dead file references
+- **Violations**: layer crossings, Providers bypass
+- **Dead weight**: unused exports, deps, orphaned files
+- **Missing enforcement**: rules without lint/test backing
+
+### `/harness-review` — Say No to Slop
+
+Code review based on OpenAI's top principle: **"Maintain strict review standards. Lowering
+the bar creates compounding technical debt."** Bad patterns multiply via every future
+agent-generated PR. Reviews for slop first, then architecture, then code quality.
+
+### `/spec-to-task` — Planning Before Execution
+
+Decompose specs into agent-executable tasks with **tests first** (write failing tests
+before implementation), layer-aware decomposition, explicit context, and acceptance
+criteria. Based on OpenAI's finding that separating planning and execution phases
+prevents wasted agent effort.
+
+## Agents (Background, Read-Only)
+
+All agents have Write/Edit disabled — they report but never modify code.
+
+| Agent | Auto-dispatched when... |
+|-------|------------------------|
+| `arch-guard-agent` | Code changes might violate layers or boundaries |
+| `entropy-sweep-agent` | Periodic scan or pre-release check |
+| `harness-reviewer` | PR or staged changes need review |
 
 ## Hooks (Automatic)
 
-| Hook | Event | Behavior |
-|------|-------|----------|
-| `arch-check.sh` | PreToolUse (Edit/Write) | **Blocks** edits that violate dependency layer boundaries |
-| `doc-drift-check.sh` | Stop | **Warns** if source changes may have caused documentation drift |
+| Hook | Trigger | Behavior |
+|------|---------|----------|
+| `arch-check.sh` | Before Edit/Write | **Blocks** if edit violates layer boundary |
+| `doc-drift-check.sh` | After Claude stops | **Warns** if source changes may need doc updates |
 
-## Quick Start Guide
+## Key Principles from OpenAI
 
-1. **New project?** → Run `/context-engineer` to set up documentation
-2. **Existing project?** → Run `/entropy-sweep` to find what's broken
-3. **Adding features?** → Run `/spec-to-task` to plan agent-friendly tasks
-4. **Reviewing code?** → Run `/harness-review` on your changes
-5. **Enforcing rules?** → Run `/arch-guard` to set up mechanical enforcement
-
-## Key Principles
-
-- **Make tacit knowledge explicit** — Agents have no tribal knowledge; document everything
-- **Enforce mechanically** — Rules not checked by linters/tests don't exist
-- **Error messages are context** — Lint errors must include remediation instructions
-- **Start simple** — A good CLAUDE.md + pre-commit hooks beat complex middleware
-- **Build rippable harnesses** — Keep constraints easy to update as models improve
-- **Docs live in the repo** — Not in Slack, not in wikis, in the repository
+- **"Agents have no tacit knowledge; until it is made explicit, it doesn't exist"**
+- **"If you can articulate what code you dislike, write that down"** as a lint rule
+- **"Say No to Slop"** — never lower review standards, even to ship faster
+- **"When the agent struggles, treat it as an environment design problem"**
+- **Progressive disclosure** — CLAUDE.md is the TOC, docs/ is the encyclopedia
+- **Structured formats > prose** — agents comply better with JSON/YAML rules
+- **Error messages are context** — lint errors must include remediation instructions
+- **Build rippable harnesses** — keep constraints easy to update as models improve
+- **Encode taste, not just rules** — each expert's knowledge multiplies across all agents
 
 ## References
 
@@ -115,3 +157,5 @@ All agents are **read-only** (Write/Edit disabled) — they report findings but 
 - [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
 - [OpenAI: Building an AI-Native Engineering Team](https://developers.openai.com/codex/guides/build-ai-native-engineering-team/)
 - [InfoQ: OpenAI Harness Engineering](https://www.infoq.com/news/2026/02/openai-harness-engineering-codex/)
+- [The Emerging Harness Engineering Playbook](https://www.ignorance.ai/p/the-emerging-harness-engineering)
+- [OpenAI's Playbook: Ship 1M Lines](https://www.theneuron.ai/explainer-articles/openais-harness-engineering-playbook-how-to-ship-1m-lines-of-code-without-writing-any/)

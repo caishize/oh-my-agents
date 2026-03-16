@@ -1,21 +1,20 @@
 ---
 name: arch-guard
-description: Analyze and enforce architectural constraints through linters, structural tests, and dependency layer validation. Use when setting up or auditing architectural enforcement.
+description: Analyze and enforce architectural constraints through custom linters, structural tests, and dependency layer validation. Based on OpenAI's rigid layered architecture + Providers pattern where agents are restricted to operate within defined layers.
 user-invocable: true
-argument-hint: "[scope: full|layers|naming|size]"
+argument-hint: "[scope: full|layers|naming|size|providers]"
 ---
 
 # Arch Guard
 
-You are an architectural constraint enforcement specialist following harness engineering
-principles. Your job is to analyze the codebase and set up mechanical enforcement of
-architectural boundaries.
+Set up mechanical enforcement of architectural boundaries. Based on OpenAI's approach
+where **"agents are most effective in environments with strict boundaries and
+predictable structure"** — they chose tech stacks and structures for "harness-friendliness"
+rather than flexibility.
 
-## Core Principle
-
-> "Enforce architectural boundaries through mechanical rules and structural tests.
-> When the agent struggles, treat it as a signal: identify what is missing and feed
-> it back into the repository."
+> "These constraints are enforced mechanically via custom linters and structural tests."
+> "When the agent struggles, treat it as a signal: identify what is missing — tools,
+> guardrails, documentation — and feed it back into the repository."
 
 ## Task
 
@@ -41,12 +40,34 @@ Types → Config → Repository → Service → Runtime → UI
 ```
 
 Rules:
-- Each layer may only import from layers to its left
+- Each layer may only import from layers to its left (unidirectional)
 - No circular dependencies between layers
 - Shared types belong in the Types layer
 - Configuration must not depend on runtime code
+- **Cross-cutting concerns (auth, telemetry, feature flags) flow through a single
+  "Providers" interface** — never accessed directly from business logic
 
-### Step 3: Create Enforcement Mechanisms
+### Step 3: Set Up Providers Interface
+
+Channel cross-cutting concerns through a single interface. This prevents agents
+from scattering auth checks, telemetry calls, and feature flag reads throughout
+the codebase:
+
+```
+// src/providers/index.ts (or equivalent)
+export interface Providers {
+  auth: AuthProvider;
+  telemetry: TelemetryProvider;
+  featureFlags: FeatureFlagProvider;
+  logger: LoggerProvider;
+}
+```
+
+All service/runtime code accesses these through Providers, never directly. This is
+critical because agents will replicate whatever access pattern they see — if one file
+calls `getFeatureFlag()` directly, agents will do it everywhere.
+
+### Step 4: Create Enforcement Mechanisms
 
 Create appropriate enforcement for the project's language/framework:
 
@@ -55,7 +76,7 @@ Create appropriate enforcement for the project's language/framework:
 **For Go**: depguard rules or architecture validation tests
 **For any project**: `scripts/arch-check.sh` for CI + pre-commit hook config
 
-### Step 4: Create Custom Linters ("Taste Invariants")
+### Step 5: Create Custom Linters ("Taste Invariants")
 
 Create custom lint rules that enforce:
 
@@ -74,7 +95,7 @@ GOOD: Error: Module 'ui/components' cannot import from 'service/auth'.
       See docs/ARCHITECTURE.md#dependency-layers
 ```
 
-### Step 5: Create Structural Tests
+### Step 6: Create Structural Tests
 
 Write tests that validate architectural compliance:
 
@@ -83,7 +104,7 @@ Write tests that validate architectural compliance:
 - `test_file_size_limits` — no file exceeds limit
 - `test_naming_conventions` — all files follow conventions
 
-### Step 6: Update Documentation
+### Step 7: Update Documentation
 
 - Update docs/ARCHITECTURE.md with defined layers and rules
 - Add enforcement instructions to CLAUDE.md

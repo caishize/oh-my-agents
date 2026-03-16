@@ -2,79 +2,101 @@
 
 ## Overview
 
-oh-my-agents is a Claude Code plugin that provides skills, agents, and hooks implementing
-OpenAI's harness engineering methodology. It is designed to be copied into any project's
-`.claude/` directory to instantly gain harness engineering capabilities.
+oh-my-agents implements OpenAI's harness engineering methodology as Claude Code
+skills, agents, and hooks. The harness is the set of constraints, documentation,
+feedback loops, and entry points that make AI coding agents work reliably.
+
+## Origin
+
+Based on OpenAI's internal experiment:
+- 3 engineers, ~1M lines of production code, ~1,500 PRs in 5 months
+- Zero hand-written code — all agent-generated
+- Key insight: "The bottleneck was never the agent's ability to write code, but the
+  lack of structure, tools, and feedback mechanisms surrounding it."
+
+## Three Pillars
+
+### 1. Context Engineering
+
+Making the codebase legible to agents through structured documentation.
+
+- **CLAUDE.md as table of contents** (~100 lines, progressive disclosure)
+- **docs/ as system of record** (structured, machine-readable, in-repo)
+- **Structured formats > prose** (agents comply better with JSON/YAML rules)
+- **No tacit knowledge** — if it's not in the repo, it doesn't exist
+
+Implemented by: `/harness-init`, `/legibility-score`
+
+### 2. Architectural Constraints
+
+Mechanical enforcement of boundaries so agents can't accidentally violate rules.
+
+- **Rigid layered architecture**: Types → Config → Repo → Service → Runtime → UI
+- **Providers interface**: Cross-cutting concerns (auth, telemetry, feature flags)
+  channeled through a single interface — never accessed directly
+- **Custom linters with remediation in error messages** — error messages are agent context
+- **Structural tests** validating layer boundaries, naming, file sizes
+- **"Taste invariants"** — encoding team expertise into mechanical rules
+
+Implemented by: `/arch-guard`, `/taste-encoder`, `arch-guard-agent`, `arch-check.sh`
+
+### 3. Entropy Management ("Garbage Collection")
+
+Continuous detection and repair of codebase degradation.
+
+- **"Say No to Slop"** — maintain strict review standards, never lower the bar
+- **Automated scanning** — evolved from manual Friday cleanup to scheduled agent sweeps
+- **Documentation drift detection** — verify docs match reality
+- **Missing enforcement detection** — rules without lint/test enforcement are suggestions
+
+Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
+`harness-reviewer`, `doc-drift-check.sh`
 
 ## Plugin Structure
 
 ```
 .claude/
-├── settings.json              # Hook event bindings
-├── skills/                    # User-invocable slash commands
-│   ├── context-engineer/      # /context-engineer — set up docs structure
-│   ├── arch-guard/            # /arch-guard — enforce architecture
-│   ├── entropy-sweep/         # /entropy-sweep — detect codebase entropy
-│   ├── harness-review/        # /harness-review — code review
-│   └── spec-to-task/          # /spec-to-task — task decomposition
-├── agents/                    # Auto-dispatched subagents
-│   ├── arch-guard-agent/      # Read-only arch compliance checker
-│   ├── entropy-sweep-agent/   # Read-only entropy scanner
-│   └── harness-reviewer/      # Read-only code reviewer
-└── hooks/                     # Event hook scripts
-    ├── arch-check.sh          # PreToolUse — layer boundary check
-    └── doc-drift-check.sh     # Stop — documentation drift detection
+├── settings.json                         # Hook event bindings
+├── skills/                               # User-invocable slash commands
+│   ├── harness-init/SKILL.md             # Initialize the harness
+│   ├── legibility-score/SKILL.md         # 7-metric readiness assessment
+│   ├── taste-encoder/SKILL.md            # Encode expertise into rules
+│   ├── arch-guard/SKILL.md               # Set up constraint enforcement
+│   ├── entropy-sweep/SKILL.md            # Scan for entropy
+│   ├── harness-review/SKILL.md           # Harness-aware code review
+│   └── spec-to-task/SKILL.md             # Task decomposition
+├── agents/                               # Read-only background subagents
+│   ├── arch-guard-agent/AGENT.md         # Architectural compliance
+│   ├── entropy-sweep-agent/AGENT.md      # Entropy detection
+│   └── harness-reviewer/AGENT.md         # Code review
+└── hooks/                                # Event hook scripts
+    ├── arch-check.sh                     # PreToolUse: layer boundary check
+    └── doc-drift-check.sh                # Stop: documentation drift warning
 ```
-
-## Harness Engineering Pillars
-
-### 1. Context Engineering (skills/context-engineer)
-
-Sets up the documentation layer:
-- CLAUDE.md as a concise table of contents (~100 lines)
-- Structured `docs/` directory as the system of record
-- Machine-readable, actionable documentation
-
-### 2. Architectural Constraints (skills/arch-guard + agents + hooks)
-
-Three enforcement levels:
-- **Hooks** (arch-check.sh): Real-time blocking on Edit/Write if layer violated
-- **Agent** (arch-guard-agent): Deep read-only compliance scan
-- **Skill** (/arch-guard): Interactive setup and audit of constraints
-
-### 3. Entropy Management (skills/entropy-sweep + agents)
-
-Two operation modes:
-- **Agent** (entropy-sweep-agent): Background periodic scan
-- **Skill** (/entropy-sweep): Interactive comprehensive sweep
-
-## Dependency Layer Model
-
-The default layer model enforced by arch-check.sh:
-
-```
-Types(0) → Config(1) → Repository(2) → Service(3) → Runtime(4) → UI(5)
-```
-
-Each layer may only import from layers with lower numbers (to its left).
-Customize in `.claude/hooks/arch-check.sh` by editing the `get_layer()` function.
 
 ## Design Decisions
 
-### Why read-only agents?
-
-Agents run in background and may be dispatched automatically. Making them read-only
-(disallowing Write/Edit) ensures they can never accidentally modify code — they only
-report findings for human review.
-
-### Why both skills and agents for the same concern?
+### Skills vs Agents for the same concern
 
 Skills are interactive and user-invoked — they can modify files and set things up.
-Agents are background workers that report findings without modification. This matches
-the harness engineering principle: "Engineers own the final review and merge."
+Agents are read-only background workers — they report but never modify. This matches
+OpenAI's principle: "Engineers own the final review and merge process."
 
-### Why shell-based hooks?
+### Read-only agents
 
-Shell hooks are portable across all project types (TypeScript, Python, Go, etc.)
-and run outside the LLM, providing deterministic enforcement. They also inject
-remediation instructions into agent context when violations are found.
+All agents have `disallowedTools: Write, Edit, NotebookEdit`. Since agents may be
+auto-dispatched, they must never accidentally modify code. They report findings for
+human decision.
+
+### Shell-based hooks
+
+Shell hooks are portable across project types and run deterministically outside the
+LLM. Error messages from hooks inject remediation instructions into agent context,
+following OpenAI's pattern of "custom linter error messages that double as
+remediation instructions."
+
+### Progressive disclosure
+
+CLAUDE.md is the table of contents (~100 lines); docs/ contains the full details.
+OpenAI found that one massive instruction file failed — context is scarce and crowds
+out actual task details.
