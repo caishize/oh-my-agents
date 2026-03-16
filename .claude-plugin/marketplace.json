@@ -1,0 +1,23 @@
+{
+  "name": "oh-my-agents",
+  "owner": {
+    "name": "caishize"
+  },
+  "metadata": {
+    "description": "Harness engineering toolkit for Claude Code — skills, agents, and hooks implementing OpenAI's methodology for AI-native development.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "oh-my-agents",
+      "source": {
+        "source": "github",
+        "repo": "caishize/oh-my-agents"
+      },
+      "description": "Harness engineering skills, agents, and hooks — context engineering, architectural constraints, entropy management.",
+      "version": "1.0.0",
+      "keywords": ["harness-engineering", "ai-coding", "code-review", "architecture"],
+      "category": "productivity"
+    }
+  ]
+}

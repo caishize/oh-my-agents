@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/arch-check.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/arch-check.sh",
             "timeout": 10000,
             "statusMessage": "Checking architectural constraints..."
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/doc-drift-check.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/doc-drift-check.sh",
             "timeout": 15000,
             "statusMessage": "Checking for documentation drift..."
           }

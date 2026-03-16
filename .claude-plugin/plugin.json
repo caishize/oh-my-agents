@@ -1,0 +1,24 @@
+{
+  "name": "oh-my-agents",
+  "version": "1.0.0",
+  "description": "Harness engineering skills, agents, and hooks for Claude Code — implementing OpenAI's methodology for AI-native development.",
+  "author": {
+    "name": "caishize",
+    "url": "https://github.com/caishize"
+  },
+  "homepage": "https://github.com/caishize/oh-my-agents",
+  "repository": "https://github.com/caishize/oh-my-agents",
+  "license": "MIT",
+  "keywords": [
+    "harness-engineering",
+    "ai-coding",
+    "code-review",
+    "architecture",
+    "entropy",
+    "devops",
+    "claude-code"
+  ],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "hooks": "./hooks/hooks.json"
+}
