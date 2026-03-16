@@ -2,11 +2,10 @@
 #
 # Architectural layer boundary check hook
 # Triggered on PreToolUse for Edit/Write operations
-# Reads the tool input to check if a file edit would violate layer boundaries
+# Checks if a file edit would violate layer boundaries
 #
-# Expected env vars from Claude Code hooks:
-#   TOOL_NAME - the tool being used (Edit, Write)
-#   TOOL_INPUT - JSON with the tool parameters
+# Claude Code passes hook input as JSON on stdin:
+#   { "tool_name": "Edit", "tool_input": { "file_path": "...", "new_string": "..." } }
 #
 # Exit codes:
 #   0 - no violations found (allow)
@@ -14,11 +13,11 @@
 
 set -euo pipefail
 
+# Read JSON input from stdin
+INPUT=$(cat)
+
 # Parse the file path from tool input
-FILE_PATH=""
-if [ -n "${TOOL_INPUT:-}" ]; then
-    FILE_PATH=$(echo "$TOOL_INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('file_path',''))" 2>/dev/null || echo "")
-fi
+FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo "")
 
 if [ -z "$FILE_PATH" ]; then
     exit 0  # Can't determine file, allow
@@ -59,14 +58,11 @@ if [ "$FILE_LAYER" = "-1" ]; then
 fi
 
 # Check if the file content (for Write) or new_string (for Edit) imports from higher layers
-CONTENT=""
-if [ -n "${TOOL_INPUT:-}" ]; then
-    CONTENT=$(echo "$TOOL_INPUT" | python3 -c "
+CONTENT=$(echo "$INPUT" | python3 -c "
 import sys, json
-data = json.load(sys.stdin)
+data = json.load(sys.stdin).get('tool_input', {})
 print(data.get('content', '') or data.get('new_string', ''))
 " 2>/dev/null || echo "")
-fi
 
 if [ -z "$CONTENT" ]; then
     exit 0

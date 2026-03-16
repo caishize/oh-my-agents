@@ -28,13 +28,20 @@ Based on OpenAI's experiment: 3 engineers shipped ~1M lines of production code v
 │   ├── entropy-sweep/         # Scan for slop, doc drift, dead code, violations
 │   ├── harness-review/        # Code review with "Say No to Slop"
 │   └── spec-to-task/          # Convert specs into agent-friendly tasks
-├── agents/                    # Read-only background subagents
+├── agents/                    # Read-only background subagents (with memory: project)
 │   ├── arch-guard-agent/      # Architectural compliance checker
 │   ├── entropy-sweep-agent/   # Entropy scanner
 │   └── harness-reviewer/      # Code review agent
-└── hooks/                     # Event hook scripts
+└── hooks/                     # Event hook scripts (input via stdin JSON)
     ├── arch-check.sh          # Block Edit/Write on layer violations
     └── doc-drift-check.sh     # Warn about documentation drift after changes
+docs/
+├── ARCHITECTURE.md            # Layer model, module boundaries, design decisions
+├── CONVENTIONS.md             # Naming, file size, error handling, logging patterns
+├── TESTING.md                 # Test strategy, structural tests, coverage rules
+├── LINTING.md                 # Custom lint rules registry (TASTE-NNN)
+├── DECISIONS.md               # Architecture Decision Records (ADRs)
+└── PROVIDERS.md               # Cross-cutting: auth, telemetry, feature flags interface
 ```
 
 ## Installation

@@ -69,9 +69,16 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
 │   ├── arch-guard-agent/AGENT.md         # Architectural compliance
 │   ├── entropy-sweep-agent/AGENT.md      # Entropy detection
 │   └── harness-reviewer/AGENT.md         # Code review
-└── hooks/                                # Event hook scripts
+└── hooks/                                # Event hook scripts (stdin JSON)
     ├── arch-check.sh                     # PreToolUse: layer boundary check
     └── doc-drift-check.sh                # Stop: documentation drift warning
+docs/
+├── ARCHITECTURE.md                       # Layer model, boundaries, decisions
+├── CONVENTIONS.md                        # Naming, size, patterns (template)
+├── TESTING.md                            # Test strategy, structural tests
+├── LINTING.md                            # Lint rule registry (TASTE-NNN)
+├── DECISIONS.md                          # Architecture Decision Records
+└── PROVIDERS.md                          # Cross-cutting interface definition
 ```
 
 ## Claude Code Features Used
