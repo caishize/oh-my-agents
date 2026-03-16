@@ -74,6 +74,21 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
     └── doc-drift-check.sh                # Stop: documentation drift warning
 ```
 
+## Claude Code Features Used
+
+This plugin leverages specific Claude Code capabilities:
+
+| Feature | Where Used | Why |
+|---------|-----------|-----|
+| `allowed-tools` | legibility-score, harness-review, entropy-sweep | Enforce read-only behavior for review/scan skills |
+| `context: fork` + `agent` | legibility-score | Run assessment in isolated subagent context |
+| `memory: project` | All agents | Accumulate findings across sessions |
+| `background: true` | arch-guard-agent, entropy-sweep-agent | Run scans without blocking the main conversation |
+| `disallowedTools` | All agents | Prevent agents from modifying code |
+| `PreToolUse` hooks | arch-check.sh | Block layer violations before Edit/Write |
+| `Stop` hooks | doc-drift-check.sh | Advisory warnings after session ends |
+| `$ARGUMENTS` | All skills | Pass user arguments to skill content |
+
 ## Design Decisions
 
 ### Skills vs Agents for the same concern
@@ -82,11 +97,13 @@ Skills are interactive and user-invoked — they can modify files and set things
 Agents are read-only background workers — they report but never modify. This matches
 OpenAI's principle: "Engineers own the final review and merge process."
 
-### Read-only agents
+### Read-only agents with persistent memory
 
-All agents have `disallowedTools: Write, Edit, NotebookEdit`. Since agents may be
-auto-dispatched, they must never accidentally modify code. They report findings for
-human decision.
+All agents have `disallowedTools: Write, Edit, NotebookEdit, Agent` — they cannot
+modify code or spawn sub-agents. They use `memory: project` to accumulate findings
+across sessions, building institutional knowledge about architectural patterns,
+recurring violations, and entropy trends. The `background: true` flag on scanning
+agents lets them run without blocking the main conversation.
 
 ### Shell-based hooks
 

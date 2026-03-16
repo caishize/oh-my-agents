@@ -3,6 +3,7 @@ name: harness-review
 description: "Code review following OpenAI's harness engineering philosophy: Say No to Slop, check architectural compliance, evaluate harness impact, ensure agent context quality."
 user-invocable: true
 argument-hint: "[PR-number or file-path]"
+allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Harness Review
@@ -26,13 +27,26 @@ Review the current changes (staged/unstaged diff, or PR via $ARGUMENTS).
 The most important check. Agent-generated code often produces "slop" — technically
 correct but harmful to codebase quality:
 
-1. **Duplicate logic** — Does this duplicate existing helpers? (OpenAI's real failure:
-   agents creating duplicate concurrency helpers without OTel instrumentation)
-2. **Pattern inconsistency** — Does it follow the established patterns, or introduce
-   a slightly-different way of doing the same thing?
-3. **Unnecessary abstraction** — Does it over-engineer simple operations?
-4. **Copy-paste artifacts** — Generic comments, misleading variable names from templates?
-5. **Missing taste** — Would a senior engineer accept this in a manual PR?
+**Duplicate logic** (highest signal):
+- Same function implemented in 2+ places (especially helpers, utils)
+- Real example: duplicate concurrency helpers where only one had OpenTelemetry
+
+**Pattern inconsistency:**
+- 5 files use async/await, 3 use callbacks for the same thing
+- Mixed logging: some `logger.info()`, some `console.log()`
+- Different error handling approaches in the same layer
+
+**Copy-paste artifacts:**
+- Generic comments ("This function does X") that add no value
+- Variable names from a template that don't match the context
+- Leftover TODOs from scaffolding
+
+**Over-engineering:**
+- Abstract factory for a single implementation
+- Generic type parameters used in only one place
+- Configuration for behavior that never varies
+
+**Missing taste** — would a senior engineer accept this in a manual PR?
 
 ### Review 2: Architectural Compliance
 

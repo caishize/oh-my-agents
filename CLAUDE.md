@@ -33,6 +33,13 @@ Copy `.claude/` into your project, or cherry-pick individual skills/agents/hooks
 | `arch-check.sh` | PreToolUse (Edit/Write) | Blocks layer violations |
 | `doc-drift-check.sh` | Stop | Warns about documentation drift |
 
+## Workflow
+
+1. `/harness-init` → `/legibility-score` → `/arch-guard` (one-time setup)
+2. `/taste-encoder` (ongoing: encode team expertise into rules)
+3. `/spec-to-task` → develop → `/harness-review` (daily cycle)
+4. `/entropy-sweep` (weekly or pre-release)
+
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

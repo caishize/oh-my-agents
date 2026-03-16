@@ -3,6 +3,7 @@ name: entropy-sweep
 description: Scan for and fix codebase entropy — documentation drift, AI slop accumulation, constraint violations, dead code. Based on OpenAI's "garbage collection" pillar and their evolution from manual Friday cleanup to automated agent scanning.
 user-invocable: true
 argument-hint: "[scope: full|docs|slop|arch|dead-code]"
+allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Entropy Sweep

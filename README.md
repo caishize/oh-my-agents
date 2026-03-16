@@ -139,6 +139,61 @@ All agents have Write/Edit disabled — they report but never modify code.
 | `arch-check.sh` | Before Edit/Write | **Blocks** if edit violates layer boundary |
 | `doc-drift-check.sh` | After Claude stops | **Warns** if source changes may need doc updates |
 
+## Workflow: How to Use This Plugin
+
+### Phase 1: Initialize (one-time setup)
+
+```
+/harness-init          # Set up CLAUDE.md, docs/, bootstrap, entry points
+/legibility-score      # Assess readiness — find gaps
+/arch-guard            # Set up layer enforcement + Providers
+```
+
+### Phase 2: Encode Team Knowledge (ongoing)
+
+```
+/taste-encoder "no direct DB queries outside repo layer"
+/taste-encoder "all API responses use ResponseEnvelope<T>"
+/taste-encoder "max 300 lines per file"
+```
+
+Each team member's expertise becomes a lint rule or structural test that all agents
+inherit. Designate an **Agent Captain** per team (OpenAI's recommendation) to manage
+this encoding process.
+
+### Phase 3: Daily Development Cycle
+
+```
+/spec-to-task <feature-spec>       # Decompose into agent-ready tasks
+# ... agent implements tasks ...
+/harness-review                    # Review with "Say No to Slop"
+```
+
+### Phase 4: Entropy Management (weekly or pre-release)
+
+```
+/entropy-sweep                     # Full scan: slop, drift, violations, dead code
+```
+
+### Parallelization Workflows
+
+OpenAI's key throughput multiplier: **3.5 PRs per engineer per day**, increasing as team grew.
+
+**Attended parallelization** — engineer manages 3-4 Claude Code sessions simultaneously:
+1. Open multiple terminal sessions
+2. Give each a scoped task from `/spec-to-task` output
+3. Monitor progress, redirect when stuck
+4. Review each output with `/harness-review`
+
+**Unattended parallelization** — agent works independently to PR stage:
+1. Use Claude Code's `/batch` for large-scale changes across files
+2. Agent implements, runs tests, opens PR
+3. Engineer reviews when ready
+4. CI validation catches issues the agent missed
+
+> "When someone had a technical decision in Slack, they would tag Codex:
+> '@codex please add guardrails to our codebase' and get 4 PRs in 15 minutes"
+
 ## Key Principles from OpenAI
 
 - **"Agents have no tacit knowledge; until it is made explicit, it doesn't exist"**
