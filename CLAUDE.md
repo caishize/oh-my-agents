@@ -18,7 +18,7 @@ Copy `.claude/` into your project, or cherry-pick individual skills/agents/hooks
 | `/harness-review` | Code review with "Say No to Slop" |
 | `/spec-to-task` | Convert specs into agent-friendly tasks |
 
-## Agents (Auto-dispatched, read-only)
+## Agents (Read-only, dispatched by Claude)
 
 | Agent | Purpose |
 |-------|---------|

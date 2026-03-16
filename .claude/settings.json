@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/arch-check.sh",
-            "timeout": 10,
+            "timeout": 10000,
             "statusMessage": "Checking architectural constraints..."
           }
         ]
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/doc-drift-check.sh",
-            "timeout": 15,
+            "timeout": 15000,
             "statusMessage": "Checking for documentation drift..."
           }
         ]

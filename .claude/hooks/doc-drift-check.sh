@@ -14,9 +14,21 @@
 
 set -euo pipefail
 
-# Read stdin (Stop hook input) — we mainly need the cwd
+# Read stdin
 INPUT=$(cat)
-PROJECT_DIR=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd','.'))" 2>/dev/null || echo ".")
+
+# JSON parser: prefer jq, fallback to python3
+json_get_cwd() {
+    if command -v jq >/dev/null 2>&1; then
+        echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo "."
+    elif command -v python3 >/dev/null 2>&1; then
+        echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd','.'))" 2>/dev/null || echo "."
+    else
+        echo "."
+    fi
+}
+
+PROJECT_DIR=$(json_get_cwd)
 
 # Get files modified in the last commit or staged
 CHANGED_FILES=$(git -C "$PROJECT_DIR" diff --name-only HEAD 2>/dev/null || git -C "$PROJECT_DIR" diff --name-only --staged 2>/dev/null || echo "")
@@ -48,7 +60,6 @@ done <<< "$CHANGED_FILES"
 if [ -f "$PROJECT_DIR/docs/ARCHITECTURE.md" ]; then
     while IFS= read -r file; do
         [ -z "$file" ] && continue
-        # If a new file was added (exists in diff but might be new)
         if git -C "$PROJECT_DIR" diff --name-status HEAD 2>/dev/null | grep -q "^A.*$file"; then
             DIR=$(dirname "$file")
             if grep -q "$DIR" "$PROJECT_DIR/docs/ARCHITECTURE.md" 2>/dev/null; then
@@ -59,7 +70,7 @@ if [ -f "$PROJECT_DIR/docs/ARCHITECTURE.md" ]; then
     done <<< "$CHANGED_FILES"
 fi
 
-# 2. Check if API files changed but API docs weren't updated
+# 2. Check if API files changed but docs weren't updated
 API_CHANGED=false
 while IFS= read -r file; do
     case "$file" in

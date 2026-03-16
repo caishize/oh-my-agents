@@ -133,10 +133,10 @@ prevents wasted agent effort.
 
 All agents have Write/Edit disabled — they report but never modify code.
 
-| Agent | Auto-dispatched when... |
-|-------|------------------------|
+| Agent | Dispatched by Claude when... |
+|-------|-------------------------------|
 | `arch-guard-agent` | Code changes might violate layers or boundaries |
-| `entropy-sweep-agent` | Periodic scan or pre-release check |
+| `entropy-sweep-agent` | Periodic scan or pre-release check requested |
 | `harness-reviewer` | PR or staged changes need review |
 
 ## Hooks (Automatic)
@@ -234,7 +234,4 @@ OpenAI defines clear human/agent responsibilities at each phase:
 
 - [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/)
 - [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
-- [OpenAI: Building an AI-Native Engineering Team](https://developers.openai.com/codex/guides/build-ai-native-engineering-team/)
-- [InfoQ: OpenAI Harness Engineering](https://www.infoq.com/news/2026/02/openai-harness-engineering-codex/)
 - [The Emerging Harness Engineering Playbook](https://www.ignorance.ai/p/the-emerging-harness-engineering)
-- [OpenAI's Playbook: Ship 1M Lines](https://www.theneuron.ai/explainer-articles/openais-harness-engineering-playbook-how-to-ship-1m-lines-of-code-without-writing-any/)

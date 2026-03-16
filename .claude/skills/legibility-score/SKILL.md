@@ -3,8 +3,6 @@ name: legibility-score
 description: Assess the 7-metric Agent Legibility Score for a repository — measures how ready a codebase is for AI agent-driven development. Based on OpenAI's harness engineering readiness framework.
 user-invocable: true
 argument-hint: "[project-path]"
-context: fork
-agent: Explore
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
