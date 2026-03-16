@@ -11,63 +11,82 @@ Based on OpenAI's experiment: 3 engineers shipped ~1M lines of production code v
 
 | Pillar | What It Means | This Plugin |
 |--------|---------------|-------------|
-| **Context Engineering** | Structured docs that give agents the right info | `/harness-init`, `/legibility-score` |
-| **Architectural Constraints** | Mechanical enforcement of boundaries | `/arch-guard`, `/taste-encoder`, agents, hooks |
-| **Entropy Management** | Continuous detection of codebase degradation | `/entropy-sweep`, `/harness-review` |
+| **Context Engineering** | Structured docs that give agents the right info | `harness-init`, `legibility-score` |
+| **Architectural Constraints** | Mechanical enforcement of boundaries | `arch-guard`, `taste-encoder`, agents, hooks |
+| **Entropy Management** | Continuous detection of codebase degradation | `entropy-sweep`, `harness-review` |
 
 ## Project Structure
 
 ```
-.claude/
-├── settings.json              # Hook event bindings
-├── skills/                    # User-invocable slash commands
-│   ├── harness-init/          # Initialize: CLAUDE.md, docs/, bootstrap, entry points
-│   ├── legibility-score/      # 7-metric Agent Legibility Score assessment
-│   ├── taste-encoder/         # Encode expertise into lint rules & structural tests
-│   ├── arch-guard/            # Set up layer enforcement + Providers pattern
-│   ├── entropy-sweep/         # Scan for slop, doc drift, dead code, violations
-│   ├── harness-review/        # Code review with "Say No to Slop"
-│   └── spec-to-task/          # Convert specs into agent-friendly tasks
-├── agents/                    # Read-only background subagents (with memory: project)
-│   ├── arch-guard-agent/      # Architectural compliance checker
-│   ├── entropy-sweep-agent/   # Entropy scanner
-│   └── harness-reviewer/      # Code review agent
-└── hooks/                     # Event hook scripts (input via stdin JSON)
-    ├── arch-check.sh          # Block Edit/Write on layer violations
-    └── doc-drift-check.sh     # Warn about documentation drift after changes
-docs/
-├── ARCHITECTURE.md            # Layer model, module boundaries, design decisions
-├── CONVENTIONS.md             # Naming, file size, error handling, logging patterns
-├── TESTING.md                 # Test strategy, structural tests, coverage rules
-├── LINTING.md                 # Custom lint rules registry (TASTE-NNN)
-├── DECISIONS.md               # Architecture Decision Records (ADRs)
-└── PROVIDERS.md               # Cross-cutting: auth, telemetry, feature flags interface
+.claude-plugin/
+├── plugin.json                   # Plugin manifest (name, version, paths)
+├── marketplace.json              # Marketplace definition for distribution
+skills/                           # User-invocable slash commands
+├── harness-init/SKILL.md         # Initialize: CLAUDE.md, docs/, bootstrap, entry points
+├── legibility-score/SKILL.md     # 7-metric Agent Legibility Score assessment
+├── taste-encoder/SKILL.md        # Encode expertise into lint rules & structural tests
+├── arch-guard/SKILL.md           # Set up layer enforcement + Providers pattern
+├── entropy-sweep/SKILL.md        # Scan for slop, doc drift, dead code, violations
+├── harness-review/SKILL.md       # Code review with "Say No to Slop"
+└── spec-to-task/SKILL.md         # Convert specs into agent-friendly tasks
+agents/                           # Read-only background subagents (with memory: project)
+├── arch-guard-agent.md           # Architectural compliance checker
+├── entropy-sweep-agent.md        # Entropy scanner
+└── harness-reviewer.md           # Code review agent
+hooks/                            # Event hook scripts
+├── hooks.json                    # Hook event bindings (uses ${CLAUDE_PLUGIN_ROOT})
+├── arch-check.sh                 # Block Edit/Write on layer violations
+└── doc-drift-check.sh            # Warn about documentation drift after changes
+docs/                             # Template documentation for target projects
+├── ARCHITECTURE.md               # Layer model, module boundaries, design decisions
+├── CONVENTIONS.md                # Naming, file size, error handling, logging patterns
+├── TESTING.md                    # Test strategy, structural tests, coverage rules
+├── LINTING.md                    # Custom lint rules registry (TASTE-NNN)
+├── DECISIONS.md                  # Architecture Decision Records (ADRs)
+└── PROVIDERS.md                  # Cross-cutting: auth, telemetry, feature flags interface
 ```
 
 ## Installation
 
-### Copy entire .claude/ directory
+### Via Claude Code Plugin System (Recommended)
+
+```bash
+# Add the marketplace
+/plugin marketplace add caishize/oh-my-agents
+
+# Install the plugin
+/plugin install oh-my-agents
+```
+
+After installation, all skills are available with the `oh-my-agents:` namespace:
+
+```
+/oh-my-agents:harness-init
+/oh-my-agents:legibility-score
+/oh-my-agents:entropy-sweep
+...
+```
+
+### Manual Installation (copy to .claude/)
+
+If you prefer the standalone approach, copy individual components:
 
 ```bash
 git clone https://github.com/caishize/oh-my-agents.git
-cp -r oh-my-agents/.claude/ /path/to/your-project/
-```
 
-### Cherry-pick specific components
+# Copy all skills
+cp -r oh-my-agents/skills/ /path/to/your-project/.claude/skills/
 
-```bash
-# One skill
-mkdir -p .claude/skills/entropy-sweep
-cp oh-my-agents/.claude/skills/entropy-sweep/SKILL.md .claude/skills/entropy-sweep/
+# Copy all agents
+mkdir -p /path/to/your-project/.claude/agents
+for f in oh-my-agents/agents/*.md; do
+  name=$(basename "$f" .md)
+  mkdir -p /path/to/your-project/.claude/agents/"$name"
+  cp "$f" /path/to/your-project/.claude/agents/"$name"/AGENT.md
+done
 
-# One agent
-mkdir -p .claude/agents/arch-guard-agent
-cp oh-my-agents/.claude/agents/arch-guard-agent/AGENT.md .claude/agents/arch-guard-agent/
-
-# Hooks (remember chmod +x)
-mkdir -p .claude/hooks
-cp oh-my-agents/.claude/hooks/arch-check.sh .claude/hooks/
-chmod +x .claude/hooks/arch-check.sh
+# Copy hooks
+cp -r oh-my-agents/hooks/ /path/to/your-project/.claude/hooks/
 ```
 
 ## Skills

@@ -1,22 +1,19 @@
-# Oh-My-Agents — Harness Engineering for Claude Code
+# Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-Claude Code skills, agents, and hooks implementing OpenAI's harness engineering methodology.
-
-## Quick Start
-
-Copy `.claude/` into your project, or cherry-pick individual skills/agents/hooks.
+Claude Code plugin implementing OpenAI's harness engineering methodology.
+Install via `/plugin install oh-my-agents` or copy components manually.
 
 ## Skills (User-invocable)
 
 | Command | Purpose |
 |---------|---------|
-| `/harness-init` | Initialize harness: CLAUDE.md, docs/, bootstrap, entry points |
-| `/legibility-score` | Assess the 7-metric Agent Legibility Score |
-| `/taste-encoder` | Encode team expertise into lint rules and structural tests |
-| `/arch-guard` | Set up architectural constraint enforcement |
-| `/entropy-sweep` | Scan for slop, doc drift, violations, dead code |
-| `/harness-review` | Code review with "Say No to Slop" |
-| `/spec-to-task` | Convert specs into agent-friendly tasks |
+| `/oh-my-agents:harness-init` | Initialize harness: CLAUDE.md, docs/, bootstrap, entry points |
+| `/oh-my-agents:legibility-score` | Assess the 7-metric Agent Legibility Score |
+| `/oh-my-agents:taste-encoder` | Encode team expertise into lint rules and structural tests |
+| `/oh-my-agents:arch-guard` | Set up architectural constraint enforcement |
+| `/oh-my-agents:entropy-sweep` | Scan for slop, doc drift, violations, dead code |
+| `/oh-my-agents:harness-review` | Code review with "Say No to Slop" |
+| `/oh-my-agents:spec-to-task` | Convert specs into agent-friendly tasks |
 
 ## Agents (Read-only, dispatched by Claude)
 
@@ -35,10 +32,10 @@ Copy `.claude/` into your project, or cherry-pick individual skills/agents/hooks
 
 ## Workflow
 
-1. `/harness-init` → `/legibility-score` → `/arch-guard` (one-time setup)
-2. `/taste-encoder` (ongoing: encode team expertise into rules)
-3. `/spec-to-task` → develop → `/harness-review` (daily cycle)
-4. `/entropy-sweep` (weekly or pre-release)
+1. `/oh-my-agents:harness-init` → `/oh-my-agents:legibility-score` → `/oh-my-agents:arch-guard` (one-time setup)
+2. `/oh-my-agents:taste-encoder` (ongoing: encode team expertise into rules)
+3. `/oh-my-agents:spec-to-task` → develop → `/oh-my-agents:harness-review` (daily cycle)
+4. `/oh-my-agents:entropy-sweep` (weekly or pre-release)
 
 ## Architecture
 

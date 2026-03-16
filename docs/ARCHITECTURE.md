@@ -55,26 +55,28 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
 ## Plugin Structure
 
 ```
-.claude/
-├── settings.json                         # Hook event bindings
-├── skills/                               # User-invocable slash commands
-│   ├── harness-init/SKILL.md             # Initialize the harness
-│   ├── legibility-score/SKILL.md         # 7-metric readiness assessment
-│   ├── taste-encoder/SKILL.md            # Encode expertise into rules
-│   ├── arch-guard/SKILL.md               # Set up constraint enforcement
-│   ├── entropy-sweep/SKILL.md            # Scan for entropy
-│   ├── harness-review/SKILL.md           # Harness-aware code review
-│   └── spec-to-task/SKILL.md             # Task decomposition
-├── agents/                               # Read-only background subagents
-│   ├── arch-guard-agent/AGENT.md         # Architectural compliance
-│   ├── entropy-sweep-agent/AGENT.md      # Entropy detection
-│   └── harness-reviewer/AGENT.md         # Code review
-└── hooks/                                # Event hook scripts (stdin JSON)
-    ├── arch-check.sh                     # PreToolUse: layer boundary check
-    └── doc-drift-check.sh                # Stop: documentation drift warning
-docs/
+.claude-plugin/
+├── plugin.json                           # Plugin manifest
+├── marketplace.json                      # Marketplace definition for distribution
+skills/                                   # User-invocable slash commands
+├── harness-init/SKILL.md                 # Initialize the harness
+├── legibility-score/SKILL.md             # 7-metric readiness assessment
+├── taste-encoder/SKILL.md                # Encode expertise into rules
+├── arch-guard/SKILL.md                   # Set up constraint enforcement
+├── entropy-sweep/SKILL.md                # Scan for entropy
+├── harness-review/SKILL.md               # Harness-aware code review
+└── spec-to-task/SKILL.md                 # Task decomposition
+agents/                                   # Read-only background subagents
+├── arch-guard-agent.md                   # Architectural compliance
+├── entropy-sweep-agent.md                # Entropy detection
+└── harness-reviewer.md                   # Code review
+hooks/                                    # Event hook scripts
+├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
+├── arch-check.sh                         # PreToolUse: layer boundary check
+└── doc-drift-check.sh                    # Stop: documentation drift warning
+docs/                                     # Template docs for target projects
 ├── ARCHITECTURE.md                       # Layer model, boundaries, decisions
-├── CONVENTIONS.md                        # Naming, size, patterns (template)
+├── CONVENTIONS.md                        # Naming, size, patterns
 ├── TESTING.md                            # Test strategy, structural tests
 ├── LINTING.md                            # Lint rule registry (TASTE-NNN)
 ├── DECISIONS.md                          # Architecture Decision Records
@@ -87,8 +89,10 @@ This plugin leverages specific Claude Code capabilities:
 
 | Feature | Where Used | Why |
 |---------|-----------|-----|
+| `.claude-plugin/plugin.json` | Plugin root | Standard plugin manifest for install/update |
+| `marketplace.json` | Plugin root | Distribution via `/plugin marketplace add` |
+| `${CLAUDE_PLUGIN_ROOT}` | hooks.json, hook scripts | Portable path resolution within plugin |
 | `allowed-tools` | legibility-score, harness-review, entropy-sweep | Enforce read-only behavior for review/scan skills |
-| `allowed-tools` (read-only) | legibility-score | Restrict to Read/Glob/Grep/Bash for safe assessment |
 | `memory: project` | All agents | Accumulate findings across sessions |
 | `background: true` | arch-guard-agent, entropy-sweep-agent | Run scans without blocking the main conversation |
 | `disallowedTools` | All agents | Prevent agents from modifying code |
