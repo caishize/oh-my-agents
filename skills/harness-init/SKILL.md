@@ -82,6 +82,7 @@ Template:
 [1-2 sentences describing the system]. Full details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 Layer model: Types -> Config -> Repo -> Service -> Runtime -> UI
+Sibling layers (e.g., UI imports Types/Utils but not API/Service): noted separately
 Cross-cutting (auth, telemetry, feature flags): via Providers interface
 
 ## Key Conventions (Top 5)
@@ -94,9 +95,9 @@ Cross-cutting (auth, telemetry, feature flags): via Providers interface
 Full conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 
 ## Module Map
-| Module | Path | Purpose | Nested CLAUDE.md |
-|--------|------|---------|-----------------|
-| [name] | `src/[dir]` | [1-line purpose] | Yes/No |
+| Module | Path | Files | Purpose | Nested CLAUDE.md |
+|--------|------|-------|---------|-----------------|
+| [name] | `src/[dir]` | [count] | [1-line purpose] | Yes/No |
 
 ## Documentation
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -175,7 +176,7 @@ docs/
 ├── CONVENTIONS.md         # Naming, file size limits, error handling patterns
 ├── TESTING.md             # Test strategy, structural tests, coverage rules
 ├── LINTING.md             # Custom lint rules and their rationale
-├── DECISIONS.md           # ADRs: "we chose X over Y because..."
+├── DECISIONS.md           # ADRs: "we chose X over Y because..." (status: Proposed → Accepted → Superseded/Deprecated)
 ├── PROVIDERS.md           # Cross-cutting: auth, telemetry, feature flags
 ├── OBSERVABILITY.md       # Logging, metrics, tracing, monitoring strategy
 ├── design-docs/           # Design documents for major features
@@ -192,6 +193,12 @@ docs/
 ```
 
 Key rules for documentation:
+- **Sibling layers in ARCHITECTURE.md** — If a layer (like UI) does not fit the linear
+  dependency chain (it imports from Types/Utils but not from API/Service), note it as a
+  sibling layer in the diagram rather than placing it at the end of the linear chain.
+  This prevents agents from incorrectly inferring that UI depends on API.
+- **ADR lifecycle in DECISIONS.md** — Include a brief ADR lifecycle note at the top of
+  DECISIONS.md: `Status flow: Proposed → Accepted → Superseded/Deprecated`.
 - **Structured formats (JSON/YAML) > prose** where agents need to parse rules
 - **Machine-readable** — clear headings, bullet points, code examples
 - **Actionable** — rules an agent can follow, not descriptions
@@ -225,6 +232,10 @@ Create a machine-readable harness configuration that other skills can reference:
 Adapt `layer_dirs` to match the actual project structure discovered in Step 1.
 Set `providers_path` if a cross-cutting providers module exists.
 
+**Layer name rule:** Layer keys in `harness.json` must match actual directory names exactly
+(including plural forms). If the directory is `src/services/`, use `"services"` as the key,
+not `"service"`. Mismatched keys cause other skills to fail when resolving layer paths.
+
 ### Step 6: Create Bootstrap Script
 
 Create `scripts/bootstrap.sh` — a single script from zero to running:
@@ -246,7 +257,7 @@ echo "[3/4] Running initial build..."
 [build command]
 
 echo "[4/4] Verifying setup..."
-[test command]
+[check command if unified check exists, otherwise build + test]
 
 echo ""
 echo "Setup complete. Available commands:"
@@ -258,6 +269,16 @@ echo "  [check cmd]  — Full validation (lint + test + build)"
 ```
 
 Make it executable: `chmod +x scripts/bootstrap.sh`
+
+**Secrets handling:** If hardcoded secrets (API keys, passwords, tokens, connection strings)
+are detected in source code during Step 1, create a `.env.example` file listing the required
+environment variables with placeholder values (e.g., `DB_PASSWORD=change_me`,
+`API_KEY=your_key_here`). This ensures that `CONVENTIONS.md` references and the bootstrap
+script's `cp .env.example .env` step are not orphaned.
+
+**Unified check preference:** If a unified check command exists (e.g., `npm run check` =
+lint + test + build), prefer it in the bootstrap script's verification step over running
+build and test separately. This ensures lint is also verified on first setup.
 
 ### Step 7: Create Task Entry Points
 
@@ -272,6 +293,10 @@ in CLAUDE.md and **actually work** (verify by running each one):
 
 If entry points are missing, create them using the project's build system
 (Makefile, package.json scripts, Cargo.toml, etc.).
+
+**Non-functional command annotation:** If a command cannot be verified (e.g., `npm start`
+requires a missing entry point), annotate it in CLAUDE.md: `npm start` *(not yet functional
+— entry point missing)*. Never list a broken command without qualification.
 
 > "When Codex got stuck, we treated it as an environment design problem — what was
 > missing for the agent to proceed reliably?"
@@ -343,3 +368,11 @@ Next Steps:
   skipping any pillar creates blind spots that compound over time
 - **Nested CLAUDE.md for every module with 5+ source files** — this is how OpenAI scaled to
   88 instruction files; one root file cannot hold everything
+- **Layer keys must match directory names** — `harness.json` layer keys use the actual
+  directory name including plural forms (`"services"` not `"service"`)
+- **Auto-create `.env.example` when secrets detected** — if hardcoded secrets are found,
+  produce `.env.example` with placeholder values so bootstrap and CONVENTIONS.md refs work
+- **Never list broken commands without annotation** — if a command cannot be verified,
+  qualify it in CLAUDE.md (e.g., *(not yet functional — entry point missing)*)
+- **Module Map includes file counts** — the Files column lets agents assess when a module
+  has grown past the nested CLAUDE.md threshold

@@ -55,6 +55,10 @@ correct but harmful to codebase quality:
 
 **Missing taste** — would a senior engineer accept this in a manual PR?
 
+For each slop finding, note the **agent replication risk**: bad patterns in the codebase
+multiply via every future agent-generated PR. Example: "Three retry implementations
+exist — an agent encountering this codebase will create a 4th."
+
 ### Review 2: Risk & Safety (P0 — alongside Slop)
 
 Security and safety issues compound just like slop. An agent that sees an insecure
@@ -93,6 +97,9 @@ Check changes against the layer model and constraints:
    instead of through the Providers interface?
 3. **Module boundaries** — Are internal implementation details leaking?
 4. **New dependencies** — Are cross-module dependencies justified?
+5. **Direct instantiation** — Check for direct instantiation of services in
+   route/controller files (e.g., `new UserService()`). Direct instantiation prevents
+   dependency injection, makes testing harder, and couples layers. Flag as P1.
 
 ### Review 4: Execution Plan Alignment
 
@@ -104,7 +111,8 @@ that other agents (and humans) aren't expecting.
 2. **Scope creep** — Are changes touching files outside the plan's defined scope?
 3. **Unplanned work** — If no plan covers this change, should one exist?
 
-If no execution plans directory exists, skip this review silently.
+If no execution plans directory exists, note this as a process gap and recommend
+which findings (if any) warrant creating an execution plan via `/spec-to-task`.
 
 ### Review 5: Harness Impact
 
@@ -155,6 +163,8 @@ Does this change strengthen or weaken the harness?
 - Unclear naming (but don't nitpick what linters should catch)
 - Potential for future confusion
 - Opportunities for better patterns
+- Unused dependencies in package.json/requirements.txt that are never imported in
+  source code. Unused dependencies increase bundle size and supply-chain attack surface.
 
 ## Output Format
 
@@ -165,12 +175,12 @@ Does this change strengthen or weaken the harness?
 
 ### Merge Recommendation: [TRIVIAL / STANDARD / COMPLEX]
 
-> **Trivial**: Docs-only, config tweaks, test additions with no logic changes.
-> If CI passes, consider auto-merging. "Waiting is expensive, correction is cheap."
+> **TRIVIAL**: Single-file, low-risk change (docs-only, config tweaks, test additions
+> with no logic changes). Auto-merge candidate if CI passes.
 >
-> **Standard**: Single-concern changes with clear scope. 1-minute human review.
+> **STANDARD**: Multi-file but focused change. 1-minute human review sufficient.
 >
-> **Complex**: Multi-module changes, new patterns, architectural shifts. Deep review needed.
+> **COMPLEX**: Cross-module, architectural, or security-impacting. Deep review required.
 
 ### Slop Check
 [Pass / Fail — list any slop patterns found]
@@ -199,14 +209,15 @@ Does this change strengthen or weaken the harness?
 - `file.ts:15` — [note]
 
 ### Checklist
-- [ ] No slop (no duplicates, consistent patterns, no over-engineering)
-- [ ] No security/safety risks (secrets, auth bypass, unvalidated input)
-- [ ] Architectural constraints respected
-- [ ] Aligned with active execution plan (if applicable)
-- [ ] Documentation updated if needed (including nested CLAUDE.md)
-- [ ] Tests cover new code paths
-- [ ] Error messages include remediation context
-- [ ] Lint/structural tests still pass
+<!-- [x] = passed, [ ] = FAILED — mark each item accordingly -->
+- [x] No slop (no duplicates, consistent patterns, no over-engineering)
+- [x] No security/safety risks (secrets, auth bypass, unvalidated input)
+- [x] Architectural constraints respected
+- [ ] Aligned with active execution plan (if applicable) — FAILED: [reason]
+- [x] Documentation updated if needed (including nested CLAUDE.md)
+- [x] Tests cover new code paths
+- [x] Error messages include remediation context
+- [x] Lint/structural tests still pass
 ```
 
 ## Rules

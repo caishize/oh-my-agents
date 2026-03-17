@@ -52,6 +52,10 @@ compounding technical debt.** Scan for:
 3. **Unnecessary abstraction** — Over-engineered code for simple operations
 4. **Inconsistent naming** — Same concept with different names across modules
 5. **Copy-paste artifacts** — Comments, variable names, or logic from unrelated code
+6. **Security Slop** — Hardcoded secrets, API keys, or tokens committed to source.
+   Check for string literals matching common secret patterns (e.g., `sk-`, `ghp_`,
+   `AKIA`, `Bearer`, API key assignments). These should use environment variables
+   or a secrets manager, never literal values in code.
 
 ### Sweep 2: Documentation Drift
 
@@ -65,6 +69,11 @@ produce wrong code. Check every claim in CLAUDE.md and docs/:
 3. **Stale API descriptions** — Function signatures that changed since docs were written
 4. **Outdated dependency lists** — Packages mentioned but not in manifest
 5. **Contradictory docs** — CLAUDE.md says one thing, docs/ says another
+
+**Note:** Dead imports (imported but never called) belong in Sweep 4 (Dead Weight),
+not here. Documentation Drift covers only actual documentation issues — commands that
+don't work, dead file references in docs, stale API descriptions, outdated dependency
+lists, and contradictory docs.
 
 ### Sweep 3: Architectural Violations
 
@@ -87,6 +96,15 @@ Check against the layer model (Types -> Config -> Repo -> Service -> Runtime -> 
 3. **Orphaned files** — Files not imported by anything
 4. **Stale TODOs/FIXMEs** — References to completed issues or old PRs
 5. **Commented-out code** — Dead code left as comments
+6. **Dead imports** — Modules or symbols imported but never referenced in the file.
+   These accumulate quickly in agent-generated code.
+7. **Deprecated dependencies** — Packages known to be deprecated or in maintenance
+   mode (e.g., `moment.js`, `request`, `tslint`, `node-uuid`). Flag and suggest
+   modern replacements.
+8. **Zero test files** — If a test runner is configured in dependencies (jest,
+   vitest, mocha, pytest, etc.) but zero test files exist in the project, flag
+   this as a significant gap. A configured-but-unused test runner signals an
+   abandoned testing practice.
 
 ### Sweep 5: Missing Enforcement
 
@@ -124,7 +142,11 @@ Check `docs/exec-plans/active/` for:
 4. **Ghost references** — Plans referencing files, modules, or APIs that no
    longer exist. This happens when code evolves but plans aren't updated.
 
-If `docs/exec-plans/` doesn't exist, skip this sweep silently.
+If `docs/exec-plans/` does not exist at all, skip this sweep silently.
+If `docs/exec-plans/` exists but `docs/exec-plans/active/` is empty or missing,
+report this as a finding: "Execution plans directory exists but contains no active
+plans — either the directory structure is vestigial (clean it up) or active plans
+are missing (create them)."
 
 ### Sweep 7: Nested CLAUDE.md Drift
 
@@ -145,6 +167,14 @@ give agents confident but wrong instructions.
 4. **Oversized module docs** — Nested CLAUDE.md files exceeding 50 lines.
    Module docs should be concise pointers, not encyclopedias. If a module
    CLAUDE.md is too long, it's trying to do too much — extract to docs/.
+5. **Root CLAUDE.md accuracy** — When a root CLAUDE.md exists, verify its
+   content is still accurate. Check that: Module Map entries reference
+   directories/files that still exist, documented commands actually work
+   (e.g., `npm test`, `npm run build`), listed dependencies match the
+   current manifest, and architectural claims match the actual code
+   structure. A root CLAUDE.md that exists but contains stale information
+   is worse than a missing one — agents will follow its instructions
+   confidently.
 
 ## Output Format
 
@@ -201,6 +231,7 @@ give agents confident but wrong instructions.
 ## Rules
 
 - **Say No to Slop** — never lower review standards, even to ship faster
+- **Deduplication** — each finding appears in exactly one category. Dead imports and unused code belong in Dead Weight, not Documentation Drift. Documentation Drift is only for actual documentation issues (stale docs, broken references, contradictory docs).
 - Verify documentation claims by actually running commands
 - Never delete code you're not certain is unused — flag for human review
 - When a pattern is violated, also check if enforcement is missing
