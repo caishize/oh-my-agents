@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Execution Plan v2",
+  "description": "Schema for oh-my-agents execution plans used by /spec-to-task and tracked by /harness-dashboard.",
+  "type": "object",
+  "required": ["id", "feature", "status", "created", "tasks"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^plan-",
+      "description": "Unique plan identifier, must start with 'plan-'"
+    },
+    "feature": {
+      "type": "string",
+      "description": "Human-readable feature name"
+    },
+    "status": {
+      "enum": ["active", "completing", "completed", "stalled", "abandoned"],
+      "description": "Current lifecycle status of the plan"
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 last-update timestamp"
+    },
+    "author": {
+      "type": "string",
+      "description": "Who created this plan (human or agent identifier)"
+    },
+    "spec_ref": {
+      "type": "string",
+      "description": "Reference to the original spec (file path, URL, or issue number)"
+    },
+    "pillar": {
+      "enum": ["architecture", "documentation", "observability", "entropy"],
+      "description": "Primary pillar this plan addresses"
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^task-",
+            "description": "Unique task identifier within the plan"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short task description"
+          },
+          "status": {
+            "enum": ["pending", "in-progress", "done", "blocked", "skipped"],
+            "description": "Current task status"
+          },
+          "layer": {
+            "enum": ["types", "config", "repo", "service", "runtime", "ui", "docs", "test"],
+            "description": "Architectural layer this task targets"
+          },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "File paths this task will create or modify"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Task IDs that must complete before this task"
+          },
+          "acceptance": {
+            "type": "string",
+            "description": "Acceptance criteria or verification command"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Implementation notes or context for the agent"
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Architectural or process constraints for this plan"
+    },
+    "golden_principles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Project-specific golden principles that must not be violated"
+    }
+  }
+}

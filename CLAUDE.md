@@ -1,44 +1,49 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-Claude Code plugin implementing OpenAI's harness engineering methodology.
-Install via `/plugin install oh-my-agents` or copy components manually.
+Implements OpenAI's harness engineering methodology (four pillars) adapted for Claude Code.
 
 ## Skills (User-invocable)
 
-| Command | Purpose |
-|---------|---------|
-| `/oh-my-agents:harness-init` | Initialize harness: CLAUDE.md, docs/, bootstrap, entry points |
-| `/oh-my-agents:legibility-score` | Assess the 7-metric Agent Legibility Score |
-| `/oh-my-agents:taste-encoder` | Encode team expertise into lint rules and structural tests |
-| `/oh-my-agents:arch-guard` | Set up architectural constraint enforcement |
-| `/oh-my-agents:entropy-sweep` | Scan for slop, doc drift, violations, dead code |
-| `/oh-my-agents:harness-review` | Code review with "Say No to Slop" |
-| `/oh-my-agents:spec-to-task` | Convert specs into agent-friendly tasks |
+| Command | Pillar | Purpose |
+|---------|--------|---------|
+| `/harness-init` | All | Initialize harness: nested CLAUDE.md, docs/, bootstrap, config |
+| `/legibility-score` | All | 10-metric Agent Legibility Score (0-30) |
+| `/spec-to-task` | Documentation | Convert specs to execution plans with lifecycle |
+| `/arch-guard` | Architecture | Enforce architectural constraints and Providers |
+| `/taste-encoder` | Architecture | Encode expertise into lint rules and tests |
+| `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code, stale plans |
+| `/harness-review` | Entropy | Code review: slop, safety, architecture, plan alignment |
+| `/harness-dashboard` | Observability | Session metrics, plan progress, harness health |
+| `/harness-metrics` | Observability | Detailed metric queries and analysis |
 
-## Agents (Read-only, dispatched by Claude)
+## Agents (Read-only background)
 
-| Agent | Purpose |
-|-------|---------|
-| `arch-guard-agent` | Background architectural compliance check |
-| `entropy-sweep-agent` | Background entropy scan |
-| `harness-reviewer` | Background code review |
+| Agent | Pillar | Purpose |
+|-------|--------|---------|
+| arch-guard-agent | Architecture | Background compliance checking |
+| entropy-sweep-agent | Entropy | Background entropy scanning |
+| harness-reviewer | Entropy | Background code review |
+| session-observer-agent | Observability | Session tracking and shift-handoff |
 
-## Hooks (Automatic)
+## Hooks (Automatic enforcement)
 
-| Hook | Event | Behavior |
-|------|-------|----------|
-| `arch-check.sh` | PreToolUse (Edit/Write) | Blocks layer violations |
-| `doc-drift-check.sh` | Stop | Warns about documentation drift |
+| Hook | Event | Pillar | Behavior |
+|------|-------|--------|----------|
+| arch-check.sh | PreToolUse | Architecture | Blocks layer violations and Providers bypass |
+| safety-check.sh | PreToolUse | Entropy | Blocks hardcoded secrets and risk patterns |
+| session-metrics.sh | PostToolUse | Observability | Records tool usage metrics |
+| doc-drift-check.sh | Stop | Documentation | Warns about documentation drift |
+
+## Four Pillars
+
+1. **Architecture as Guardrails** — Layer model, Providers, mechanical enforcement
+2. **Documentation as System of Record** — Nested CLAUDE.md, exec-plans, progressive disclosure
+3. **Observability & Legibility** — Session metrics, dashboard, shift-handoff
+4. **Entropy Management** — Slop detection, doc-gardening, golden principles
 
 ## Workflow
 
-1. `/oh-my-agents:harness-init` → `/oh-my-agents:legibility-score` → `/oh-my-agents:arch-guard` (one-time setup)
-2. `/oh-my-agents:taste-encoder` (ongoing: encode team expertise into rules)
-3. `/oh-my-agents:spec-to-task` → develop → `/oh-my-agents:harness-review` (daily cycle)
-4. `/oh-my-agents:entropy-sweep` (weekly or pre-release)
-
-## Architecture
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-Three pillars: Context Engineering, Architectural Constraints, Entropy Management.
+1. `/harness-init` -> `/legibility-score` (one-time setup)
+2. `/spec-to-task` -> develop -> `/harness-review` (daily cycle)
+3. `/entropy-sweep` (weekly or pre-release)
+4. `/harness-dashboard` (anytime — check harness health)

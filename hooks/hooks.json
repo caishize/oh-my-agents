@@ -9,6 +9,25 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/arch-check.sh",
             "timeout": 10000,
             "statusMessage": "Checking architectural constraints..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/safety-check.sh",
+            "timeout": 5000,
+            "statusMessage": "Checking for risk patterns..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-metrics.sh",
+            "timeout": 2000,
+            "statusMessage": "Recording metrics..."
           }
         ]
       }

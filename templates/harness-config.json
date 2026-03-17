@@ -1,0 +1,16 @@
+{
+  "version": "2.0",
+  "pillars": ["architecture", "documentation", "observability", "entropy"],
+  "layers": ["types", "config", "repo", "service", "runtime", "ui"],
+  "layer_dirs": {
+    "types": ["**/types/**", "**/models/**", "**/interfaces/**"],
+    "config": ["**/config/**", "**/configuration/**"],
+    "repo": ["**/repo/**", "**/repository/**", "**/dal/**"],
+    "service": ["**/service/**", "**/services/**"],
+    "runtime": ["**/runtime/**", "**/server/**", "**/api/**"],
+    "ui": ["**/ui/**", "**/components/**", "**/pages/**", "**/views/**"]
+  },
+  "providers_path": null,
+  "file_size_limit": 300,
+  "nested_claude_md_threshold": 5
+}

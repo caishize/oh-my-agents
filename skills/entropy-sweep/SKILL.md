@@ -1,20 +1,27 @@
 ---
 name: entropy-sweep
-description: Scan for and fix codebase entropy — documentation drift, AI slop accumulation, constraint violations, dead code. Based on OpenAI's "garbage collection" pillar and their evolution from manual Friday cleanup to automated agent scanning.
+description: "Scan for and fix codebase entropy across all four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Covers slop, doc drift, arch violations, dead code, missing enforcement, exec plan health, and nested CLAUDE.md drift."
 user-invocable: true
-argument-hint: "[scope: full|docs|slop|arch|dead-code]"
+argument-hint: "[scope: full|docs|slop|arch|dead-code|plans|claude-md]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Entropy Sweep
 
 Perform the "garbage collection" that keeps agent-generated codebases healthy. Based on
-OpenAI's discovery that their initial approach (manual Friday cleanup of "AI slop")
-didn't scale, leading them to automate recurring agent tasks that scan for pattern
-violations and open targeted cleanup PRs.
+the discovery that manual Friday cleanup of "AI slop" doesn't scale, leading to
+automated recurring agent tasks that scan for pattern violations and open targeted
+cleanup PRs.
 
 > "The bottleneck was never the agent's ability to write code, but the lack of structure,
 > tools, and feedback mechanisms surrounding it."
+
+The sweep is organized around the **four pillars**:
+
+1. **Architecture as Guardrails** — layer violations, provider bypass, dead weight
+2. **Documentation as System of Record** — doc drift, stale references
+3. **Observability & Legibility** — nested CLAUDE.md health, logging gaps
+4. **Entropy Management** — execution plan health, missing enforcement, slop
 
 ## What Is Entropy?
 
@@ -23,8 +30,9 @@ In agent-driven codebases, entropy accumulates faster because:
 - Agents have no taste — they'll produce functionally-correct but poorly-maintainable code
 - Documentation drifts as code changes outpace doc updates
 - Duplicate helpers and inconsistent patterns multiply
+- Execution plans go stale as reality diverges from the plan
 
-OpenAI calls this **"slop"** — technically correct code that degrades the codebase quality.
+This is **"slop"** — technically correct code that degrades codebase quality.
 
 ## Task
 
@@ -32,11 +40,13 @@ Perform a comprehensive entropy sweep. Use $ARGUMENTS to scope (default: full).
 
 ### Sweep 1: Say No to Slop
 
-OpenAI's #1 rule: **maintain strict review standards. Lowering the bar creates
+**Pillar: Entropy Management**
+
+The #1 rule: **maintain strict review standards. Lowering the bar creates
 compounding technical debt.** Scan for:
 
 1. **Duplicate helpers** — Same logic implemented in multiple places
-   (OpenAI's real example: duplicate concurrency helpers where only one had OTel)
+   (Real example: duplicate concurrency helpers where only one had OTel)
 2. **Pattern drift** — Similar operations done differently across files
    (e.g., 5 files use async/await, 3 use callbacks)
 3. **Unnecessary abstraction** — Over-engineered code for simple operations
@@ -45,7 +55,10 @@ compounding technical debt.** Scan for:
 
 ### Sweep 2: Documentation Drift
 
-Check every claim in CLAUDE.md and docs/:
+**Pillar: Documentation as System of Record**
+
+Documentation is the system of record. When it drifts, agents get wrong context and
+produce wrong code. Check every claim in CLAUDE.md and docs/:
 
 1. **Commands that don't work** — Run each documented command, verify it succeeds
 2. **Dead file references** — Paths mentioned in docs that don't exist
@@ -55,7 +68,9 @@ Check every claim in CLAUDE.md and docs/:
 
 ### Sweep 3: Architectural Violations
 
-Check against the layer model (Types → Config → Repo → Service → Runtime → UI):
+**Pillar: Architecture as Guardrails**
+
+Check against the layer model (Types -> Config -> Repo -> Service -> Runtime -> UI):
 
 1. **Layer boundary crossings** — Imports going the wrong direction
 2. **Circular dependencies** — Modules importing each other
@@ -65,6 +80,8 @@ Check against the layer model (Types → Config → Repo → Service → Runtime
 
 ### Sweep 4: Dead Weight
 
+**Pillar: Entropy Management**
+
 1. **Unused exports** — Functions/classes exported but never imported
 2. **Unused dependencies** — Packages in manifest not used in code
 3. **Orphaned files** — Files not imported by anything
@@ -73,52 +90,112 @@ Check against the layer model (Types → Config → Repo → Service → Runtime
 
 ### Sweep 5: Missing Enforcement
 
+**Pillar: Architecture as Guardrails**
+
 Check if documented rules actually have mechanical enforcement:
 
 1. For each rule in docs/CONVENTIONS.md — is there a lint rule or test?
 2. For each constraint in docs/ARCHITECTURE.md — is there a structural test?
 3. For each taste invariant in docs/LINTING.md — is there a lint rule?
 
-Rules without enforcement are just suggestions agents will ignore.
+Rules without enforcement are just suggestions agents will ignore. This is the
+gap between "we document conventions" and "we enforce conventions." Only enforcement
+scales.
+
+### Sweep 6: Execution Plan Health
+
+**Pillar: Entropy Management**
+
+If `docs/exec-plans/` exists, check the health of active plans. Execution plans
+that go stale become misleading — agents following an outdated plan create work
+that conflicts with reality.
+
+Check `docs/exec-plans/active/` for:
+
+1. **Stale active plans** — Plans with no file modifications in 7+ days.
+   Use file modification dates to detect. A plan that hasn't been touched
+   is either completed (move to `completed/`) or blocked (needs attention).
+2. **Blocked tasks with no progress** — Plans where tasks are marked blocked
+   but no resolution steps are documented. Blocked work should either have
+   a path forward or be descoped.
+3. **Completed tasks not marked done** — Cross-reference plan task lists
+   against actual code changes. If the code exists but the task isn't checked
+   off, the plan is misleading.
+4. **Ghost references** — Plans referencing files, modules, or APIs that no
+   longer exist. This happens when code evolves but plans aren't updated.
+
+If `docs/exec-plans/` doesn't exist, skip this sweep silently.
+
+### Sweep 7: Nested CLAUDE.md Drift
+
+**Pillar: Documentation as System of Record / Observability & Legibility**
+
+Nested CLAUDE.md files give agents module-specific context, but they rot just like
+any other documentation. Stale module docs are worse than no docs because they
+give agents confident but wrong instructions.
+
+1. **Missing coverage** — Modules with 5+ source files that lack a CLAUDE.md.
+   These are blind spots where agents have no module-specific guidance.
+2. **Ghost references** — Nested CLAUDE.md files referencing source files that
+   have been moved or deleted. Check every file path mentioned.
+3. **Layer rule inconsistency** — Nested CLAUDE.md claiming different layer rules
+   than the root CLAUDE.md or docs/ARCHITECTURE.md. For example, a module
+   CLAUDE.md saying "this module may import from service/" when the root says
+   it's a types-layer module.
+4. **Oversized module docs** — Nested CLAUDE.md files exceeding 50 lines.
+   Module docs should be concise pointers, not encyclopedias. If a module
+   CLAUDE.md is too long, it's trying to do too much — extract to docs/.
 
 ## Output Format
 
 ```markdown
 ## Entropy Sweep Report — [date]
 
-### 🔴 Slop (fix immediately)
+### Slop (fix immediately)
 - `src/utils/retry.ts` + `src/helpers/async-retry.ts` — duplicate retry logic
   Only `src/utils/retry.ts` has OTel instrumentation. Delete the duplicate.
 - 5 files use `logger.info()`, 3 use `console.log()` — mixed logging
 
-### 🟡 Documentation Drift
+### Documentation Drift
 - CLAUDE.md:15 says `npm test` but project uses `pnpm test`
 - docs/ARCHITECTURE.md references `src/services/` but directory is `src/service/`
 
-### 🟠 Architectural Violations
+### Architectural Violations
 - `src/ui/dashboard.ts:15` imports `src/service/internal/auth` (layer violation)
 - `src/api/users.ts:42` calls `getFeatureFlag()` directly (bypass Providers)
 
-### ⚪ Dead Weight
+### Dead Weight
 - `src/helpers/legacy.ts` — imported by nothing
 - `lodash` in package.json — not imported in any source file
 
-### 🔵 Missing Enforcement
+### Missing Enforcement
 - docs/CONVENTIONS.md says "max 300 lines per file" — no lint rule or test
 - docs/ARCHITECTURE.md defines layers — no structural test validates them
 
+### Execution Plan Health
+- `docs/exec-plans/active/migration-v2.md` — last modified 12 days ago (stale)
+- `docs/exec-plans/active/auth-refactor.md` — references `src/auth/legacy.ts` (deleted)
+- `docs/exec-plans/active/api-v3.md` — 4 tasks appear complete but unmarked
+
+### Nested CLAUDE.md Drift
+- `src/services/` (12 files) — missing CLAUDE.md
+- `src/auth/CLAUDE.md:8` references `src/auth/middleware.ts` (moved to `src/middleware/auth.ts`)
+- `src/utils/CLAUDE.md` — 67 lines (exceeds 50 line limit)
+
 ### Auto-fixed
-- ✅ Updated 3 stale paths in docs/ARCHITECTURE.md
-- ✅ Removed 2 stale TODO comments referencing closed issues
+- Updated 3 stale paths in docs/ARCHITECTURE.md
+- Removed 2 stale TODO comments referencing closed issues
 
 ### Summary
-| Category              | Count | Severity |
-|-----------------------|-------|----------|
-| Slop                  |     N | Fix now  |
-| Documentation drift   |     N | Fix soon |
-| Architectural         |     N | Fix soon |
-| Dead weight           |     N | Clean up |
-| Missing enforcement   |     N | Add rules|
+| Category              | Count | Severity   |
+|-----------------------|-------|------------|
+| Slop                  |     N | Fix now    |
+| Documentation drift   |     N | Fix soon   |
+| Architectural         |     N | Fix soon   |
+| Dead weight           |     N | Clean up   |
+| Missing enforcement   |     N | Add rules  |
+| Exec plan health      |     N | Review     |
+| Nested CLAUDE.md      |     N | Update     |
 ```
 
 ## Rules
@@ -129,4 +206,5 @@ Rules without enforcement are just suggestions agents will ignore.
 - When a pattern is violated, also check if enforcement is missing
 - For each finding, include the specific file:line and actionable fix
 - Recommend `/taste-encoder` for patterns that need mechanical enforcement
+- Recommend `/harness-dashboard` for tracking entropy trends over time
 - This sweep should run weekly or before every major release

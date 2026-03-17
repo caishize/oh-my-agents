@@ -1,27 +1,39 @@
 ---
 name: taste-encoder
-description: Encode team expertise and taste into mechanical enforcement — custom lint rules, structural tests, and bespoke code reviewers. Each expert's knowledge becomes a multiplier for the entire agent fleet.
+description: "Encode team expertise and taste into mechanical enforcement — custom lint rules, structural tests, and bespoke code reviewers. Each expert's knowledge becomes a multiplier for the entire agent fleet. Integrates with nested CLAUDE.md and Claude Code memory for cross-session persistence. Based on four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management."
 user-invocable: true
 argument-hint: "<what-to-encode: pattern-description or code-example>"
+allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Taste Encoder
 
-Turn human expertise and "taste" into mechanically-enforced rules. Based on OpenAI's
+Turn human expertise and "taste" into mechanically-enforced rules. Based on a
 key insight: **"If you can articulate what code you dislike, write that down"** as a
 lint rule, structural test, or automated reviewer.
+
+> **Mitchell Hashimoto's principle**: "Anytime you find an agent makes a mistake, you
+> take the time to engineer a solution such that the agent never makes that mistake again."
+>
+> This is the core philosophy of taste encoding. Every mistake is an opportunity to
+> permanently improve the entire agent fleet. The cost of encoding a rule is paid once;
+> the benefit compounds across every future agent session.
 
 > "Each person's expertise becomes a multiplier for the entire team's agent fleet."
 > When a front-end expert joined OpenAI's team, they encoded React component architecture
 > patterns (single-file hooks, small testable components). All agents immediately benefited.
 
-> Mitchell Hashimoto's principle: **"Anytime you find an agent makes a mistake, you take
-> the time to engineer a solution such that the agent never makes that mistake again."**
+This skill touches all **four pillars**:
+
+1. **Architecture as Guardrails** — lint rules and structural tests are guardrails
+2. **Documentation as System of Record** — rules are documented in docs/ and CLAUDE.md
+3. **Observability & Legibility** — error messages make violations visible and fixable
+4. **Entropy Management** — encoding prevents the same mistake from recurring
 
 ## Why This Matters
 
 Without encoding, agents will:
-- Create duplicate helper functions (OpenAI's real example: Codex kept creating duplicate
+- Create duplicate helper functions (real example: Codex kept creating duplicate
   concurrency helpers, but only one version connected to OpenTelemetry)
 - Violate unwritten conventions that "everyone knows"
 - Produce code that's technically correct but stylistically wrong ("slop")
@@ -117,10 +129,10 @@ def test_concurrency_helpers_only_in_approved_location():
             if isinstance(node, ast.FunctionDef) and node.name in ("with_retry", "with_timeout"):
                 violations.append(f"{path}:{node.lineno}")
     assert not violations, (
-        f"Concurrency helpers defined outside approved location:\\n"
-        + "\\n".join(violations)
-        + "\\nUse imports from src/utils/concurrency.py instead."
-        + "\\nRef: docs/CONVENTIONS.md#concurrency-helpers"
+        f"Concurrency helpers defined outside approved location:\n"
+        + "\n".join(violations)
+        + "\nUse imports from src/utils/concurrency.py instead."
+        + "\nRef: docs/CONVENTIONS.md#concurrency-helpers"
     )
 
 def test_file_size_limits():
@@ -133,10 +145,10 @@ def test_file_size_limits():
         if lines > 300:
             violations.append(f"{path}: {lines} lines (limit: 300)")
     assert not violations, (
-        f"Files exceeding size limit:\\n"
-        + "\\n".join(violations)
-        + "\\nRefactor: extract helpers into separate modules."
-        + "\\nRef: docs/CONVENTIONS.md#file-size"
+        f"Files exceeding size limit:\n"
+        + "\n".join(violations)
+        + "\nRefactor: extract helpers into separate modules."
+        + "\nRef: docs/CONVENTIONS.md#file-size"
     )
 ```
 
@@ -154,7 +166,30 @@ repos:
         types: [python]  # or [javascript], [typescript], etc.
 ```
 
-### Step 4: Document the Rule
+### Step 4: Error Message Quality Checklist
+
+Every error message produced by an encoded rule must pass this checklist. Error
+messages are agent context — a bad error message means the agent will struggle to
+fix the violation, and may introduce new slop trying to work around it.
+
+Each error message MUST include:
+
+1. **What the violation is** — Clear, specific description of what went wrong.
+   Bad: "Invalid import." Good: "Module 'ui/dashboard' imports from 'service/internal/auth'."
+
+2. **Where the correct pattern lives** — Point to the approved location or reference.
+   "Use the approved implementation from 'src/utils/concurrency.ts'."
+
+3. **How to fix it** — Concrete remediation steps, not just "fix this."
+   "Import: `import { withRetry } from '@/utils/concurrency'`"
+
+4. **Reference to docs** — Link to the convention, ADR, or architecture doc.
+   "Ref: docs/CONVENTIONS.md#concurrency-helpers"
+
+If an error message is missing any of these four elements, the encoding is incomplete.
+An agent seeing a bad error message will either ignore it or produce a worse fix.
+
+### Step 5: Document the Rule
 
 Add an entry to `docs/LINTING.md` or `docs/CONVENTIONS.md`:
 
@@ -170,19 +205,60 @@ Duplicates lose observability.
 **Bad example**: `function withRetry(fn) { ... }` in any other file
 ```
 
-### Step 5: Verify the Encoding
+### Step 6: Update Nested CLAUDE.md
 
-1. Write a test case that triggers the violation → confirm it's caught
-2. Write a test case that follows the pattern → confirm it passes
-3. Run the full lint/test suite → no false positives
-4. Verify the error message includes remediation instructions
+After creating a rule, check whether the relevant module's CLAUDE.md should be
+updated. This is where the Documentation pillar intersects with enforcement —
+an agent reading a module's CLAUDE.md should see the conventions that apply to
+that module.
+
+1. **Identify the affected module** — Which directory does this rule primarily affect?
+2. **Check if a nested CLAUDE.md exists** for that module.
+   - If yes: Add the new convention to the module's "Conventions" section.
+   - If no, and the module has 5+ files: Suggest creating one with the convention included.
+3. **Keep it concise** — Add one line describing the rule, not the full documentation.
+   Example: `- Use @/utils/concurrency for all retry/timeout logic (TASTE-001)`
+4. **Verify consistency** — Ensure the nested CLAUDE.md doesn't contradict the root
+   CLAUDE.md or docs/CONVENTIONS.md.
+
+### Step 7: Memory Integration
+
+When encoding a taste, suggest saving to Claude Code memory for cross-session
+persistence. Lint rules and structural tests persist in the repo, but CLAUDE.md
+rules and team conventions benefit from memory reinforcement.
+
+**Suggest the following pattern to the user**:
+
+> Consider saving this convention to Claude Code memory so it persists across sessions:
+>
+> "Convention encoded on [date] by [who]: [one-line description]. Enforced by [method].
+> Reason: [why]. See docs/CONVENTIONS.md#[section] and [module]/CLAUDE.md."
+
+This is especially valuable for:
+- Conventions that are documented in CLAUDE.md but not mechanically enforced
+- Patterns that are nuanced and require judgment
+- Team preferences that span multiple modules
+
+Memory complements mechanical enforcement — enforcement catches violations at
+commit time, while memory helps agents avoid violations during code generation.
+
+### Step 8: Verify the Encoding
+
+1. Write a test case that triggers the violation — confirm it's caught
+2. Write a test case that follows the pattern — confirm it passes
+3. Run the full lint/test suite — no false positives
+4. Verify the error message passes the quality checklist (Step 4)
+5. Verify nested CLAUDE.md is updated if applicable (Step 6)
 
 ## Rules
 
-- Error messages MUST include remediation instructions — they are agent context
+- Error messages MUST pass the quality checklist (what, where, how, ref)
 - Every rule needs a reference to documentation (docs/ file + section)
 - Rules must have 100% test coverage (both positive and negative cases)
 - Start simple — a doc rule in CLAUDE.md is better than no rule at all
 - Rules should be "rippable" — easy to update or remove as needs change
 - Tag each rule with an ID (TASTE-001) for tracking
 - Include "Added by" and date so the team knows who owns the expertise
+- Update nested CLAUDE.md when a rule affects a specific module
+- Suggest memory integration for conventions that benefit from cross-session persistence
+- Remember Mitchell Hashimoto: every agent mistake is an encoding opportunity

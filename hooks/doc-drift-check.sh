@@ -98,6 +98,77 @@ if [ "$CONFIG_CHANGED" = true ] && [ "$HAS_DOC_CHANGES" = false ]; then
     WARNINGS="${WARNINGS}   Check if CLAUDE.md or docs/CONVENTIONS.md needs updating.\n\n"
 fi
 
+# 4. Check nested CLAUDE.md files for drift
+# Find all CLAUDE.md files in the project (not just root)
+if [ -d "$PROJECT_DIR" ]; then
+    while IFS= read -r claude_md; do
+        [ -z "$claude_md" ] && continue
+        # Get the directory this CLAUDE.md covers
+        CLAUDE_DIR=$(dirname "$claude_md")
+        REL_CLAUDE_DIR="${CLAUDE_DIR#$PROJECT_DIR/}"
+
+        # Check if any changed files are under this CLAUDE.md's directory
+        SRC_CHANGED_IN_DIR=false
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+                *.ts|*.js|*.py|*.go|*.rs|*.java|*.rb)
+                    if [[ "$file" == "$REL_CLAUDE_DIR"/* ]]; then
+                        SRC_CHANGED_IN_DIR=true
+                        break
+                    fi
+                    ;;
+            esac
+        done <<< "$CHANGED_FILES"
+
+        # Check if this CLAUDE.md was also modified
+        CLAUDE_MD_REL="${claude_md#$PROJECT_DIR/}"
+        CLAUDE_MD_CHANGED=false
+        if echo "$CHANGED_FILES" | grep -qF "$CLAUDE_MD_REL"; then
+            CLAUDE_MD_CHANGED=true
+        fi
+
+        if [ "$SRC_CHANGED_IN_DIR" = true ] && [ "$CLAUDE_MD_CHANGED" = false ]; then
+            WARNINGS="${WARNINGS}Source files changed under '${REL_CLAUDE_DIR}/' but its CLAUDE.md was not updated.\n"
+            WARNINGS="${WARNINGS}   Review: ${CLAUDE_MD_REL}\n\n"
+        fi
+    done < <(find "$PROJECT_DIR" -name "CLAUDE.md" -not -path "*/.git/*" -not -path "*/node_modules/*" 2>/dev/null || true)
+fi
+
+# 5. Check if active execution plans reference modified files
+if [ -d "$PROJECT_DIR/docs/exec-plans/active" ]; then
+    while IFS= read -r plan_file; do
+        [ -z "$plan_file" ] && continue
+        PLAN_NAME=$(basename "$plan_file")
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if grep -qF "$file" "$plan_file" 2>/dev/null; then
+                WARNINGS="${WARNINGS}Modified file '${file}' is referenced in active plan '${PLAN_NAME}'.\n"
+                WARNINGS="${WARNINGS}   Review plan status: docs/exec-plans/active/${PLAN_NAME}\n\n"
+                break
+            fi
+        done <<< "$CHANGED_FILES"
+    done < <(find "$PROJECT_DIR/docs/exec-plans/active" -type f -name "*.json" -o -name "*.md" 2>/dev/null || true)
+fi
+
+# 6. Warn if a new directory with 5+ files was created without a CLAUDE.md
+NEW_DIRS=$(git -C "$PROJECT_DIR" diff --name-status HEAD 2>/dev/null | grep "^A" | awk '{print $2}' | xargs -I{} dirname {} 2>/dev/null | sort -u || true)
+while IFS= read -r dir; do
+    [ -z "$dir" ] && continue
+    # Skip root, docs, and hidden directories
+    case "$dir" in
+        .|docs|docs/*|.git|.git/*|.claude|.claude/*|node_modules|node_modules/*) continue ;;
+    esac
+    # Count files in this directory (including newly added)
+    FILE_COUNT=$(find "$PROJECT_DIR/$dir" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$FILE_COUNT" -ge 5 ]; then
+        if [ ! -f "$PROJECT_DIR/$dir/CLAUDE.md" ]; then
+            WARNINGS="${WARNINGS}Directory '${dir}/' has ${FILE_COUNT} files but no CLAUDE.md.\n"
+            WARNINGS="${WARNINGS}   Consider adding a CLAUDE.md for agent context. Threshold: 5 files.\n\n"
+        fi
+    fi
+done <<< "$NEW_DIRS"
+
 # Output warnings if any
 if [ -n "$WARNINGS" ]; then
     echo ""
