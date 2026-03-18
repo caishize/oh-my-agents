@@ -1,6 +1,6 @@
 ---
 name: entropy-sweep
-description: "Scan for and fix codebase entropy across all four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Covers slop, doc drift, arch violations, dead code, missing enforcement, exec plan health, and nested CLAUDE.md drift."
+description: "Scan for and fix codebase entropy across all four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Covers slop, doc drift, arch violations, dead code, missing enforcement, exec plan health, and nested CLAUDE.md drift. Aliases: 熵扫描, 代码清理, 死代码清理, 代码垃圾回收, 代码腐化检查, 文档过期检查"
 user-invocable: true
 argument-hint: "[scope: full|docs|slop|arch|dead-code|plans|claude-md]"
 allowed-tools: Read, Glob, Grep, Bash

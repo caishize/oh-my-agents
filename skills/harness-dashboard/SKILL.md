@@ -1,6 +1,6 @@
 ---
 name: harness-dashboard
-description: "Harness health dashboard — aggregates session metrics, enforcement activity, execution plan progress, and entropy/legibility trends. Use when you want to see how the harness is performing, check plan status, or understand development patterns."
+description: "High-level harness health overview (use /harness-metrics for deep-dive queries) — aggregates session metrics, enforcement activity, execution plan progress, and entropy/legibility trends. Use when you want to see how the harness is performing, check plan status, or understand development patterns. Aliases: 仪表盘, 看板, 运行状态, 健康检查, harness概览"
 user-invocable: true
 argument-hint: "[--days N] [--plan plan-id] [--json]"
 allowed-tools: Read, Glob, Grep, Bash

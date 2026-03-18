@@ -1,6 +1,6 @@
 ---
 name: harness-init
-description: "Initialize your project as an agent-ready harness — CLAUDE.md as table of contents, nested CLAUDE.md per module, docs/ system of record, bootstrap script, and task entry points. The complete AI coding environment setup based on OpenAI's four-pillar harness engineering methodology."
+description: "Initialize your project as an agent-ready harness — CLAUDE.md as table of contents, nested CLAUDE.md per module, docs/ system of record, bootstrap script, and task entry points. The complete AI coding environment setup based on OpenAI's four-pillar harness engineering methodology. Aliases: 初始化, 项目初始化, harness初始化, 环境搭建, 项目配置, AI开发环境"
 user-invocable: true
 argument-hint: "[project-path]"
 ---

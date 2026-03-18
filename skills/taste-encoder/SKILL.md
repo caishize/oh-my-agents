@@ -1,6 +1,6 @@
 ---
 name: taste-encoder
-description: "Encode team expertise and taste into mechanical enforcement — custom lint rules, structural tests, and bespoke code reviewers. Each expert's knowledge becomes a multiplier for the entire agent fleet. Integrates with nested CLAUDE.md and Claude Code memory for cross-session persistence. Based on four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management."
+description: "Encode team expertise and taste into mechanical enforcement — custom lint rules, structural tests, and bespoke code reviewers. Each expert's knowledge becomes a multiplier for the entire agent fleet. Integrates with nested CLAUDE.md and Claude Code memory for cross-session persistence. Based on four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Aliases: 品味编码, 规则编码, 编码规范, 知识固化, 团队规范, 自定义lint规则"
 user-invocable: true
 argument-hint: "<what-to-encode: pattern-description or code-example>"
 allowed-tools: Read, Glob, Grep, Bash

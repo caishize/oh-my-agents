@@ -1,6 +1,6 @@
 ---
 name: harness-metrics
-description: "Query and analyze harness engineering metrics — layer balance, plan progress, enforcement history, development patterns. Use for detailed metric analysis beyond what the dashboard shows."
+description: "Deep-dive metric queries (use /harness-dashboard for the overview) — query and analyze harness engineering metrics: layer balance, plan progress, enforcement history, development patterns. Use for detailed metric analysis beyond what the dashboard shows. Aliases: 指标查询, 指标分析, 度量分析, 数据查询, 层级分析"
 user-invocable: true
 argument-hint: "<query: layer-balance|plan-detail|violations|trends|export>"
 allowed-tools: Read, Glob, Grep, Bash

@@ -1,6 +1,6 @@
 ---
 name: arch-guard
-description: "Analyze and enforce architectural constraints through custom linters, structural tests, and dependency layer validation. Reads project-specific config from .claude/harness.json. Integrates with nested CLAUDE.md for module-level enforcement. Based on four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management."
+description: "Set up and manage architectural enforcement rules (use /harness-review for per-PR review) — analyze and enforce architectural constraints through custom linters, structural tests, and dependency layer validation. Reads project-specific config from .claude/harness.json. Integrates with nested CLAUDE.md for module-level enforcement. Based on four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Aliases: 架构检查, 架构守卫, 依赖检查, 分层检查, 架构约束, 架构合规"
 user-invocable: true
 argument-hint: "[scope: full|layers|naming|size|providers]"
 allowed-tools: Read, Glob, Grep, Bash

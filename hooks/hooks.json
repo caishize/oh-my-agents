@@ -17,6 +17,17 @@
             "statusMessage": "Checking for risk patterns..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bash-safety-check.sh",
+            "timeout": 3000,
+            "statusMessage": "Checking bash command for credential leaks..."
+          }
+        ]
       }
     ],
     "PostToolUse": [

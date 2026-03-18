@@ -43,69 +43,107 @@ if [ -z "$CONTENT" ]; then
     exit 0
 fi
 
+# --- Skip test files, fixtures, and mocks (P0 fix) ---
+case "$FILE_PATH" in
+    */test/*|*/tests/*|*/__tests__/*|*/fixtures/*|*/__fixtures__/*|*/__mocks__/*|*.test.*|*.spec.*)
+        exit 0
+        ;;
+esac
+
+# --- Strip comment lines to reduce false positives (P0 fix) ---
+# Only strips lines where the first non-whitespace char is a comment marker.
+# Inline comments after code are preserved (intentionally conservative).
+CONTENT_NO_COMMENTS=$(echo "$CONTENT" | grep -vE '^\s*(//|#|;|\*|<!--|/\*)' | grep -vE '^\s*\*/' || true)
+
 VIOLATIONS=""
 
-# --- 1. Hardcoded secrets detection ---
+# --- Helper: build violation message ---
+add_violation() {
+    local risk_type="$1"
+    local file="$2"
+    local pattern="${3:-}"
+    local fix="$4"
+    local ref="${5:-docs/CONVENTIONS.md#secrets-management}"
+    VIOLATIONS="${VIOLATIONS}Security risk: ${risk_type}\n"
+    VIOLATIONS="${VIOLATIONS}  File: ${file}\n"
+    if [ -n "$pattern" ]; then
+        VIOLATIONS="${VIOLATIONS}  Pattern: ${pattern}\n"
+    fi
+    VIOLATIONS="${VIOLATIONS}  Fix: ${fix}\n"
+    VIOLATIONS="${VIOLATIONS}  Ref: ${ref}\n\n"
+}
 
-# password = 'value' or password = "value"
-if echo "$CONTENT" | grep -iEq 'password\s*=\s*["\x27][^"\x27]+["\x27]'; then
-    MATCH=$(echo "$CONTENT" | grep -iE 'password\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
-    VIOLATIONS="${VIOLATIONS}Security risk: Hardcoded password detected in source code.\n"
-    VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-    VIOLATIONS="${VIOLATIONS}  Pattern: ${MATCH}\n"
-    VIOLATIONS="${VIOLATIONS}  Fix: Use environment variable: password: process.env.DB_PASSWORD\n"
-    VIOLATIONS="${VIOLATIONS}  Add to .env.example: DB_PASSWORD=\n"
-    VIOLATIONS="${VIOLATIONS}  Ref: docs/CONVENTIONS.md#secrets-management\n\n"
+# --- 1. Hardcoded secrets detection (uses comment-stripped content) ---
+
+# Detect credential assignments in quoted strings
+if echo "$CONTENT_NO_COMMENTS" | grep -iEq 'password\s*=\s*["\x27][^"\x27]+["\x27]'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -iE 'password\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
+    add_violation "Hardcoded credential detected in source code." "$FILE_PATH" "$MATCH" \
+        "Use environment variable via process.env instead of inline value."
 fi
 
-# SECRET = 'value'
-if echo "$CONTENT" | grep -Eq 'SECRET\s*=\s*["\x27][^"\x27]+["\x27]'; then
-    MATCH=$(echo "$CONTENT" | grep -E 'SECRET\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
-    VIOLATIONS="${VIOLATIONS}Security risk: Hardcoded secret detected.\n"
-    VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-    VIOLATIONS="${VIOLATIONS}  Pattern: ${MATCH}\n"
-    VIOLATIONS="${VIOLATIONS}  Fix: Use environment variable instead of inline secret.\n"
-    VIOLATIONS="${VIOLATIONS}  Ref: docs/CONVENTIONS.md#secrets-management\n\n"
+# Detect SECRET variable with literal value
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'SECRET\s*=\s*["\x27][^"\x27]+["\x27]'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -E 'SECRET\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
+    add_violation "Hardcoded secret detected." "$FILE_PATH" "$MATCH" \
+        "Use environment variable instead of inline secret."
 fi
 
-# api_key = 'value' or apiKey = 'value' or api-key = 'value'
-if echo "$CONTENT" | grep -iEq 'api[_-]?key\s*=\s*["\x27][^"\x27]+["\x27]'; then
-    MATCH=$(echo "$CONTENT" | grep -iE 'api[_-]?key\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
-    VIOLATIONS="${VIOLATIONS}Security risk: Hardcoded API key detected.\n"
-    VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-    VIOLATIONS="${VIOLATIONS}  Pattern: ${MATCH}\n"
-    VIOLATIONS="${VIOLATIONS}  Fix: Use environment variable: process.env.API_KEY\n"
-    VIOLATIONS="${VIOLATIONS}  Ref: docs/CONVENTIONS.md#secrets-management\n\n"
+# Detect api_key / apiKey / api-key with literal value
+if echo "$CONTENT_NO_COMMENTS" | grep -iEq 'api[_-]?key\s*=\s*["\x27][^"\x27]+["\x27]'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -iE 'api[_-]?key\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
+    add_violation "Hardcoded API key detected." "$FILE_PATH" "$MATCH" \
+        "Use environment variable via process.env instead of inline key."
 fi
 
-# AWS access key (AKIA...)
-if echo "$CONTENT" | grep -Eq 'AKIA[0-9A-Z]{16}'; then
-    MATCH=$(echo "$CONTENT" | grep -oE 'AKIA[0-9A-Z]{16}' | head -1)
-    VIOLATIONS="${VIOLATIONS}Security risk: AWS Access Key ID detected.\n"
-    VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-    VIOLATIONS="${VIOLATIONS}  Pattern: ${MATCH}\n"
-    VIOLATIONS="${VIOLATIONS}  Fix: Use AWS credential chain (env vars, IAM role, or ~/.aws/credentials).\n"
-    VIOLATIONS="${VIOLATIONS}  Rotate this key immediately if it was ever committed.\n"
-    VIOLATIONS="${VIOLATIONS}  Ref: docs/CONVENTIONS.md#secrets-management\n\n"
+# Detect AWS access key (AKIA prefix with 16 uppercase alphanumeric chars)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'AKIA[0-9A-Z]{16}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'AKIA[0-9A-Z]{16}' | head -1)
+    add_violation "AWS Access Key ID detected." "$FILE_PATH" "$MATCH" \
+        "Use AWS credential chain (env vars, IAM role, or ~/.aws/credentials). Rotate immediately if committed."
 fi
 
-# JWT tokens (eyJ...)
-if echo "$CONTENT" | grep -Eq 'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}'; then
-    VIOLATIONS="${VIOLATIONS}Security risk: JWT token detected in source code.\n"
-    VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-    VIOLATIONS="${VIOLATIONS}  Fix: Never embed tokens in source. Load from environment or secrets manager.\n"
-    VIOLATIONS="${VIOLATIONS}  Ref: docs/CONVENTIONS.md#secrets-management\n\n"
+# Detect JWT tokens (eyJ... two-segment base64)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}'; then
+    add_violation "JWT token detected in source code." "$FILE_PATH" "" \
+        "Never embed tokens in source. Load from environment or secrets manager."
+fi
+
+# --- Additional credential patterns (P2 fix) ---
+
+# Detect GitHub Personal Access Token (ghp_ prefix)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'ghp_[A-Za-z0-9_]{36,}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'ghp_[A-Za-z0-9_]{36,}' | head -1)
+    add_violation "GitHub Personal Access Token detected." "$FILE_PATH" "$MATCH" \
+        "Use GITHUB_TOKEN env var or GitHub App credentials. Rotate immediately if committed."
+fi
+
+# Detect Slack tokens (xoxb- / xoxp- prefix)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'xox[bp]-[0-9]{10,}-[A-Za-z0-9-]+'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'xox[bp]-[0-9]{10,}-[A-Za-z0-9-]+' | head -1)
+    add_violation "Slack token detected." "$FILE_PATH" "$MATCH" \
+        "Use SLACK_TOKEN env var."
+fi
+
+# Detect private keys (PEM format)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY'; then
+    add_violation "Private key detected in source code." "$FILE_PATH" "" \
+        "Store keys in a secrets manager or .pem file excluded via .gitignore."
+fi
+
+# Detect Google API key (AIzaSy prefix)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'AIzaSy[A-Za-z0-9_-]{33}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'AIzaSy[A-Za-z0-9_-]{33}' | head -1)
+    add_violation "Google API key detected." "$FILE_PATH" "$MATCH" \
+        "Use GOOGLE_API_KEY env var."
 fi
 
 # --- 2. .env file modification with secrets ---
 case "$FILE_PATH" in
     *.env|*.env.local|*.env.production|*.env.staging)
         if echo "$CONTENT" | grep -Eq '=\s*["\x27]?[A-Za-z0-9+/=_-]{16,}["\x27]?\s*$'; then
-            VIOLATIONS="${VIOLATIONS}Security risk: Potential secret value in env file.\n"
-            VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-            VIOLATIONS="${VIOLATIONS}  Fix: Env files with secrets should be in .gitignore.\n"
-            VIOLATIONS="${VIOLATIONS}  Use .env.example with empty values for documentation.\n"
-            VIOLATIONS="${VIOLATIONS}  Ref: docs/CONVENTIONS.md#secrets-management\n\n"
+            add_violation "Potential secret value in env file." "$FILE_PATH" "" \
+                "Env files with secrets should be in .gitignore. Use .env.example with empty values."
         fi
         ;;
 esac

@@ -1,6 +1,6 @@
 ---
 name: spec-to-task
-description: "Convert feature specs into agent-executable tasks with a layer-aware execution plan — failing tests first, explicit context per task, JSON progress tracking, and full plan lifecycle management. Turn any idea into a structured, dependency-ordered plan that agents can execute reliably."
+description: "Convert feature specs into agent-executable tasks with a layer-aware execution plan — failing tests first, explicit context per task, JSON progress tracking, and full plan lifecycle management. Turn any idea into a structured, dependency-ordered plan that agents can execute reliably. Aliases: 需求拆分, 任务分解, 规格转任务, 拆解需求, 创建执行计划"
 user-invocable: true
 argument-hint: "<spec-description or issue-url> [--continue <plan-id>] [--status]"
 ---
