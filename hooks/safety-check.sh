@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Safety check hook — PreToolUse for Edit/Write
-# Detects hardcoded secrets, risk patterns, and Providers bypass.
+# Detects hardcoded secrets and risk patterns.
 #
 # Input: JSON on stdin from Claude Code
 #   { "tool_name": "Edit", "tool_input": { "file_path": "...", "new_string": "..." } }
@@ -109,52 +109,6 @@ case "$FILE_PATH" in
         fi
         ;;
 esac
-
-# --- 3. Providers bypass detection ---
-# Check if harness.json defines a providers_path
-PROJECT_DIR=$(dirname "$FILE_PATH")
-while [ "$PROJECT_DIR" != "/" ] && [ "$PROJECT_DIR" != "." ]; do
-    if [ -f "${PROJECT_DIR}/.claude/harness.json" ]; then
-        HARNESS_FILE="${PROJECT_DIR}/.claude/harness.json"
-        PROVIDERS_PATH=""
-        if command -v jq >/dev/null 2>&1; then
-            PROVIDERS_PATH=$(jq -r '.providers_path // ""' "$HARNESS_FILE" 2>/dev/null || echo "")
-        elif command -v python3 >/dev/null 2>&1; then
-            PROVIDERS_PATH=$(python3 -c "import json; print(json.load(open('${HARNESS_FILE}')).get('providers_path',''))" 2>/dev/null || echo "")
-        fi
-
-        if [ -n "$PROVIDERS_PATH" ] && [ "$PROVIDERS_PATH" != "null" ]; then
-            # Check for direct auth/telemetry/feature-flag imports
-            AUTH_IMPORTS=$(echo "$CONTENT" | grep -iE "(import|from|require).*['\"](@?passport|jsonwebtoken|bcrypt|jose|next-auth|auth0|firebase\/auth)" 2>/dev/null || true)
-            TELEMETRY_IMPORTS=$(echo "$CONTENT" | grep -iE "(import|from|require).*['\"](@?opentelemetry|datadog|newrelic|sentry)" 2>/dev/null || true)
-            FF_IMPORTS=$(echo "$CONTENT" | grep -iE "(import|from|require).*['\"](@?launchdarkly|unleash|flagsmith|split)" 2>/dev/null || true)
-
-            if [ -n "$AUTH_IMPORTS" ]; then
-                VIOLATIONS="${VIOLATIONS}Providers bypass: Direct auth library import detected.\n"
-                VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-                VIOLATIONS="${VIOLATIONS}  Import: $(echo "$AUTH_IMPORTS" | head -1 | sed 's/^[[:space:]]*//')\n"
-                VIOLATIONS="${VIOLATIONS}  Fix: Use Providers interface instead of direct import. See docs/PROVIDERS.md\n"
-                VIOLATIONS="${VIOLATIONS}  Providers path: ${PROVIDERS_PATH}\n\n"
-            fi
-            if [ -n "$TELEMETRY_IMPORTS" ]; then
-                VIOLATIONS="${VIOLATIONS}Providers bypass: Direct telemetry library import detected.\n"
-                VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-                VIOLATIONS="${VIOLATIONS}  Import: $(echo "$TELEMETRY_IMPORTS" | head -1 | sed 's/^[[:space:]]*//')\n"
-                VIOLATIONS="${VIOLATIONS}  Fix: Use Providers interface instead of direct import. See docs/PROVIDERS.md\n"
-                VIOLATIONS="${VIOLATIONS}  Providers path: ${PROVIDERS_PATH}\n\n"
-            fi
-            if [ -n "$FF_IMPORTS" ]; then
-                VIOLATIONS="${VIOLATIONS}Providers bypass: Direct feature-flag library import detected.\n"
-                VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
-                VIOLATIONS="${VIOLATIONS}  Import: $(echo "$FF_IMPORTS" | head -1 | sed 's/^[[:space:]]*//')\n"
-                VIOLATIONS="${VIOLATIONS}  Fix: Use Providers interface instead of direct import. See docs/PROVIDERS.md\n"
-                VIOLATIONS="${VIOLATIONS}  Providers path: ${PROVIDERS_PATH}\n\n"
-            fi
-        fi
-        break
-    fi
-    PROJECT_DIR=$(dirname "$PROJECT_DIR")
-done
 
 # --- Output ---
 if [ -n "$VIOLATIONS" ]; then
