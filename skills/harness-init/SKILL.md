@@ -253,10 +253,17 @@ echo "[1/4] Installing dependencies..."
 echo "[2/4] Setting up environment..."
 cp .env.example .env 2>/dev/null || echo "No .env.example found, skipping"
 
-echo "[3/4] Running initial build..."
+echo "[3/4] Setting up pre-commit hooks..."
+if command -v pre-commit &>/dev/null; then
+  pre-commit install
+elif [ -f .pre-commit-config.yaml ]; then
+  pip install pre-commit && pre-commit install
+fi
+
+echo "[4/5] Running initial build..."
 [build command]
 
-echo "[4/4] Verifying setup..."
+echo "[5/5] Verifying setup..."
 [check command if unified check exists, otherwise build + test]
 
 echo ""
@@ -280,7 +287,96 @@ script's `cp .env.example .env` step are not orphaned.
 lint + test + build), prefer it in the bootstrap script's verification step over running
 build and test separately. This ensures lint is also verified on first setup.
 
-### Step 7: Create Task Entry Points
+### Step 7: Set Up Pre-Commit Enforcement
+
+Create `.pre-commit-config.yaml` to enforce conventions at commit time. Pre-commit hooks
+are the **second line of defense** — they catch violations before code enters the repository,
+complementing CI (which catches violations on PR) and Claude Code hooks (which catch during
+editing).
+
+The hook config should include **three tiers**:
+
+1. **Linter + formatter** — Fast, catches syntax/style issues (~1s)
+2. **Type checker** — Medium, catches type errors (~5s)
+3. **Architecture guard** — Runs structural tests that enforce TASTE/ARCH rules (~1-2s)
+
+The architecture guard is critical: it mechanically enforces every convention documented
+in `docs/CONVENTIONS.md`. Without it, conventions are just suggestions that agents will
+eventually ignore.
+
+**Template** (adapt to the project's language and tooling):
+
+For **Python** projects:
+```yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: type-check
+        name: type check
+        entry: bash -c '[type-check command, e.g., uv run mypy src/]'
+        language: system
+        files: \.py$
+        types: [python]
+        pass_filenames: false
+
+      - id: architecture-guard
+        name: architecture guard (TASTE + ARCH rules)
+        entry: bash -c '[test command, e.g., uv run pytest tests/test_architecture.py -x -q]'
+        language: system
+        files: ^src/
+        types: [python]
+        pass_filenames: false
+```
+
+For **TypeScript/JavaScript** projects:
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: lint-fix
+        name: eslint
+        entry: npx eslint --fix
+        language: system
+        types: [javascript, typescript]
+
+      - id: type-check
+        name: tsc
+        entry: npx tsc --noEmit
+        language: system
+        files: \.tsx?$
+        pass_filenames: false
+
+      - id: architecture-guard
+        name: architecture guard
+        entry: npx jest tests/architecture.test.ts --passWithNoTests
+        language: system
+        files: ^src/
+        pass_filenames: false
+```
+
+After creating the config, install hooks:
+```bash
+pip install pre-commit && pre-commit install
+# or: npx husky install (for JS projects)
+```
+
+**Why architecture guard in pre-commit?** Structural tests (`test_architecture.py` or
+`architecture.test.ts`) run in ~1 second but catch layer violations, naming drift, file
+size limits, and every TASTE rule. Running them at commit time means violations are caught
+**before** they enter the branch, not after CI fails minutes later. This is the tightest
+enforcement loop possible without real-time Claude Code hooks.
+
+**Bootstrap integration:** Add `pre-commit install` to `scripts/bootstrap.sh` so the hooks
+are active from the first checkout.
+
+### Step 8: Create Task Entry Points
 
 Ensure the project has consistent, discoverable entry points. These must be documented
 in CLAUDE.md and **actually work** (verify by running each one):
@@ -304,7 +400,7 @@ requires a missing entry point), annotate it in CLAUDE.md: `npm start` *(not yet
 The `check` command is critical for **Pillar: Entropy Management** — it's how agents
 verify their own changes don't degrade the codebase.
 
-### Step 8: Report Summary
+### Step 9: Report Summary
 
 After completing all steps, produce a summary report:
 
@@ -328,6 +424,7 @@ Files Created:
   [x] docs/PROVIDERS.md
   [x] docs/OBSERVABILITY.md
   [x] .claude/harness.json
+  [x] .pre-commit-config.yaml (with architecture guard)
   [x] scripts/bootstrap.sh
 
 Entry Points Verified:
@@ -376,3 +473,7 @@ Next Steps:
   qualify it in CLAUDE.md (e.g., *(not yet functional — entry point missing)*)
 - **Module Map includes file counts** — the Files column lets agents assess when a module
   has grown past the nested CLAUDE.md threshold
+- **Pre-commit must include architecture guard** — lint/format alone is not enough; structural
+  tests that enforce TASTE/ARCH rules must run at commit time, not just in CI
+- **Bootstrap must install pre-commit hooks** — add `pre-commit install` (or equivalent) to
+  `scripts/bootstrap.sh` so hooks are active from the first checkout
