@@ -157,9 +157,14 @@ The key loop: **QA finds bug -> fix it -> `/encode-mistake` -> permanent guardra
 /harness-init -> /legibility-score -> /arch-guard
 ```
 
-### Feature development
+### Feature development (full lifecycle with gstack)
 ```
 /office-hours -> /plan-eng-review -> /spec-to-task -> [develop] -> /verify -> /review -> /harness-review -> /ship
+```
+
+### Feature development (oh-my-agents only)
+```
+/spec-to-task -> [develop] -> /verify -> /harness-review
 ```
 
 ### When agents make mistakes
@@ -168,6 +173,11 @@ The key loop: **QA finds bug -> fix it -> `/encode-mistake` -> permanent guardra
 ```
 
 ### Weekly health check
+```
+/entropy-sweep -> /harness-dashboard
+```
+
+### Weekly health check (with gstack)
 ```
 /entropy-sweep -> /retro -> /harness-dashboard
 ```

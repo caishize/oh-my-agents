@@ -113,7 +113,11 @@ Full conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 
 Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 
-**If gstack is installed** (detected in Step 1), include the full integrated workflow:
+**AGENT NOTE**: Include ONLY ONE of the two tables below based on gstack detection in
+Step 1. Remove the conditional headers and the unused table. The rendered CLAUDE.md
+must not contain "If gstack is installed/NOT installed" text.
+
+**If gstack IS installed** — use this table:
 
 | Phase | Command | Purpose |
 |-------|---------|---------|
@@ -122,6 +126,7 @@ Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 | Plan | `/plan-eng-review` | Architecture & eng review |
 | Plan | `/plan-design-review` | Design & UX review |
 | Decompose | `/spec-to-task` | Layer-aware execution plan |
+| Execute | [develop] + hooks | Implement with automatic enforcement |
 | Verify | `/verify` | Build, test, lint, arch check |
 | Review | `/review` | PR structural review (SQL, LLM safety) |
 | Review | `/harness-review` | Four-pillar harness review |
@@ -131,11 +136,12 @@ Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 | Guard | `/encode-mistake` | Convert failures to rules |
 | Sweep | `/entropy-sweep` | Weekly codebase health scan |
 
-**If gstack is NOT installed**, include oh-my-agents-only workflow:
+**If gstack is NOT installed** — use this table:
 
 | Phase | Command | Purpose |
 |-------|---------|---------|
 | Decompose | `/spec-to-task` | Layer-aware execution plan |
+| Execute | [develop] + hooks | Implement with automatic enforcement |
 | Verify | `/verify` | Build, test, lint, arch check |
 | Review | `/harness-review` | Four-pillar harness review |
 | Guard | `/encode-mistake` | Convert failures to rules |
@@ -300,13 +306,13 @@ set -euo pipefail
 
 echo "=== Harness Bootstrap ==="
 
-echo "[1/4] Installing dependencies..."
+echo "[1/5] Installing dependencies..."
 [package-manager install command]
 
-echo "[2/4] Setting up environment..."
+echo "[2/5] Setting up environment..."
 cp .env.example .env 2>/dev/null || echo "No .env.example found, skipping"
 
-echo "[3/4] Setting up pre-commit hooks..."
+echo "[3/5] Setting up pre-commit hooks..."
 if command -v pre-commit &>/dev/null; then
   pre-commit install
 elif [ -f .pre-commit-config.yaml ]; then
@@ -766,7 +772,7 @@ Four Pillars Assessment:
   Observability & Legibility:     [score/description]
   Entropy Management:             [score/description]
 
-Legibility Score: [X/7] (see /legibility-score for details)
+Legibility Score: [X/30] (see /legibility-score for details)
 
 Plugins Detected:
   gstack: [yes/no]

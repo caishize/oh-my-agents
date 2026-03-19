@@ -48,7 +48,7 @@ Implements OpenAI's harness engineering methodology (four pillars) adapted for C
 Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 
 **One-time setup:**
-1. `/harness-init` → `/legibility-score`
+1. `/harness-init` → `/legibility-score` → `/arch-guard`
 
 **Daily cycle (Research → Plan → Execute → Verify):**
 2. `/spec-to-task` → develop → `/verify` → `/harness-review`
