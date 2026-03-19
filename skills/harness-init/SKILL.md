@@ -46,6 +46,16 @@ Scan the repository and evaluate readiness:
 5. **Observability status** — Check for logging, metrics, tracing, or monitoring setup
 6. **Entropy indicators** — Look for oversized files, circular dependencies, inconsistent
    naming, dead code patterns
+7. **gstack detection** — Check if gstack is installed:
+   ```bash
+   GSTACK_INSTALLED="no"
+   if [ -d "$HOME/.claude/skills/gstack" ] || [ -d ".claude/skills/gstack" ]; then
+     GSTACK_INSTALLED="yes"
+   fi
+   echo "GSTACK: $GSTACK_INSTALLED"
+   ```
+   If gstack is present, the generated Workflow section in CLAUDE.md will include the
+   full lifecycle (idea → ship → retro). If not, it includes oh-my-agents-only commands.
 
 Produce a brief assessment report before proceeding.
 
@@ -99,6 +109,39 @@ Full conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 |--------|------|-------|---------|-----------------|
 | [name] | `src/[dir]` | [count] | [1-line purpose] | Yes/No |
 
+## Workflow (Research → Plan → Execute → Verify)
+
+Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md)
+
+**If gstack is installed** (detected in Step 1), include the full integrated workflow:
+
+| Phase | Command | Purpose |
+|-------|---------|---------|
+| Ideate | `/office-hours` | Product diagnostic, design doc |
+| Plan | `/plan-ceo-review` | Strategy & scope review |
+| Plan | `/plan-eng-review` | Architecture & eng review |
+| Plan | `/plan-design-review` | Design & UX review |
+| Decompose | `/spec-to-task` | Layer-aware execution plan |
+| Verify | `/verify` | Build, test, lint, arch check |
+| Review | `/review` | PR structural review (SQL, LLM safety) |
+| Review | `/harness-review` | Four-pillar harness review |
+| Ship | `/ship` | Version, changelog, PR |
+| Docs | `/document-release` | Post-ship doc sync |
+| Retro | `/retro` + `/harness-dashboard` | Eng metrics + harness health |
+| Guard | `/encode-mistake` | Convert failures to rules |
+| Sweep | `/entropy-sweep` | Weekly codebase health scan |
+
+**If gstack is NOT installed**, include oh-my-agents-only workflow:
+
+| Phase | Command | Purpose |
+|-------|---------|---------|
+| Decompose | `/spec-to-task` | Layer-aware execution plan |
+| Verify | `/verify` | Build, test, lint, arch check |
+| Review | `/harness-review` | Four-pillar harness review |
+| Guard | `/encode-mistake` | Convert failures to rules |
+| Sweep | `/entropy-sweep` | Weekly codebase health scan |
+| Observe | `/harness-dashboard` | Session metrics & health |
+
 ## Documentation
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
@@ -107,6 +150,7 @@ Full conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 - Decisions (ADRs): [docs/DECISIONS.md](docs/DECISIONS.md)
 - Providers: [docs/PROVIDERS.md](docs/PROVIDERS.md)
 - Observability: [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)
+- Workflow: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 - Execution Plans: [docs/exec-plans/](docs/exec-plans/)
 ```
 
@@ -179,6 +223,7 @@ docs/
 ├── DECISIONS.md           # ADRs: "we chose X over Y because..." (status: Proposed → Accepted → Superseded/Deprecated)
 ├── PROVIDERS.md           # Cross-cutting: auth, telemetry, feature flags
 ├── OBSERVABILITY.md       # Logging, metrics, tracing, monitoring strategy
+├── WORKFLOW.md            # Full development lifecycle (oh-my-agents + gstack if present)
 ├── design-docs/           # Design documents for major features
 │   └── .gitkeep
 ├── exec-plans/            # Execution plans from /spec-to-task
@@ -191,6 +236,14 @@ docs/
 └── references/            # External references, research, vendor docs
     └── .gitkeep
 ```
+
+**WORKFLOW.md generation:**
+If gstack was detected in Step 1, generate `docs/WORKFLOW.md` using the full integrated
+lifecycle template (Ideate → Plan → Decompose → Execute → Verify → Review → Ship → Docs →
+Retro → Guard). If gstack is not installed, generate a reduced version covering only
+oh-my-agents commands (Decompose → Execute → Verify → Review → Guard). Use the template
+from the oh-my-agents plugin's own `docs/WORKFLOW.md` as a reference, adapting project-specific
+details (commands, paths, framework) discovered in Step 1.
 
 Key rules for documentation:
 - **Sibling layers in ARCHITECTURE.md** — If a layer (like UI) does not fit the linear
@@ -694,6 +747,7 @@ Files Created:
   [x] docs/DECISIONS.md
   [x] docs/PROVIDERS.md
   [x] docs/OBSERVABILITY.md
+  [x] docs/WORKFLOW.md (full lifecycle if gstack detected, oh-my-agents-only otherwise)
   [x] .claude/harness.json
   [x] .pre-commit-config.yaml (with architecture guard)
   [x] tests/test_architecture.py or tests/architecture.test.ts
@@ -714,10 +768,16 @@ Four Pillars Assessment:
 
 Legibility Score: [X/7] (see /legibility-score for details)
 
+Plugins Detected:
+  gstack: [yes/no]
+
 Next Steps:
   - Review generated docs and fill in project-specific details
   - Run /legibility-score for detailed assessment
   - Use /spec-to-task to create execution plans for features
+  [If gstack detected:]
+  - Use /office-hours to brainstorm your next feature
+  - See docs/WORKFLOW.md for the full integrated development lifecycle
 ```
 
 ## Rules

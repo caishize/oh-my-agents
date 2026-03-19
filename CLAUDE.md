@@ -45,14 +45,19 @@ Implements OpenAI's harness engineering methodology (four pillars) adapted for C
 
 ## Workflow
 
+Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
+
 **One-time setup:**
 1. `/harness-init` → `/legibility-score`
 
 **Daily cycle (Research → Plan → Execute → Verify):**
 2. `/spec-to-task` → develop → `/verify` → `/harness-review`
 
+**Full lifecycle (with gstack installed):**
+3. `/office-hours` → `/plan-eng-review` → `/spec-to-task` → develop → `/verify` → `/review` + `/harness-review` → `/ship`
+
 **When agents make mistakes:**
-3. `/encode-mistake` → permanent guardrail (one TASTE rule per incident)
+4. `/encode-mistake` → permanent guardrail (one TASTE rule per incident)
 
 **Weekly / pre-release:**
-4. `/entropy-sweep` → `/harness-dashboard`
+5. `/entropy-sweep` → `/retro` + `/harness-dashboard`

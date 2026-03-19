@@ -54,7 +54,8 @@ docs/                              # Template documentation for target projects
 ├── LINTING.md                     # Custom lint rules registry (TASTE-NNN)
 ├── DECISIONS.md                   # Architecture Decision Records (ADRs)
 ├── PROVIDERS.md                   # Cross-cutting: auth, telemetry, feature flags interface
-└── OBSERVABILITY.md               # Logging, metrics, tracing, monitoring strategy
+├── OBSERVABILITY.md               # Logging, metrics, tracing, monitoring strategy
+└── WORKFLOW.md                    # Full dev lifecycle (oh-my-agents + gstack integration)
 templates/                         # Configuration templates for target projects
 ├── harness-config.json            # .claude/harness.json starter template
 ├── execution-plan.json            # docs/exec-plans/ execution plan template
@@ -226,6 +227,8 @@ All agents have Write/Edit disabled — they report but never modify code.
 
 ## Workflow
 
+Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
+
 ### One-Time Setup
 
 ```
@@ -234,7 +237,26 @@ All agents have Write/Edit disabled — they report but never modify code.
 /arch-guard            # Layer enforcement + Providers pattern
 ```
 
-### Daily Development Cycle: Research → Plan → Execute → Verify
+### Full Lifecycle (with [gstack](https://github.com/garrytan/gstack) installed)
+
+oh-my-agents detects gstack during `/harness-init` and generates a complete workflow in
+`docs/WORKFLOW.md`. The two plugins are complementary — gstack covers ideation, planning,
+QA, and shipping; oh-my-agents covers architectural enforcement, entropy management, and
+rule encoding. All skills work sequentially in the same Claude Code session without any
+modification — the conversation context bridges data flow between them.
+
+```
+/office-hours          # Brainstorm & design doc (gstack)
+/plan-eng-review       # Architecture & eng review (gstack)
+/spec-to-task          # Layer-aware execution plan (oh-my-agents)
+# ... develop with automatic hook enforcement ...
+/verify                # Build + test + lint + arch (oh-my-agents)
+/review                # PR structural review — SQL, LLM safety (gstack)
+/harness-review        # Four-pillar harness review (oh-my-agents)
+/ship                  # Version, changelog, PR (gstack)
+```
+
+### Daily Development Cycle (oh-my-agents only)
 
 ```
 /spec-to-task <feature-spec>    # Decompose: tests first, layer-aware, explicit context
@@ -256,6 +278,7 @@ All agents have Write/Edit disabled — they report but never modify code.
 
 ```
 /entropy-sweep          # Full scan: slop, drift, violations, dead code, stale plans
+/retro                  # Engineering velocity retrospective (gstack, if installed)
 /harness-dashboard      # Harness health overview
 ```
 
