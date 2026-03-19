@@ -1,0 +1,16 @@
+{
+  "version": "2.0",
+  "pillars": ["architecture", "documentation", "observability", "entropy"],
+  "layers": ["skills", "agents", "hooks", "templates", "docs"],
+  "layer_dirs": {
+    "skills": "skills",
+    "agents": "agents",
+    "hooks": "hooks",
+    "templates": "templates",
+    "docs": "docs"
+  },
+  "providers_path": null,
+  "file_size_limit": 800,
+  "nested_claude_md_threshold": 3,
+  "note": "oh-my-agents uses a plugin-specific layer model. skills/ are user-invocable commands, agents/ are background workers, hooks/ are event-driven enforcement scripts, templates/ are starter configs, docs/ is the system of record."
+}

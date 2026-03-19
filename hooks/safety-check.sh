@@ -82,9 +82,9 @@ if echo "$CONTENT_NO_COMMENTS" | grep -iEq 'password\s*=\s*["\x27][^"\x27]+["\x2
         "Use environment variable via process.env instead of inline value."
 fi
 
-# Detect SECRET variable with literal value
-if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'SECRET\s*=\s*["\x27][^"\x27]+["\x27]'; then
-    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -E 'SECRET\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
+# Detect SECRET variable with literal value (case-insensitive: secret, Secret, MY_SECRET, etc.)
+if echo "$CONTENT_NO_COMMENTS" | grep -iEq '[A-Z_]*SECRET[A-Z_]*\s*=\s*["\x27][^"\x27]+["\x27]'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -iE '[A-Z_]*SECRET[A-Z_]*\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
     add_violation "Hardcoded secret detected." "$FILE_PATH" "$MATCH" \
         "Use environment variable instead of inline secret."
 fi

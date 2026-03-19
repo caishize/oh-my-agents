@@ -69,21 +69,26 @@ get_layer_from_harness() {
         echo "-1"
         return
     fi
-    # Use python3 or jq to match path against layer_dirs globs
+    # Use python3 to match path against layer_dirs patterns.
+    # Passes data via sys.argv to avoid shell-escaping issues with JSON and paths.
     if command -v python3 >/dev/null 2>&1; then
         python3 -c "
-import json, fnmatch, sys
-layer_dirs = json.loads('${HARNESS_LAYER_DIRS}')
+import json, sys
+layer_dirs = json.loads(sys.argv[1])
 layer_order = ['types','config','repo','service','runtime','ui']
-path = '${path}'
+path = sys.argv[2]
 for layer_name in layer_order:
     if layer_name in layer_dirs:
-        for pattern in layer_dirs[layer_name]:
-            if fnmatch.fnmatch(path, pattern):
+        dirs = layer_dirs[layer_name]
+        if isinstance(dirs, str):
+            dirs = [dirs]
+        for pattern in dirs:
+            clean = pattern.strip('*/ ')
+            if clean and ('/' + clean + '/' in path or path.startswith(clean + '/')):
                 print(layer_order.index(layer_name))
                 sys.exit(0)
 print(-1)
-" 2>/dev/null || echo "-1"
+" "$HARNESS_LAYER_DIRS" "$path" 2>/dev/null || echo "-1"
     else
         echo "-1"
     fi

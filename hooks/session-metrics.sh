@@ -128,4 +128,14 @@ METRICS_FILE="${METRICS_DIR}/session-${DATE_PART}.jsonl"
 LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"}"
 echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
 
+# --- Log rotation: remove JSONL files older than 30 days ---
+# Non-blocking: errors are silently ignored. Runs at most once per day (only if today's file was just created).
+if [ -f "$METRICS_FILE" ]; then
+    LINE_COUNT=$(wc -l < "$METRICS_FILE" 2>/dev/null || echo "99")
+    if [ "$LINE_COUNT" -le 1 ]; then
+        # First write today — prune old files
+        find "$METRICS_DIR" -name "session-*.jsonl" -mtime +30 -delete 2>/dev/null || true
+    fi
+fi
+
 exit 0

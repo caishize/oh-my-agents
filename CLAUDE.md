@@ -9,8 +9,10 @@ Implements OpenAI's harness engineering methodology (four pillars) adapted for C
 | `/harness-init` | All | Initialize harness: nested CLAUDE.md, docs/, bootstrap, config |
 | `/legibility-score` | All | 10-metric Agent Legibility Score (0-30) |
 | `/spec-to-task` | Documentation | Convert specs to execution plans with lifecycle |
+| `/verify` | Architecture | Post-execution check: build, test, lint, arch guard |
+| `/encode-mistake` | Entropy | Convert agent mistakes into permanent lint/hook rules |
 | `/arch-guard` | Architecture | Enforce architectural constraints and Providers |
-| `/taste-encoder` | Architecture | Encode expertise into lint rules and tests |
+| `/taste-encoder` | Architecture | Encode expertise into lint rules and tests (proactive) |
 | `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code, stale plans |
 | `/harness-review` | Entropy | Code review: slop, safety, architecture, plan alignment |
 | `/harness-dashboard` | Observability | Session metrics, plan progress, harness health |
@@ -43,7 +45,14 @@ Implements OpenAI's harness engineering methodology (four pillars) adapted for C
 
 ## Workflow
 
-1. `/harness-init` -> `/legibility-score` (one-time setup)
-2. `/spec-to-task` -> develop -> `/harness-review` (daily cycle)
-3. `/entropy-sweep` (weekly or pre-release)
-4. `/harness-dashboard` (anytime — check harness health)
+**One-time setup:**
+1. `/harness-init` → `/legibility-score`
+
+**Daily cycle (Research → Plan → Execute → Verify):**
+2. `/spec-to-task` → develop → `/verify` → `/harness-review`
+
+**When agents make mistakes:**
+3. `/encode-mistake` → permanent guardrail (one TASTE rule per incident)
+
+**Weekly / pre-release:**
+4. `/entropy-sweep` → `/harness-dashboard`
