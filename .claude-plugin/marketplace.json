@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Harness engineering toolkit for Claude Code — skills, agents, and hooks implementing OpenAI's methodology for AI-native development.",
-    "version": "1.0.0"
+    "version": "2.1.1"
   },
   "plugins": [
     {
       "name": "oh-my-agents",
       "source": "./",
       "description": "Harness engineering skills, agents, and hooks — context engineering, architectural constraints, entropy management.",
-      "version": "1.0.0",
+      "version": "2.1.1",
       "keywords": ["harness-engineering", "ai-coding", "code-review", "architecture"],
       "category": "productivity"
     }
