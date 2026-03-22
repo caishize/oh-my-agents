@@ -53,6 +53,12 @@ if echo "$COMMAND" | grep -Eq 'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}'; th
     VIOLATIONS="${VIOLATIONS}  Fix: Use env var reference instead of inline token.\n\n"
 fi
 
+# Private key (PEM format) in command
+if echo "$COMMAND" | grep -Eq 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY'; then
+    VIOLATIONS="${VIOLATIONS}Security risk: Private key content in bash command.\n"
+    VIOLATIONS="${VIOLATIONS}  Fix: Reference a key file or secrets manager instead.\n\n"
+fi
+
 # curl/wget with inline Authorization header (not referencing env var)
 # Improved: exclude both $VAR and ${VAR} patterns
 if echo "$COMMAND" | grep -iEq '(Authorization|Bearer)[: ]+[A-Za-z0-9_-]{20,}'; then

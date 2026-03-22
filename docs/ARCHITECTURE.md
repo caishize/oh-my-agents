@@ -70,21 +70,32 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
 .claude-plugin/
 ├── plugin.json                           # Plugin manifest
 ├── marketplace.json                      # Marketplace definition for distribution
-skills/                                   # User-invocable slash commands
+skills/                                   # User-invocable slash commands (11 skills)
 ├── harness-init/SKILL.md                 # Initialize the harness
 ├── legibility-score/SKILL.md             # 10-metric readiness assessment
-├── taste-encoder/SKILL.md                # Encode expertise into rules
+├── spec-to-task/SKILL.md                 # Task decomposition with execution plans
+├── verify/SKILL.md                       # Post-execution verification (build/test/lint/arch)
+├── encode-mistake/SKILL.md               # Convert agent mistakes into guardrails
 ├── arch-guard/SKILL.md                   # Set up constraint enforcement
+├── taste-encoder/SKILL.md                # Encode expertise into rules
 ├── entropy-sweep/SKILL.md                # Scan for entropy
 ├── harness-review/SKILL.md               # Harness-aware code review
-└── spec-to-task/SKILL.md                 # Task decomposition
-agents/                                   # Read-only background subagents
+├── harness-dashboard/SKILL.md            # Session metrics and health overview
+└── harness-metrics/SKILL.md              # Deep-dive metric queries
+agents/                                   # Read-only background subagents (5 agents)
 ├── arch-guard-agent.md                   # Architectural compliance
 ├── entropy-sweep-agent.md                # Entropy detection
-└── harness-reviewer.md                   # Code review
-hooks/                                    # Event hook scripts
+├── harness-reviewer.md                   # Code review
+├── session-observer-agent.md             # Session tracking and shift-handoff
+└── doc-gardening-agent.md                # Documentation gardening and repair
+hooks/                                    # Event hook scripts (6 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
-├── arch-check.sh                         # PreToolUse: layer boundary check
+├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution)
+├── arch-check.sh                         # PreToolUse (Edit|Write): layer boundary check
+├── safety-check.sh                       # PreToolUse (Edit|Write): hardcoded secrets detection
+├── bash-safety-check.sh                  # PreToolUse (Bash): credential leak detection
+├── self-verify-check.sh                  # PostToolUse (Edit|Write): syntax/type self-verification
+├── session-metrics.sh                    # PostToolUse (Edit|Write|Bash): JSONL activity logging
 └── doc-drift-check.sh                    # Stop: documentation drift warning
 docs/                                     # Template docs for target projects
 ├── ARCHITECTURE.md                       # Layer model, boundaries, decisions
@@ -92,7 +103,16 @@ docs/                                     # Template docs for target projects
 ├── TESTING.md                            # Test strategy, structural tests
 ├── LINTING.md                            # Lint rule registry (TASTE-NNN)
 ├── DECISIONS.md                          # Architecture Decision Records
-└── PROVIDERS.md                          # Cross-cutting interface definition
+├── PROVIDERS.md                          # Cross-cutting interface definition
+├── OBSERVABILITY.md                      # Logging, metrics, tracing strategy
+└── WORKFLOW.md                           # Full development lifecycle
+templates/                                # Starter templates for target projects
+├── harness-config.json                   # .claude/harness.json template
+├── execution-plan.json                   # Execution plan schema
+└── github-actions-harness.yml            # CI/CD enforcement workflow
+tests/                                    # Plugin self-tests
+├── test-hooks.sh                         # Unit tests for all hooks
+└── test-skills.sh                        # Smoke tests for skill quality
 ```
 
 ## Claude Code Features Used

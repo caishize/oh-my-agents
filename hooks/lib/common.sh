@@ -154,7 +154,7 @@ index_to_layer_name() {
     case "$1" in
         0) echo "types" ;;
         1) echo "config" ;;
-        2) echo "repository" ;;
+        2) echo "repo" ;;
         3) echo "service" ;;
         4) echo "runtime" ;;
         5) echo "ui" ;;
@@ -169,7 +169,27 @@ _resolve_layer_from_harness() {
         echo ""
         return
     fi
-    if command -v python3 >/dev/null 2>&1; then
+    if command -v jq >/dev/null 2>&1; then
+        local layer_name
+        for layer_name in types config repo service runtime ui; do
+            local dirs
+            dirs=$(echo "$HARNESS_LAYER_DIRS" | jq -r ".[\"$layer_name\"] // empty | if type == \"array\" then .[] else . end" 2>/dev/null || true)
+            if [ -n "$dirs" ]; then
+                while IFS= read -r pattern; do
+                    local clean="${pattern//\*/}"
+                    clean="${clean%/}"
+                    clean="${clean#/}"
+                    clean="${clean## }"
+                    clean="${clean%% }"
+                    if [ -n "$clean" ] && { [[ "$path" == *"/$clean/"* ]] || [[ "$path" == "$clean/"* ]]; }; then
+                        echo "$layer_name"
+                        return
+                    fi
+                done <<< "$dirs"
+            fi
+        done
+        echo ""
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json, sys
 layer_dirs = json.loads(sys.argv[1])

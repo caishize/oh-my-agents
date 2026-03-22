@@ -39,7 +39,8 @@ agents/                            # Read-only background subagents (with memory
 ├── arch-guard-agent.md            # Architectural compliance checker
 ├── entropy-sweep-agent.md         # Entropy scanner
 ├── harness-reviewer.md            # Code review agent
-└── session-observer-agent.md      # Session tracking and shift-handoff (Haiku)
+├── session-observer-agent.md      # Session tracking and shift-handoff (Haiku)
+└── doc-gardening-agent.md         # Documentation gardening and drift repair (Haiku)
 hooks/                             # Event hook scripts
 ├── hooks.json                     # Hook event bindings (uses ${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                  # Shared utilities (JSON parsing, layer detection, sibling layers)
@@ -50,7 +51,7 @@ hooks/                             # Event hook scripts
 ├── session-metrics.sh             # Record tool usage + hook effectiveness to .claude/metrics/ (JSONL)
 └── doc-drift-check.sh             # Warn about documentation drift after session ends
 tests/                             # Plugin self-tests
-├── test-hooks.sh                  # 33 unit tests for all hooks and shared library
+├── test-hooks.sh                  # 47 unit tests for all hooks and shared library
 └── test-skills.sh                 # 154 smoke tests for skill frontmatter, structure, quality
 docs/                              # Template documentation for target projects
 ├── ARCHITECTURE.md                # Layer model, module boundaries, design decisions
@@ -222,6 +223,7 @@ All agents have Write/Edit disabled — they report but never modify code.
 | `entropy-sweep-agent` | Sonnet | Periodic scan or pre-release check requested |
 | `harness-reviewer` | Sonnet | PR or staged changes need review |
 | `session-observer-agent` | Haiku | Session ends — writes shift-handoff summary to memory |
+| `doc-gardening-agent` | Haiku | Periodic doc scan — dead refs, stale commands, contradictions |
 
 ## Hooks (Automatic Enforcement)
 
@@ -319,8 +321,8 @@ project for three-tier enforcement on every PR:
 Run the plugin's self-test suites:
 
 ```bash
-# Hook tests (33 tests): arch-check, safety-check, bash-safety-check,
-# session-metrics, doc-drift-check, and shared library
+# Hook tests (47 tests): arch-check, safety-check, bash-safety-check,
+# self-verify-check, session-metrics, doc-drift-check, and shared library
 bash tests/test-hooks.sh
 
 # Skill smoke tests (154 tests): frontmatter validation, model selection,
@@ -328,7 +330,7 @@ bash tests/test-hooks.sh
 bash tests/test-skills.sh
 ```
 
-187 total tests covering all hooks and all 11 skills.
+201 total tests covering all hooks and all 11 skills.
 
 ## Configuration (`.claude/harness.json`)
 

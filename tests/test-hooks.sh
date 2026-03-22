@@ -244,6 +244,107 @@ test_resolve_layer "/project/src/components/button.tsx" "ui" "resolve_layer: com
 test_resolve_layer "/project/src/utils/helper.ts" "" "resolve_layer: unknown path returns empty"
 
 # =============================================
+# safety-check.sh — additional edge case tests
+# =============================================
+
+echo ""
+echo "--- safety-check.sh (edge cases) ---"
+
+run_test "safety: block JWT token" \
+    "safety-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/project/src/app.ts","new_string":"const token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ\""}}' \
+    2 \
+    "JWT token"
+
+run_test "safety: block Slack token" \
+    "safety-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/project/src/app.ts","new_string":"const slack = \"xoxb-1234567890123-1234567890123-AbCdEfGhIjKlMnOpQrStUv\""}}' \
+    2 \
+    "Slack token"
+
+run_test "safety: block PEM private key" \
+    "safety-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/project/src/app.ts","new_string":"-----BEGIN RSA PRIVATE KEY-----"}}' \
+    2 \
+    "Private key"
+
+run_test "safety: block Google API key" \
+    "safety-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/project/src/app.ts","new_string":"const key = \"AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q\""}}' \
+    2 \
+    "Google API key"
+
+run_test "safety: allow binary files" \
+    "safety-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/project/assets/icon.png","new_string":"password = \"hunter2\""}}' \
+    0
+
+run_test "safety: block SECRET variable" \
+    "safety-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/project/src/config.ts","new_string":"MY_SECRET_KEY = \"super_secret_value_123\""}}' \
+    2 \
+    "Hardcoded secret"
+
+# =============================================
+# bash-safety-check.sh — additional edge case tests
+# =============================================
+
+echo ""
+echo "--- bash-safety-check.sh (edge cases) ---"
+
+run_test "bash-safety: block JWT in command" \
+    "bash-safety-check.sh" \
+    '{"tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0\""}}' \
+    2 \
+    "JWT token"
+
+run_test "bash-safety: block Slack token in command" \
+    "bash-safety-check.sh" \
+    '{"tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: xoxb-1234567890123-AbCdEfGhIjKl\""}}' \
+    2 \
+    "Slack token"
+
+run_test "bash-safety: block PEM key in command" \
+    "bash-safety-check.sh" \
+    '{"tool_name":"Bash","tool_input":{"command":"echo \"-----BEGIN RSA PRIVATE KEY-----\" | base64"}}' \
+    2 \
+    "Private key"
+
+run_test "bash-safety: block inline Bearer token" \
+    "bash-safety-check.sh" \
+    '{"tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: Bearer sk_live_AbCdEfGhIjKlMnOpQrSt\""}}' \
+    2 \
+    "inline auth token"
+
+# =============================================
+# self-verify-check.sh tests
+# =============================================
+
+echo ""
+echo "--- self-verify-check.sh ---"
+
+# self-verify-check always exits 0 (advisory only, never blocks)
+run_test "self-verify: always exits 0 for valid input" \
+    "self-verify-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/test.ts"}}' \
+    0
+
+run_test "self-verify: always exits 0 for empty file_path" \
+    "self-verify-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":""}}' \
+    0
+
+run_test "self-verify: always exits 0 for non-code file" \
+    "self-verify-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/readme.md"}}' \
+    0
+
+run_test "self-verify: always exits 0 for nonexistent file" \
+    "self-verify-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"/nonexistent/path/foo.ts"}}' \
+    0
+
+# =============================================
 # doc-drift-check.sh tests
 # =============================================
 

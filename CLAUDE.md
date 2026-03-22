@@ -26,6 +26,7 @@ Implements OpenAI's harness engineering methodology (four pillars) adapted for C
 | entropy-sweep-agent | Entropy | Background entropy scanning |
 | harness-reviewer | Entropy | Background code review |
 | session-observer-agent | Observability | Session tracking and shift-handoff |
+| doc-gardening-agent | Documentation | Background documentation gardening and drift repair |
 
 ## Hooks (Automatic enforcement)
 
@@ -33,8 +34,9 @@ Implements OpenAI's harness engineering methodology (four pillars) adapted for C
 |------|-------|--------|----------|
 | arch-check.sh | PreToolUse | Architecture | Blocks layer violations, Providers bypass, sibling layer support |
 | safety-check.sh | PreToolUse | Entropy | Blocks hardcoded secrets and risk patterns |
+| bash-safety-check.sh | PreToolUse | Entropy | Blocks credential leaks in bash commands |
 | self-verify-check.sh | PostToolUse | Architecture | Warns on type/syntax errors after edit (TS, Python, JS, Rust, Go) |
-| session-metrics.sh | PostToolUse | Observability | Records tool usage and hook effectiveness metrics |
+| session-metrics.sh | PostToolUse | Observability | Records tool usage, hook performance, and effectiveness metrics |
 | doc-drift-check.sh | Stop | Documentation | Warns about documentation drift |
 
 ## Four Pillars
