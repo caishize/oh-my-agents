@@ -196,7 +196,7 @@ For each category with 3+ data points:
 ## Metric Trends — [date range]
 
 ### Legibility
-  Score: 17/21 -> 19/21  [improving]
+  Score: 22/30 -> 25/30  [improving]
   CLAUDE.md coverage: 60% -> 75%  [improving]
   Sparkline: [_._.__---^^^]
 

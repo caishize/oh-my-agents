@@ -3,23 +3,19 @@
 # Bash command credential leak check — PreToolUse for Bash
 # Detects hardcoded secrets in command arguments.
 #
-# Input: JSON on stdin
-#   { "tool_name": "Bash", "tool_input": { "command": "..." } }
-#
 # Exit codes:
 #   0 - no risks (allow)
 #   2 - risk detected (block with remediation on stderr)
 
 set -euo pipefail
 
-INPUT=$(cat)
+# --- Load shared utilities ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
 
-COMMAND=""
-if command -v jq >/dev/null 2>&1; then
-    COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
-elif command -v python3 >/dev/null 2>&1; then
-    COMMAND=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null || echo "")
-fi
+read_input
+
+COMMAND=$(get_command)
 
 if [ -z "$COMMAND" ]; then
     exit 0
@@ -58,9 +54,9 @@ if echo "$COMMAND" | grep -Eq 'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}'; th
 fi
 
 # curl/wget with inline Authorization header (not referencing env var)
+# Improved: exclude both $VAR and ${VAR} patterns
 if echo "$COMMAND" | grep -iEq '(Authorization|Bearer)[: ]+[A-Za-z0-9_-]{20,}'; then
-    # Exclude env var references like $TOKEN or ${TOKEN}
-    if ! echo "$COMMAND" | grep -Eq '(Authorization|Bearer)[: ]+\$'; then
+    if ! echo "$COMMAND" | grep -Eq '(Authorization|Bearer)[: ]+\$(\{?[A-Za-z_])'; then
         VIOLATIONS="${VIOLATIONS}Security risk: Possible inline auth token in bash command.\n"
         VIOLATIONS="${VIOLATIONS}  Fix: Use environment variable reference instead of hardcoded token.\n\n"
     fi

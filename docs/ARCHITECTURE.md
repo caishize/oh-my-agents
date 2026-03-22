@@ -14,20 +14,9 @@ Based on OpenAI's internal experiment:
 - Key insight: "The bottleneck was never the agent's ability to write code, but the
   lack of structure, tools, and feedback mechanisms surrounding it."
 
-## Three Pillars
+## Four Pillars
 
-### 1. Context Engineering
-
-Making the codebase legible to agents through structured documentation.
-
-- **CLAUDE.md as table of contents** (~100 lines, progressive disclosure)
-- **docs/ as system of record** (structured, machine-readable, in-repo)
-- **Structured formats > prose** (agents comply better with JSON/YAML rules)
-- **No tacit knowledge** — if it's not in the repo, it doesn't exist
-
-Implemented by: `/harness-init`, `/legibility-score`
-
-### 2. Architectural Constraints
+### 1. Architecture as Guardrails
 
 Mechanical enforcement of boundaries so agents can't accidentally violate rules.
 
@@ -40,7 +29,30 @@ Mechanical enforcement of boundaries so agents can't accidentally violate rules.
 
 Implemented by: `/arch-guard`, `/taste-encoder`, `arch-guard-agent`, `arch-check.sh`
 
-### 3. Entropy Management ("Garbage Collection")
+### 2. Documentation as System of Record
+
+Making the codebase legible to agents through structured documentation.
+
+- **CLAUDE.md as table of contents** (~100 lines, progressive disclosure)
+- **docs/ as system of record** (structured, machine-readable, in-repo)
+- **Structured formats > prose** (agents comply better with JSON/YAML rules)
+- **No tacit knowledge** — if it's not in the repo, it doesn't exist
+
+Implemented by: `/harness-init`, `/legibility-score`, `/spec-to-task`
+
+### 3. Observability & Legibility
+
+Agents and humans can see what happened, why it happened, and where the system stands.
+
+- **Session metrics** — tool usage, layer activity, enforcement events tracked per session
+- **Harness dashboard** — aggregated health overview and trend analysis
+- **Shift-handoff** — session observer writes structured summaries to agent memory
+- **Nested CLAUDE.md** — module-level context for agent navigation
+
+Implemented by: `/harness-dashboard`, `/harness-metrics`, `session-observer-agent`,
+`session-metrics.sh`
+
+### 4. Entropy Management ("Garbage Collection")
 
 Continuous detection and repair of codebase degradation.
 
@@ -50,7 +62,7 @@ Continuous detection and repair of codebase degradation.
 - **Missing enforcement detection** — rules without lint/test enforcement are suggestions
 
 Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
-`harness-reviewer`, `doc-drift-check.sh`
+`harness-reviewer`, `doc-drift-check.sh`, `/encode-mistake`
 
 ## Plugin Structure
 
@@ -60,7 +72,7 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
 ├── marketplace.json                      # Marketplace definition for distribution
 skills/                                   # User-invocable slash commands
 ├── harness-init/SKILL.md                 # Initialize the harness
-├── legibility-score/SKILL.md             # 7-metric readiness assessment
+├── legibility-score/SKILL.md             # 10-metric readiness assessment
 ├── taste-encoder/SKILL.md                # Encode expertise into rules
 ├── arch-guard/SKILL.md                   # Set up constraint enforcement
 ├── entropy-sweep/SKILL.md                # Scan for entropy

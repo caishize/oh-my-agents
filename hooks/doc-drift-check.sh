@@ -14,21 +14,13 @@
 
 set -euo pipefail
 
-# Read stdin
-INPUT=$(cat)
+# --- Load shared utilities ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
 
-# JSON parser: prefer jq, fallback to python3
-json_get_cwd() {
-    if command -v jq >/dev/null 2>&1; then
-        echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo "."
-    elif command -v python3 >/dev/null 2>&1; then
-        echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd','.'))" 2>/dev/null || echo "."
-    else
-        echo "."
-    fi
-}
+read_input
 
-PROJECT_DIR=$(json_get_cwd)
+PROJECT_DIR=$(get_cwd)
 
 # Get files modified in the last commit or staged
 CHANGED_FILES=$(git -C "$PROJECT_DIR" diff --name-only HEAD 2>/dev/null || git -C "$PROJECT_DIR" diff --name-only --staged 2>/dev/null || echo "")

@@ -42,11 +42,14 @@ agents/                            # Read-only background subagents (with memory
 └── session-observer-agent.md      # Session tracking and shift-handoff (Haiku)
 hooks/                             # Event hook scripts
 ├── hooks.json                     # Hook event bindings (uses ${CLAUDE_PLUGIN_ROOT})
+├── lib/common.sh                  # Shared utilities (JSON parsing, layer detection)
 ├── arch-check.sh                  # Block Edit/Write on layer violations or Providers bypass
 ├── safety-check.sh                # Block Edit/Write on hardcoded secrets
 ├── bash-safety-check.sh           # Block Bash commands with credential leaks
 ├── session-metrics.sh             # Record tool usage to .claude/metrics/ (JSONL)
 └── doc-drift-check.sh             # Warn about documentation drift after session ends
+tests/                             # Plugin self-tests
+└── test-hooks.sh                  # 30 unit tests for all hooks and shared library
 docs/                              # Template documentation for target projects
 ├── ARCHITECTURE.md                # Layer model, module boundaries, design decisions
 ├── CONVENTIONS.md                 # Naming, file size, error handling, logging patterns
@@ -302,6 +305,17 @@ project for three-tier enforcement on every PR:
 2. Type check (type errors)
 3. Architecture guard (TASTE/ARCH structural tests)
 4. Tests (full suite)
+
+## Testing
+
+Run the plugin's own hook tests:
+
+```bash
+bash tests/test-hooks.sh
+```
+
+30 tests covering all hooks (arch-check, safety-check, bash-safety-check, session-metrics)
+and the shared library (layer detection, JSON parsing).
 
 ## Key Principles from OpenAI
 

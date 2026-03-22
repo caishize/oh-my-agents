@@ -131,6 +131,7 @@ For each task, determine:
 
 Write the execution plan to `docs/exec-plans/active/{plan-id}.json`.
 The plan ID format is: `plan-YYYYMMDD-feature-name` (lowercase, hyphens).
+Schema reference: `templates/execution-plan.json` in the oh-my-agents plugin.
 
 ```json
 {

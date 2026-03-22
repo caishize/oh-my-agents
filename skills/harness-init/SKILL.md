@@ -267,7 +267,9 @@ Key rules for documentation:
 
 ### Step 5: Create `.claude/harness.json` Config
 
-Create a machine-readable harness configuration that other skills can reference:
+Create a machine-readable harness configuration that other skills can reference.
+Use the template at `templates/harness-config.json` (in the oh-my-agents plugin) as
+a starting point, adapting `layer_dirs` to match the actual project structure:
 
 ```json
 {
@@ -781,6 +783,7 @@ Next Steps:
   - Review generated docs and fill in project-specific details
   - Run /legibility-score for detailed assessment
   - Use /spec-to-task to create execution plans for features
+  - Copy templates/github-actions-harness.yml to .github/workflows/ for CI enforcement
   [If gstack detected:]
   - Use /office-hours to brainstorm your next feature
   - See docs/WORKFLOW.md for the full integrated development lifecycle

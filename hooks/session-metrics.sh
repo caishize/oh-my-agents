@@ -9,83 +9,28 @@
 
 set -euo pipefail
 
-INPUT=$(cat)
+# --- Load shared utilities ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
 
-# --- Extract tool_name and file_path ---
-TOOL_NAME=""
-FILE_PATH=""
+read_input
 
-if command -v jq >/dev/null 2>&1; then
-    TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
-    FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || echo "")
-elif command -v python3 >/dev/null 2>&1; then
-    TOOL_NAME=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_name',''))" 2>/dev/null || echo "")
-    FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo "")
-fi
-
-# --- Load harness.json layer_dirs if available (P1 fix: consistency with arch-check.sh) ---
-HARNESS_LAYER_DIRS=""
-if [ -n "$FILE_PATH" ]; then
-    _SEARCH_DIR=$(dirname "$FILE_PATH")
-    while [ "$_SEARCH_DIR" != "/" ] && [ "$_SEARCH_DIR" != "." ]; do
-        if [ -f "${_SEARCH_DIR}/.claude/harness.json" ]; then
-            if command -v jq >/dev/null 2>&1; then
-                HARNESS_LAYER_DIRS=$(jq -r '.layer_dirs // empty' "${_SEARCH_DIR}/.claude/harness.json" 2>/dev/null || echo "")
-            elif command -v python3 >/dev/null 2>&1; then
-                HARNESS_LAYER_DIRS=$(python3 -c "import json; d=json.load(open('${_SEARCH_DIR}/.claude/harness.json')).get('layer_dirs',{}); print(json.dumps(d) if d else '')" 2>/dev/null || echo "")
-            fi
-            break
-        fi
-        _SEARCH_DIR=$(dirname "$_SEARCH_DIR")
-    done
-fi
+TOOL_NAME=$(get_tool_name)
+FILE_PATH=$(get_file_path)
 
 # --- Determine layer from file path ---
-get_layer() {
-    local path="$1"
-    # Try harness.json layer_dirs first
-    if [ -n "$HARNESS_LAYER_DIRS" ] && command -v python3 >/dev/null 2>&1; then
-        local result
-        result=$(python3 -c "
-import json, fnmatch, sys
-layer_dirs = json.loads(sys.argv[1])
-layer_order = ['types','config','repo','service','runtime','ui']
-path = sys.argv[2]
-for layer_name in layer_order:
-    if layer_name in layer_dirs:
-        dirs = layer_dirs[layer_name]
-        if isinstance(dirs, str):
-            dirs = [dirs]
-        for pattern in dirs:
-            if fnmatch.fnmatch(path, '*/' + pattern + '/*') or fnmatch.fnmatch(path, pattern + '/*'):
-                print(layer_name)
-                sys.exit(0)
-print('')
-" "$HARNESS_LAYER_DIRS" "$path" 2>/dev/null || echo "")
-        if [ -n "$result" ]; then
-            echo "$result"
-            return
-        fi
-    fi
-    # Hardcoded fallback
-    case "$path" in
-        */types/*|*/models/*|*/interfaces/*)       echo "types" ;;
-        */config/*|*/configuration/*)              echo "config" ;;
-        */repo/*|*/repository/*|*/dal/*)           echo "repo" ;;
-        */service/*|*/services/*)                  echo "service" ;;
-        */runtime/*|*/server/*|*/api/*)            echo "runtime" ;;
-        */ui/*|*/components/*|*/pages/*|*/views/*)  echo "ui" ;;
-        *)                                         echo "other" ;;
-    esac
-}
-
 LAYER=""
 if [ -n "$FILE_PATH" ]; then
-    LAYER=$(get_layer "$FILE_PATH")
+    # Load harness config if available
+    find_harness_json "$(dirname "$FILE_PATH")" 2>/dev/null || true
+    if [ -n "$HARNESS_FILE" ]; then
+        load_harness_config "$HARNESS_FILE"
+    fi
+    LAYER=$(resolve_layer "$FILE_PATH")
+    [ -z "$LAYER" ] && LAYER="other"
 fi
 
 # --- Determine metrics directory ---
-# Walk up from FILE_PATH to find .claude/, or use cwd
 METRICS_DIR=""
 if [ -n "$FILE_PATH" ]; then
     SEARCH_DIR=$(dirname "$FILE_PATH")
@@ -100,13 +45,8 @@ fi
 
 # Fallback: try cwd from input
 if [ -z "$METRICS_DIR" ]; then
-    CWD=""
-    if command -v jq >/dev/null 2>&1; then
-        CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
-    elif command -v python3 >/dev/null 2>&1; then
-        CWD=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null || echo "")
-    fi
-    if [ -n "$CWD" ] && [ -d "$CWD" ]; then
+    CWD=$(get_cwd)
+    if [ -n "$CWD" ] && [ "$CWD" != "." ] && [ -d "$CWD" ]; then
         METRICS_DIR="${CWD}/.claude/metrics"
     fi
 fi
@@ -129,11 +69,9 @@ LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"la
 echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
 
 # --- Log rotation: remove JSONL files older than 30 days ---
-# Non-blocking: errors are silently ignored. Runs at most once per day (only if today's file was just created).
 if [ -f "$METRICS_FILE" ]; then
     LINE_COUNT=$(wc -l < "$METRICS_FILE" 2>/dev/null || echo "99")
     if [ "$LINE_COUNT" -le 1 ]; then
-        # First write today — prune old files
         find "$METRICS_DIR" -name "session-*.jsonl" -mtime +30 -delete 2>/dev/null || true
     fi
 fi

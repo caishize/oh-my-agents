@@ -151,7 +151,7 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
 | plan-api-v2 | 1/8 tasks | stale | 9 days ago |
 
 ### Harness Health
-  Legibility Score: N/21 (last assessed: [date])
+  Legibility Score: N/30 (last assessed: [date])
   Entropy Findings: N issues (last sweep: [date])
   Nested CLAUDE.md coverage: N% (N/M modules)
   Stale plans: N

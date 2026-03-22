@@ -1,16 +1,29 @@
 {
-  "version": "2.0",
+  "version": "2.1",
   "pillars": ["architecture", "documentation", "observability", "entropy"],
-  "layers": ["skills", "agents", "hooks", "templates", "docs"],
-  "layer_dirs": {
-    "skills": "skills",
-    "agents": "agents",
-    "hooks": "hooks",
-    "templates": "templates",
-    "docs": "docs"
+  "plugin_structure": {
+    "note": "oh-my-agents is a Claude Code plugin, not a standard layered application. The directories below describe plugin components, not the target project's architecture layers.",
+    "components": {
+      "skills": "skills/",
+      "agents": "agents/",
+      "hooks": "hooks/",
+      "templates": "templates/",
+      "docs": "docs/"
+    }
+  },
+  "target_layer_model": {
+    "note": "The layer model that oh-my-agents enforces on target projects via arch-check.sh and /arch-guard.",
+    "layers": ["types", "config", "repo", "service", "runtime", "ui"],
+    "default_layer_dirs": {
+      "types": ["**/types/**", "**/models/**", "**/interfaces/**"],
+      "config": ["**/config/**", "**/configuration/**"],
+      "repo": ["**/repo/**", "**/repository/**", "**/dal/**"],
+      "service": ["**/service/**", "**/services/**"],
+      "runtime": ["**/runtime/**", "**/server/**", "**/api/**"],
+      "ui": ["**/ui/**", "**/components/**", "**/pages/**", "**/views/**"]
+    }
   },
   "providers_path": null,
   "file_size_limit": 800,
-  "nested_claude_md_threshold": 3,
-  "note": "oh-my-agents uses a plugin-specific layer model. skills/ are user-invocable commands, agents/ are background workers, hooks/ are event-driven enforcement scripts, templates/ are starter configs, docs/ is the system of record."
+  "nested_claude_md_threshold": 3
 }
