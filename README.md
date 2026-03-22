@@ -217,13 +217,13 @@ Metrics allows deep-dive queries: layer balance, violation trends, plan velocity
 
 All agents have Write/Edit disabled — they report but never modify code.
 
-| Agent | Model | Dispatched when... |
-|-------|-------|--------------------|
-| `arch-guard-agent` | Sonnet | Code changes might violate layers or boundaries |
-| `entropy-sweep-agent` | Sonnet | Periodic scan or pre-release check requested |
-| `harness-reviewer` | Sonnet | PR or staged changes need review |
-| `session-observer-agent` | Haiku | Session ends — writes shift-handoff summary to memory |
-| `doc-gardening-agent` | Haiku | Periodic doc scan — dead refs, stale commands, contradictions |
+| Agent | Dispatched when... |
+|-------|---------------------|
+| `arch-guard-agent` | Code changes might violate layers or boundaries |
+| `entropy-sweep-agent` | Periodic scan or pre-release check requested |
+| `harness-reviewer` | PR or staged changes need review |
+| `session-observer-agent` | Session ends — writes shift-handoff summary to memory |
+| `doc-gardening-agent` | Periodic doc scan — dead refs, stale commands, contradictions |
 
 ## Hooks (Automatic Enforcement)
 
@@ -325,12 +325,12 @@ Run the plugin's self-test suites:
 # self-verify-check, session-metrics, doc-drift-check, and shared library
 bash tests/test-hooks.sh
 
-# Skill smoke tests (154 tests): frontmatter validation, model selection,
+# Skill smoke tests (132 tests): frontmatter validation,
 # file size, description quality, i18n, structural integrity, cross-references
 bash tests/test-skills.sh
 ```
 
-201 total tests covering all hooks and all 11 skills.
+179 total tests covering all hooks and all 11 skills.
 
 ## Configuration (`.claude/harness.json`)
 

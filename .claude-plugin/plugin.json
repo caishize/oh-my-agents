@@ -1,6 +1,6 @@
 {
   "name": "oh-my-agents",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Harness engineering plugin for Claude Code — four pillars: architecture guardrails, documentation as system of record, observability & legibility, and entropy management.",
   "author": {
     "name": "caishize",

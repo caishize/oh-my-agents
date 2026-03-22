@@ -66,24 +66,7 @@ for skill in $EXPECTED_SKILLS; do
     assert_contains "frontmatter: $skill has description" "$SKILL_FILE" "^description:"
     assert_contains "frontmatter: $skill has user-invocable" "$SKILL_FILE" "^user-invocable:"
     assert_contains "frontmatter: $skill has argument-hint" "$SKILL_FILE" "^argument-hint:"
-    assert_contains "frontmatter: $skill has model" "$SKILL_FILE" "^model:"
     assert_contains "frontmatter: $skill has allowed-tools" "$SKILL_FILE" "^allowed-tools:"
-done
-
-# --- Model selection validation ---
-echo ""
-echo "--- Model selection ---"
-
-# Haiku for lightweight tasks
-for skill in legibility-score harness-dashboard; do
-    SKILL_FILE="${SKILLS_DIR}/${skill}/SKILL.md"
-    assert_contains "model: $skill uses haiku" "$SKILL_FILE" "^model: haiku"
-done
-
-# Sonnet for complex tasks
-for skill in harness-init spec-to-task verify encode-mistake arch-guard taste-encoder entropy-sweep harness-review harness-metrics; do
-    SKILL_FILE="${SKILLS_DIR}/${skill}/SKILL.md"
-    assert_contains "model: $skill uses sonnet" "$SKILL_FILE" "^model: sonnet"
 done
 
 # --- File size check ---
