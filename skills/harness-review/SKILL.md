@@ -3,7 +3,6 @@ name: harness-review
 description: "Harness-specific code review (NOT generic code review) — evaluates changes against the four harness pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Checks layer violations, providers bypass, doc drift, safety patterns, slop, and agent context quality. For general code review use a dedicated code-reviewer agent instead. Aliases: harness审查, 四支柱审查, 架构审查, 层级检查, harness代码评审"
 user-invocable: true
 argument-hint: "[PR-number or file-path]"
-model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 ---
 

@@ -3,7 +3,6 @@ name: arch-guard
 description: "Set up and manage architectural enforcement — custom linters, structural tests, dependency layer validation. Reads .claude/harness.json. Integrates with nested CLAUDE.md. Use /harness-review for per-PR review instead. Aliases: 架构检查, 架构守卫, 依赖检查, 分层检查, 架构约束, 架构合规"
 user-invocable: true
 argument-hint: "[scope: full|layers|naming|size|providers]"
-model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 ---
 

@@ -3,7 +3,6 @@ name: encode-mistake
 description: "Convert an agent mistake or recurring failure into a permanent guardrail — lint rule, structural test, hook, or doc rule. Implements Mitchell Hashimoto's principle: 'Every agent mistake is an encoding opportunity.' Complements /taste-encoder (which starts from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 经验编码, 防止复发"
 user-invocable: true
 argument-hint: "<description of what went wrong> [--hook-output]"
-model: sonnet
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
