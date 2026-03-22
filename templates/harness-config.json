@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "2.1",
   "pillars": ["architecture", "documentation", "observability", "entropy"],
   "layers": ["types", "config", "repo", "service", "runtime", "ui"],
   "layer_dirs": {
@@ -12,5 +12,7 @@
   },
   "providers_path": null,
   "file_size_limit": 300,
-  "nested_claude_md_threshold": 5
+  "nested_claude_md_threshold": 5,
+  "plan_stale_days": 7,
+  "sibling_layers": []
 }

@@ -3,6 +3,7 @@ name: legibility-score
 description: "Assess the 10-metric Agent Legibility Score for a repository — measures how ready a codebase is for AI agent-driven development across four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Aliases: 可读性评分, Agent就绪度, 代码可读性, AI友好度评估, 代码评分"
 user-invocable: true
 argument-hint: "[project-path]"
+model: haiku
 allowed-tools: Read, Glob, Grep, Bash
 ---
 

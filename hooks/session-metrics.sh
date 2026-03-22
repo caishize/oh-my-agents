@@ -21,13 +21,24 @@ FILE_PATH=$(get_file_path)
 # --- Determine layer from file path ---
 LAYER=""
 if [ -n "$FILE_PATH" ]; then
-    # Load harness config if available
-    find_harness_json "$(dirname "$FILE_PATH")" 2>/dev/null || true
-    if [ -n "$HARNESS_FILE" ]; then
-        load_harness_config "$HARNESS_FILE"
+    # Try fast fallback detection first (no harness.json needed)
+    LAYER=$(_resolve_layer_fallback "$FILE_PATH" 2>/dev/null || echo "")
+    if [ -z "$LAYER" ]; then
+        # Only load harness config if fallback didn't match
+        find_harness_json "$(dirname "$FILE_PATH")" 2>/dev/null || true
+        if [ -n "$HARNESS_FILE" ]; then
+            load_harness_config "$HARNESS_FILE"
+            LAYER=$(_resolve_layer_from_harness "$FILE_PATH" 2>/dev/null || echo "")
+        fi
     fi
-    LAYER=$(resolve_layer "$FILE_PATH")
-    [ -z "$LAYER" ] && LAYER="other"
+    # Classify non-layer files
+    if [ -z "$LAYER" ]; then
+        case "$FILE_PATH" in
+            */docs/*|*.md)       LAYER="docs" ;;
+            */test/*|*.test.*|*.spec.*) LAYER="test" ;;
+            *)                   LAYER="other" ;;
+        esac
+    fi
 fi
 
 # --- Determine metrics directory ---
@@ -64,9 +75,31 @@ TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 DATE_PART=$(date -u +"%Y-%m-%d")
 METRICS_FILE="${METRICS_DIR}/session-${DATE_PART}.jsonl"
 
+# --- Check for hook block events (PreToolUse hooks that returned exit 2) ---
+# Claude Code passes hook_results in the input for PostToolUse
+HOOK_BLOCKED=""
+if echo "$INPUT" | grep -q '"hook_results"' 2>/dev/null; then
+    HOOK_BLOCKED=$(json_get '.hook_results[]? | select(.exit_code == 2) | .hook' \
+        'import json,sys; d=json.loads(sys.stdin.read()); results=d.get("hook_results",[]); print(",".join(h.get("hook","") for h in results if h.get("exit_code")==2))' \
+        2>/dev/null || echo "")
+fi
+
 # Build JSON without jq for speed
-LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"}"
-echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
+BLOCKED_FIELD=""
+if [ -n "$HOOK_BLOCKED" ]; then
+    BLOCKED_FIELD=",\"blocked_by\":\"${HOOK_BLOCKED}\""
+fi
+LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"${BLOCKED_FIELD}}"
+
+# Use flock to prevent JSONL corruption from parallel Claude Code sessions (gstack Conductor)
+LOCK_FILE="${METRICS_FILE}.lock"
+if command -v flock >/dev/null 2>&1; then
+    (flock -w 2 200 && echo "$LINE" >> "$METRICS_FILE") 200>"$LOCK_FILE" 2>/dev/null || \
+        echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
+else
+    # macOS: flock not available, use atomic append (>> is typically atomic for small writes)
+    echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
+fi
 
 # --- Log rotation: remove JSONL files older than 30 days ---
 if [ -f "$METRICS_FILE" ]; then

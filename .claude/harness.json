@@ -25,5 +25,7 @@
   },
   "providers_path": null,
   "file_size_limit": 800,
-  "nested_claude_md_threshold": 3
+  "nested_claude_md_threshold": 3,
+  "plan_stale_days": 7,
+  "sibling_layers": []
 }

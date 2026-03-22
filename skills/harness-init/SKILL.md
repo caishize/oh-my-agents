@@ -2,7 +2,9 @@
 name: harness-init
 description: "Initialize your project as an agent-ready harness — CLAUDE.md as table of contents, nested CLAUDE.md per module, docs/ system of record, bootstrap script, and task entry points. The complete AI coding environment setup based on OpenAI's four-pillar harness engineering methodology. Aliases: 初始化, 项目初始化, harness初始化, 环境搭建, 项目配置, AI开发环境"
 user-invocable: true
-argument-hint: "[project-path]"
+argument-hint: "[project-path] [--quick]"
+model: sonnet
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Harness Init v2.0
@@ -32,6 +34,17 @@ This harness is built on OpenAI's **four pillars** of harness engineering:
 
 Set up the harness for this repository following all four pillars.
 If `$ARGUMENTS` specifies a project path, use that; otherwise use the current directory.
+
+### Quick Start Mode
+
+If `$ARGUMENTS` contains `--quick`, run an accelerated setup:
+1. Execute Steps 1-9 below (full harness-init)
+2. Immediately run `/legibility-score` on the project
+3. Immediately run `/arch-guard` on the project
+4. Print a one-paragraph summary: score, top 3 improvement areas, next recommended command
+
+This solves the cold-start problem — new users get the full
+`/harness-init` -> `/legibility-score` -> `/arch-guard` pipeline in a single command.
 
 ### Step 1: Assess Current State
 

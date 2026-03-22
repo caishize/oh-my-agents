@@ -22,6 +22,13 @@ if [ -z "$FILE_PATH" ]; then
     exit 0  # Can't determine file, allow
 fi
 
+# --- Fast exit for non-code files (no import analysis needed) ---
+case "$FILE_PATH" in
+    *.md|*.json|*.yaml|*.yml|*.toml|*.css|*.scss|*.less|*.html|*.svg|*.png|*.jpg|*.gif|*.ico|*.lock|*.txt|*.csv|*.env*)
+        exit 0
+        ;;
+esac
+
 # --- Load harness.json ---
 find_harness_json "$(dirname "$FILE_PATH")" || true
 if [ -n "$HARNESS_FILE" ]; then
@@ -44,6 +51,20 @@ fi
 
 VIOLATIONS=""
 
+# --- Extract import paths from content ---
+# Handles: static imports, dynamic import(), require(), re-exports, TypeScript path aliases (@/),
+# Python imports (from x import y), Go imports
+IMPORT_PATHS=$(echo "$CONTENT" | {
+    # JS/TS: import ... from "path", import("path"), require("path"), export ... from "path"
+    grep -oE "(import|from|require|export)\s*[\(\"']\s*[\"']?([^\"';\)]+)[\"';\)]" 2>/dev/null || true
+} | grep -oE "[\"'][^\"']+[\"']" | tr -d "\"'" 2>/dev/null || true)
+
+# Also extract Python-style imports: from xxx.yyy import zzz
+PYTHON_IMPORTS=$(echo "$CONTENT" | grep -oE "^from\s+[a-zA-Z0-9_.]+\s+import" | sed 's/^from\s\+//;s/\s\+import$//' | tr '.' '/' 2>/dev/null || true)
+
+# Resolve TypeScript path aliases: @/types/foo -> types/foo
+ALL_IMPORTS=$(printf "%s\n%s" "$IMPORT_PATHS" "$PYTHON_IMPORTS" | sed 's|^@/||' | sort -u)
+
 # --- Check imports for layer violations ---
 while IFS= read -r import_path; do
     [ -z "$import_path" ] && continue
@@ -51,13 +72,17 @@ while IFS= read -r import_path; do
     if [ "$IMPORT_LAYER_INDEX" != "-1" ] && [ "$IMPORT_LAYER_INDEX" -gt "$FILE_LAYER_INDEX" ]; then
         FILE_LAYER_NAME=$(index_to_layer_name "$FILE_LAYER_INDEX")
         IMPORT_LAYER_NAME=$(index_to_layer_name "$IMPORT_LAYER_INDEX")
+        # Skip if layers are declared as siblings in harness.json
+        if are_sibling_layers "$FILE_LAYER_NAME" "$IMPORT_LAYER_NAME" 2>/dev/null; then
+            continue
+        fi
         VIOLATIONS="${VIOLATIONS}Layer violation: '${FILE_LAYER_NAME}' layer cannot import from '${IMPORT_LAYER_NAME}' layer.\n"
         VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
         VIOLATIONS="${VIOLATIONS}  Import: ${import_path}\n"
         VIOLATIONS="${VIOLATIONS}  Fix: Move shared logic to the types or config layer, or use a service interface.\n"
         VIOLATIONS="${VIOLATIONS}  Ref: docs/ARCHITECTURE.md#dependency-layers\n\n"
     fi
-done < <(echo "$CONTENT" | grep -oE "(import|from|require)\s*[\(\"']([^\"']+)[\"'\)]" | grep -oE "[\"'][^\"']+[\"']" | tr -d "\"'" 2>/dev/null || true)
+done <<< "$ALL_IMPORTS"
 
 # --- Providers bypass detection ---
 if [ -n "${PROVIDERS_PATH:-}" ] && [ "${PROVIDERS_PATH:-}" != "null" ]; then

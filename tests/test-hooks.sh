@@ -244,6 +244,30 @@ test_resolve_layer "/project/src/components/button.tsx" "ui" "resolve_layer: com
 test_resolve_layer "/project/src/utils/helper.ts" "" "resolve_layer: unknown path returns empty"
 
 # =============================================
+# doc-drift-check.sh tests
+# =============================================
+
+echo ""
+echo "--- doc-drift-check.sh ---"
+
+# doc-drift-check always exits 0 (advisory only, never blocks)
+run_test "doc-drift: always exits 0 for valid input" \
+    "doc-drift-check.sh" \
+    '{"hook_event_name":"Stop","session_id":"test","cwd":"/tmp"}' \
+    0
+
+run_test "doc-drift: always exits 0 for empty cwd" \
+    "doc-drift-check.sh" \
+    '{"hook_event_name":"Stop","session_id":"test","cwd":""}' \
+    0
+
+# Test with a non-existent project dir (should gracefully handle)
+run_test "doc-drift: handles non-existent project dir gracefully" \
+    "doc-drift-check.sh" \
+    '{"hook_event_name":"Stop","session_id":"test","cwd":"/nonexistent/path/xyz"}' \
+    0
+
+# =============================================
 # Summary
 # =============================================
 

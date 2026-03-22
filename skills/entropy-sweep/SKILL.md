@@ -3,6 +3,7 @@ name: entropy-sweep
 description: "Scan for and fix codebase entropy across all four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Covers slop, doc drift, arch violations, dead code, missing enforcement, exec plan health, and nested CLAUDE.md drift. Aliases: 熵扫描, 代码清理, 死代码清理, 代码垃圾回收, 代码腐化检查, 文档过期检查"
 user-invocable: true
 argument-hint: "[scope: full|docs|slop|arch|dead-code|plans|claude-md]"
+model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -130,7 +131,8 @@ that conflicts with reality.
 
 Check `docs/exec-plans/active/` for:
 
-1. **Stale active plans** — Plans with no file modifications in 7+ days.
+1. **Stale active plans** — Plans with no file modifications in N+ days
+   (default 7; configurable via `plan_stale_days` in `.claude/harness.json`).
    Use file modification dates to detect. A plan that hasn't been touched
    is either completed (move to `completed/`) or blocked (needs attention).
 2. **Blocked tasks with no progress** — Plans where tasks are marked blocked

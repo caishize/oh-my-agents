@@ -21,11 +21,12 @@ if [ -z "$FILE_PATH" ]; then
     exit 0
 fi
 
-CONTENT=$(get_content)
-
-if [ -z "$CONTENT" ]; then
-    exit 0
-fi
+# --- Fast exit for binary/asset files (no secrets possible) ---
+case "$FILE_PATH" in
+    *.png|*.jpg|*.gif|*.ico|*.svg|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.webm|*.lock|*.map)
+        exit 0
+        ;;
+esac
 
 # --- Skip test files, fixtures, and mocks ---
 case "$FILE_PATH" in
@@ -34,8 +35,22 @@ case "$FILE_PATH" in
         ;;
 esac
 
-# --- Strip comment lines to reduce false positives ---
-CONTENT_NO_COMMENTS=$(echo "$CONTENT" | grep -vE '^\s*(//|#|;|\*|<!--|/\*)' | grep -vE '^\s*\*/' || true)
+CONTENT=$(get_content)
+
+if [ -z "$CONTENT" ]; then
+    exit 0
+fi
+
+# --- Strip comments to reduce false positives ---
+# Step 1: Remove full-line comments (lines starting with //, #, ;, *, <!--, /*)
+# Step 2: Remove inline trailing comments (// ... or # ... after code)
+# Step 3: Remove block comment close lines
+CONTENT_NO_COMMENTS=$(echo "$CONTENT" \
+    | grep -vE '^\s*(//|#|;|\*|<!--|/\*)' \
+    | grep -vE '^\s*\*/' \
+    | sed -E 's/\s+\/\/.*$//' \
+    | sed -E 's/\s+#[^"'"'"']*$//' \
+    || true)
 
 VIOLATIONS=""
 

@@ -42,14 +42,16 @@ agents/                            # Read-only background subagents (with memory
 └── session-observer-agent.md      # Session tracking and shift-handoff (Haiku)
 hooks/                             # Event hook scripts
 ├── hooks.json                     # Hook event bindings (uses ${CLAUDE_PLUGIN_ROOT})
-├── lib/common.sh                  # Shared utilities (JSON parsing, layer detection)
+├── lib/common.sh                  # Shared utilities (JSON parsing, layer detection, sibling layers)
 ├── arch-check.sh                  # Block Edit/Write on layer violations or Providers bypass
 ├── safety-check.sh                # Block Edit/Write on hardcoded secrets
 ├── bash-safety-check.sh           # Block Bash commands with credential leaks
-├── session-metrics.sh             # Record tool usage to .claude/metrics/ (JSONL)
+├── self-verify-check.sh           # Warn on type/syntax errors after edit (TS, Py, JS, Rust, Go)
+├── session-metrics.sh             # Record tool usage + hook effectiveness to .claude/metrics/ (JSONL)
 └── doc-drift-check.sh             # Warn about documentation drift after session ends
 tests/                             # Plugin self-tests
-└── test-hooks.sh                  # 30 unit tests for all hooks and shared library
+├── test-hooks.sh                  # 33 unit tests for all hooks and shared library
+└── test-skills.sh                 # 154 smoke tests for skill frontmatter, structure, quality
 docs/                              # Template documentation for target projects
 ├── ARCHITECTURE.md                # Layer model, module boundaries, design decisions
 ├── CONVENTIONS.md                 # Naming, file size, error handling, logging patterns
@@ -114,6 +116,8 @@ Set up the full harness environment in 9 steps: root CLAUDE.md as table of conte
 (~100 lines), nested CLAUDE.md for every module with 5+ files, structured docs/ directory,
 machine-readable `.claude/harness.json`, bootstrap script, pre-commit enforcement, and
 architecture test skeleton.
+
+**Quick start**: `/harness-init --quick` runs init + legibility-score + arch-guard in one command.
 
 ### `/legibility-score` — Agent Legibility Score
 
@@ -183,7 +187,8 @@ the approved location.
 Set up the rigid layered architecture: Types → Config → Repo → Service → Runtime → UI.
 Plus the Providers pattern for cross-cutting concerns (auth, telemetry, feature flags).
 Creates custom linters with **remediation instructions in error messages** (error
-messages double as agent context).
+messages double as agent context). Supports **sibling layers** for horizontal imports
+between same-level modules (configurable via `sibling_layers` in `.claude/harness.json`).
 
 ### `/entropy-sweep` — Garbage Collection
 
@@ -193,7 +198,7 @@ Evolved from OpenAI's manual Friday "slop cleanup" to automated agent scanning. 
 - **Violations**: layer crossings, Providers bypass
 - **Dead weight**: unused exports, deps, orphaned files, stale TODOs
 - **Missing enforcement**: rules in docs/ without lint/test backing
-- **Stale plans**: execution plans with no updates in 7+ days
+- **Stale plans**: execution plans with no updates in N+ days (configurable via `plan_stale_days`)
 
 ### `/harness-review` — Say No to Slop
 
@@ -222,10 +227,11 @@ All agents have Write/Edit disabled — they report but never modify code.
 
 | Hook | Trigger | Behavior |
 |------|---------|----------|
-| `arch-check.sh` | Before Edit/Write | **Blocks** layer violations and Providers bypass |
-| `safety-check.sh` | Before Edit/Write | **Blocks** hardcoded secrets and credentials |
+| `arch-check.sh` | Before Edit/Write | **Blocks** layer violations, Providers bypass; supports sibling layers |
+| `safety-check.sh` | Before Edit/Write | **Blocks** hardcoded secrets (inline comment stripping, fast-exit for non-code) |
 | `bash-safety-check.sh` | Before Bash | **Blocks** credential leaks in bash commands |
-| `session-metrics.sh` | After Edit/Write/Bash | Records tool usage to JSONL (30-day rotation) |
+| `self-verify-check.sh` | After Edit/Write | **Warns** on type/syntax errors (TypeScript, Python, JS, Rust, Go) |
+| `session-metrics.sh` | After Edit/Write/Bash | Records tool usage + hook effectiveness to JSONL (flock for parallel safety) |
 | `doc-drift-check.sh` | Session end | **Warns** if source changes may need doc updates |
 
 ## Workflow
@@ -235,6 +241,8 @@ Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 ### One-Time Setup
 
 ```
+/harness-init --quick  # All-in-one: init + legibility-score + arch-guard
+# Or step by step:
 /harness-init          # CLAUDE.md, docs/, bootstrap, harness.json, pre-commit
 /legibility-score      # Assess readiness (0-30) — find gaps
 /arch-guard            # Layer enforcement + Providers pattern
@@ -308,14 +316,31 @@ project for three-tier enforcement on every PR:
 
 ## Testing
 
-Run the plugin's own hook tests:
+Run the plugin's self-test suites:
 
 ```bash
+# Hook tests (33 tests): arch-check, safety-check, bash-safety-check,
+# session-metrics, doc-drift-check, and shared library
 bash tests/test-hooks.sh
+
+# Skill smoke tests (154 tests): frontmatter validation, model selection,
+# file size, description quality, i18n, structural integrity, cross-references
+bash tests/test-skills.sh
 ```
 
-30 tests covering all hooks (arch-check, safety-check, bash-safety-check, session-metrics)
-and the shared library (layer detection, JSON parsing).
+187 total tests covering all hooks and all 11 skills.
+
+## Configuration (`.claude/harness.json`)
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `layers` | `["types","config","repo","service","runtime","ui"]` | Canonical layer order |
+| `layer_dirs` | `{...}` | Glob patterns mapping directories to layers |
+| `sibling_layers` | `[]` | Layer pairs that can import each other, e.g. `["service:runtime"]` |
+| `providers_path` | `null` | Path to Providers interface (enables bypass detection) |
+| `file_size_limit` | `300` | Max lines per source file |
+| `nested_claude_md_threshold` | `5` | Min files in a directory to require CLAUDE.md |
+| `plan_stale_days` | `7` | Days before an execution plan is flagged as stalled |
 
 ## Key Principles from OpenAI
 
@@ -324,14 +349,18 @@ and the shared library (layer detection, JSON parsing).
 - **"Say No to Slop"** — never lower review standards, even to ship faster
 - **"When the agent struggles, treat it as an environment design problem"**
 - **"Every agent mistake is an encoding opportunity"** — Mitchell Hashimoto
+- **"If you over-engineer the control flow, the next model update will break your system"** — build rippable harnesses
 - **Progressive disclosure** — CLAUDE.md is the TOC, docs/ is the encyclopedia
 - **Structured formats > prose** — agents comply better with JSON/YAML rules
 - **Error messages are context** — lint errors must include WHAT, WHERE, HOW, REF
 - **JSON > Markdown for tracking** — agents less frequently overwrite structured data
 - **Speed increases communication need** — faster AI output requires more human check-ins
+- **Self-verification** — agents must confirm their own changes work before requesting review
 
 ## References
 
 - [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/)
+- [gstack: Garry Tan's Claude Code Setup](https://github.com/garrytan/gstack) — complementary workflow plugin
 - [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
+- [NxCode: Complete Guide to Harness Engineering](https://www.nxcode.io/resources/news/harness-engineering-complete-guide-ai-agent-codex-2026)
 - [The Emerging Harness Engineering Playbook](https://www.ignorance.ai/p/the-emerging-harness-engineering)

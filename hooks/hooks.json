@@ -32,7 +32,24 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|Bash",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-metrics.sh",
+            "timeout": 2000,
+            "statusMessage": "Recording metrics..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/self-verify-check.sh",
+            "timeout": 15000,
+            "statusMessage": "Self-verifying edit..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",

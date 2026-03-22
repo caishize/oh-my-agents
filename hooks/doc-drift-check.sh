@@ -124,7 +124,7 @@ if [ -d "$PROJECT_DIR" ]; then
             WARNINGS="${WARNINGS}Source files changed under '${REL_CLAUDE_DIR}/' but its CLAUDE.md was not updated.\n"
             WARNINGS="${WARNINGS}   Review: ${CLAUDE_MD_REL}\n\n"
         fi
-    done < <(find "$PROJECT_DIR" -name "CLAUDE.md" -not -path "*/.git/*" -not -path "*/node_modules/*" 2>/dev/null || true)
+    done < <(find "$PROJECT_DIR" -maxdepth 5 -name "CLAUDE.md" -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -not -path "*/.next/*" -not -path "*/dist/*" 2>/dev/null || true)
 fi
 
 # 5. Check if active execution plans reference modified files

@@ -182,6 +182,26 @@ The key loop: **QA finds bug -> fix it -> `/encode-mistake` -> permanent guardra
 /entropy-sweep -> /retro -> /harness-dashboard
 ```
 
+## Rippable Harness Principle
+
+> "If you over-engineer the control flow, the next model update will break your system."
+> — OpenAI Harness Engineering
+
+Constraints should be **rippable** — easy to remove when models improve. Review your harness
+quarterly or with each major model update:
+
+1. **Review hook false-positive rate** — Check `.claude/metrics/` for `blocked_by` events.
+   If a hook blocks more false positives than real violations, simplify or remove it.
+2. **Simplify graduating constraints** — If models reliably handle a pattern (e.g., import
+   ordering), remove the lint rule and trust the model. Start with doc rules, graduate to
+   lint rules only when models fail repeatedly.
+3. **Remove stale TASTE rules** — Rules in `docs/LINTING.md` that haven't triggered in 3+
+   months may be obsolete. Archive rather than delete (move to `docs/LINTING-archive.md`).
+4. **Test harness evolution** — After removing a constraint, monitor for regression via
+   `/entropy-sweep`. If violations return, re-add the constraint.
+
+The goal is the **minimum harness that produces correct output** — not the maximum.
+
 ## Plugin Detection
 
 This workflow adapts based on installed plugins:

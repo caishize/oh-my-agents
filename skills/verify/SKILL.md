@@ -3,6 +3,7 @@ name: verify
 description: "Post-execution verification — runs build, test, lint, and architecture checks then reports structured results. Implements the Verify phase of Research→Plan→Execute→Verify. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
 user-invocable: true
 argument-hint: "[scope: all|build|test|lint|arch] [--plan <plan-id>]"
+model: sonnet
 allowed-tools: Read, Glob, Grep, Bash
 ---
 

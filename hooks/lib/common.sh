@@ -77,6 +77,7 @@ HARNESS_FILE=""
 HARNESS_ROOT=""
 PROVIDERS_PATH=""
 HARNESS_LAYER_DIRS=""
+SIBLING_LAYERS=""
 
 # Walk up from a directory to find .claude/harness.json
 # Sets: HARNESS_FILE, HARNESS_ROOT
@@ -96,21 +97,40 @@ find_harness_json() {
 }
 
 # Load config from harness.json
-# Sets: PROVIDERS_PATH, HARNESS_LAYER_DIRS
+# Sets: PROVIDERS_PATH, HARNESS_LAYER_DIRS, SIBLING_LAYERS
 load_harness_config() {
     local harness_file="$1"
     PROVIDERS_PATH=""
     HARNESS_LAYER_DIRS=""
+    SIBLING_LAYERS=""
     if [ -z "$harness_file" ] || [ ! -f "$harness_file" ]; then
         return 1
     fi
     if command -v jq >/dev/null 2>&1; then
         PROVIDERS_PATH=$(jq -r '.providers_path // ""' "$harness_file" 2>/dev/null || echo "")
         HARNESS_LAYER_DIRS=$(jq -r '.layer_dirs // empty' "$harness_file" 2>/dev/null || echo "")
+        SIBLING_LAYERS=$(jq -r '(.sibling_layers // []) | .[]' "$harness_file" 2>/dev/null | tr '\n' ',' || echo "")
     elif command -v python3 >/dev/null 2>&1; then
         PROVIDERS_PATH=$(python3 -c "import json; print(json.load(open('${harness_file}')).get('providers_path',''))" 2>/dev/null || echo "")
         HARNESS_LAYER_DIRS=$(python3 -c "import json; d=json.load(open('${harness_file}')).get('layer_dirs',{}); print(json.dumps(d) if d else '')" 2>/dev/null || echo "")
+        SIBLING_LAYERS=$(python3 -c "import json; print(','.join(json.load(open('${harness_file}')).get('sibling_layers',[])))" 2>/dev/null || echo "")
     fi
+}
+
+# Check if two layers are siblings (allowed to import from each other)
+# sibling_layers format in harness.json: ["service:runtime", "ui:pages"]
+# SIBLING_LAYERS is a comma-separated string: "service:runtime,ui:pages,"
+are_sibling_layers() {
+    local layer_a="$1"
+    local layer_b="$2"
+    if [ -z "${SIBLING_LAYERS:-}" ]; then
+        return 1
+    fi
+    # Check both orderings: a:b and b:a
+    if echo ",$SIBLING_LAYERS" | grep -qE ",${layer_a}:${layer_b},|,${layer_b}:${layer_a},"; then
+        return 0
+    fi
+    return 1
 }
 
 # --- Layer resolution ---

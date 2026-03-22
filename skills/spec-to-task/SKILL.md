@@ -3,6 +3,8 @@ name: spec-to-task
 description: "Convert feature specs into agent-executable tasks with a layer-aware execution plan — failing tests first, explicit context per task, JSON progress tracking, and full plan lifecycle management. Turn any idea into a structured, dependency-ordered plan that agents can execute reliably. Aliases: 需求拆分, 任务分解, 规格转任务, 拆解需求, 创建执行计划"
 user-invocable: true
 argument-hint: "<spec-description or issue-url> [--continue <plan-id>] [--status]"
+model: sonnet
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Spec to Task v2.0
@@ -75,7 +77,7 @@ Show existing active plans and ask:
 - `active` — Currently being worked on
 - `completing` — All tasks done, awaiting final verification
 - `completed` — Verified and moved to `docs/exec-plans/completed/`
-- `stalled` — No updates in 7+ days (flagged automatically)
+- `stalled` — No updates in N+ days (default 7; configurable via `plan_stale_days` in `.claude/harness.json`)
 - `abandoned` — Explicitly marked as no longer pursued
 
 When all tasks reach `done` status, transition plan to `completing`. After final
