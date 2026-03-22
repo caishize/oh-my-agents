@@ -23,7 +23,5 @@
     "gstack",
     "layer-enforcement"
   ],
-  "skills": "./skills/",
-  "agents": "./agents/",
-  "hooks": "./hooks/"
+  "skills": "./skills/"
 }
