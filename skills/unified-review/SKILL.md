@@ -198,6 +198,12 @@ echo "{\"skill\":\"unified-review\",\"timestamp\":\"$TIMESTAMP\",\"branch\":\"$B
 Also log to gstack's review system if available:
 
 ```bash
+# Re-detect gstack (bash blocks are independent)
+GSTACK_PATH=""
+for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
+  [ -d "$p" ] && GSTACK_PATH="$p" && break
+done
+
 if [ -n "$GSTACK_PATH" ] && [ -x "$GSTACK_PATH/bin/gstack-review-log" ]; then
   "$GSTACK_PATH/bin/gstack-review-log" \
     --skill unified-review \
@@ -209,7 +215,7 @@ fi
 
 ## Rules
 
-- **Read-only** — this skill never modifies source code; it only reports findings
+- **Source-read-only** — this skill never modifies source code; it only writes to `.claude/metrics/`
 - **Slop is priority 1** — always check slop before anything else (OpenAI principle)
 - **Deduplicate, don't duplicate** — merged findings appear once with combined source tags
 - **Cross-validation escalates** — when both systems flag the same issue, it's more certain

@@ -114,7 +114,7 @@ the need for better hooks or more `/encode-mistake` usage.
 - Flag plans not updated in 3+ days as stale
 
 **Health Indicators**:
-- Most recent legibility score (out of 21) with date
+- Most recent legibility score (out of 30) with date
 - Most recent entropy finding count with date
 - Nested CLAUDE.md coverage: count of modules with their own CLAUDE.md vs total modules
 - Count of stale plans (not updated in 7+ days)

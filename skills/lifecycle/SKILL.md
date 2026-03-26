@@ -3,7 +3,7 @@ name: lifecycle
 description: "Full development lifecycle orchestrator — guides through the complete Research→Plan→Execute→Verify→Review→Ship cycle, adapting to installed plugins (gstack + oh-my-agents). Tracks phase transitions, ensures artifact handoffs, and prevents phase skipping. Aliases: 生命周期, 全流程, 开发流程, 工作流引导, 完整周期"
 user-invocable: true
 argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--skip-ideate]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Lifecycle — Full Development Cycle Orchestrator

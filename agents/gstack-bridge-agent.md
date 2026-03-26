@@ -92,6 +92,8 @@ cat .claude/integration.json 2>/dev/null || echo "Not configured — run /gstack
 Analyze git log and artifacts to determine which lifecycle phases have been used:
 
 ```bash
+SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+
 echo "=== Recent Activity ==="
 git log --oneline -20 2>/dev/null
 
