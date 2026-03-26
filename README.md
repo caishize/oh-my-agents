@@ -26,21 +26,25 @@ across their codebase.
 skills/                            # User-invocable slash commands
 ├── harness-init/SKILL.md          # Initialize: CLAUDE.md, docs/, bootstrap, entry points
 ├── legibility-score/SKILL.md      # 10-metric Agent Legibility Score (0-30)
-├── spec-to-task/SKILL.md          # Convert specs into agent-ready tasks with execution plans
-├── verify/SKILL.md                # Post-execution check: build, test, lint, arch guard
+├── spec-to-task/SKILL.md          # Convert specs into agent-ready tasks (auto-imports gstack design docs)
+├── verify/SKILL.md                # Post-execution check + gstack readiness signal
 ├── encode-mistake/SKILL.md        # Convert agent mistakes into permanent lint/hook rules
 ├── arch-guard/SKILL.md            # Set up layer enforcement + Providers pattern
 ├── taste-encoder/SKILL.md         # Encode expertise into lint rules & structural tests
 ├── entropy-sweep/SKILL.md         # Scan for slop, doc drift, dead code, violations
 ├── harness-review/SKILL.md        # Code review with "Say No to Slop"
-├── harness-dashboard/SKILL.md     # Session metrics, plan progress, harness health
-└── harness-metrics/SKILL.md       # Deep-dive metric queries and analysis
+├── harness-dashboard/SKILL.md     # Session metrics, plan progress, harness + gstack health
+├── harness-metrics/SKILL.md       # Deep-dive metric queries and analysis
+├── gstack-sync/SKILL.md           # gstack integration hub: detect, configure, sync metrics
+├── unified-review/SKILL.md        # Dual-system review: harness + structural in one pass
+└── lifecycle/SKILL.md             # Full lifecycle orchestrator: guides through all phases
 agents/                            # Read-only background subagents (with memory: project)
 ├── arch-guard-agent.md            # Architectural compliance checker
 ├── entropy-sweep-agent.md         # Entropy scanner
 ├── harness-reviewer.md            # Code review agent
 ├── session-observer-agent.md      # Session tracking and shift-handoff (Haiku)
-└── doc-gardening-agent.md         # Documentation gardening and drift repair (Haiku)
+├── doc-gardening-agent.md         # Documentation gardening and drift repair (Haiku)
+└── gstack-bridge-agent.md         # Cross-system artifact health monitoring (Haiku)
 hooks/                             # Event hook scripts
 ├── hooks.json                     # Hook event bindings (uses ${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                  # Shared utilities (JSON parsing, layer detection, sibling layers)
@@ -52,7 +56,7 @@ hooks/                             # Event hook scripts
 └── doc-drift-check.sh             # Warn about documentation drift after session ends
 tests/                             # Plugin self-tests
 ├── test-hooks.sh                  # 47 unit tests for all hooks and shared library
-└── test-skills.sh                 # 154 smoke tests for skill frontmatter, structure, quality
+└── test-skills.sh                 # 168 smoke tests for skill frontmatter, structure, quality
 docs/                              # Template documentation for target projects
 ├── ARCHITECTURE.md                # Layer model, module boundaries, design decisions
 ├── CONVENTIONS.md                 # Naming, file size, error handling, logging patterns
@@ -211,7 +215,32 @@ plan alignment.
 ### `/harness-dashboard` + `/harness-metrics` — Observability
 
 Dashboard aggregates session metrics, enforcement activity, and plan progress.
+Now includes gstack metrics fusion: skill usage, dual review rates, lifecycle coverage.
 Metrics allows deep-dive queries: layer balance, violation trends, plan velocity.
+
+### `/gstack-sync` — Integration Hub
+
+Detect gstack installation, configure artifact bridges, and sync metrics between
+oh-my-agents and gstack. Run `/gstack-sync --status` to check integration health,
+`--setup` for first-time configuration, or `--metrics` for cross-system reporting.
+
+### `/unified-review` — Dual-System Code Review
+
+Orchestrate both gstack's structural review and oh-my-agents' four-pillar review in
+a single pass. Deduplicates findings, cross-validates issues (both systems flagging
+the same issue escalates severity), and produces a unified report with actionable verdict.
+
+### `/lifecycle` — Full Lifecycle Orchestrator
+
+Guides through the complete development lifecycle: Ideate → Plan → Decompose → Execute →
+Verify → Review → Ship → Deploy → Retro → Improve. Adapts to installed plugins,
+auto-detects the next phase from artifacts, and ensures proper handoffs.
+
+```
+/lifecycle next       # Auto-detect and execute next phase
+/lifecycle status     # Show current progress across all phases
+/lifecycle decompose  # Start specific phase
+```
 
 ## Agents (Background, Read-Only)
 
@@ -224,6 +253,7 @@ All agents have Write/Edit disabled — they report but never modify code.
 | `harness-reviewer` | PR or staged changes need review |
 | `session-observer-agent` | Session ends — writes shift-handoff summary to memory |
 | `doc-gardening-agent` | Periodic doc scan — dead refs, stale commands, contradictions |
+| `gstack-bridge-agent` | Cross-system artifact health: stale handoffs, metric drift, lifecycle gaps |
 
 ## Hooks (Automatic Enforcement)
 
@@ -252,21 +282,25 @@ Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 
 ### Full Lifecycle (with [gstack](https://github.com/garrytan/gstack) installed)
 
-oh-my-agents detects gstack during `/harness-init` and generates a complete workflow in
-`docs/WORKFLOW.md`. The two plugins are complementary — gstack covers ideation, planning,
+oh-my-agents and gstack are deeply complementary — gstack covers ideation, planning,
 QA, and shipping; oh-my-agents covers architectural enforcement, entropy management, and
-rule encoding. All skills work sequentially in the same Claude Code session without any
-modification — the conversation context bridges data flow between them.
+rule encoding. With v3.0, they share structured artifacts (design docs, review logs,
+metrics) in addition to conversation context.
 
 ```
-/office-hours          # Brainstorm & design doc (gstack)
-/plan-eng-review       # Architecture & eng review (gstack)
-/spec-to-task          # Layer-aware execution plan (oh-my-agents)
-# ... develop with automatic hook enforcement ...
-/verify                # Build + test + lint + arch (oh-my-agents)
-/review                # PR structural review — SQL, LLM safety (gstack)
-/harness-review        # Four-pillar harness review (oh-my-agents)
-/ship                  # Version, changelog, PR (gstack)
+/gstack-sync --setup            # One-time: configure artifact bridges
+/lifecycle next                 # Auto-guided (recommended)
+# OR manually:
+/office-hours                   # Brainstorm & design doc (gstack)
+/autoplan                       # Auto-review: CEO → Design → Eng (gstack)
+/spec-to-task                   # Layer-aware execution plan (auto-imports design doc)
+# ... develop with automatic hook enforcement (both systems) ...
+/verify                         # Build + test + lint + arch + gstack readiness
+/unified-review                 # Dual review: harness + structural in one pass
+/ship                           # Version, changelog, PR (gstack)
+/land-and-deploy                # Merge → deploy → canary verify (gstack)
+/retro + /harness-dashboard     # Combined velocity + governance metrics
+/encode-mistake                 # Convert any failures to permanent rules
 ```
 
 ### Daily Development Cycle (oh-my-agents only)
@@ -325,12 +359,12 @@ Run the plugin's self-test suites:
 # self-verify-check, session-metrics, doc-drift-check, and shared library
 bash tests/test-hooks.sh
 
-# Skill smoke tests (132 tests): frontmatter validation,
+# Skill smoke tests (168 tests): frontmatter validation,
 # file size, description quality, i18n, structural integrity, cross-references
 bash tests/test-skills.sh
 ```
 
-179 total tests covering all hooks and all 11 skills.
+215 total tests covering all hooks and all 14 skills.
 
 ## Configuration (`.claude/harness.json`)
 

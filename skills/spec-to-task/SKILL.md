@@ -36,14 +36,33 @@ managed execution plan.
 ### Step 1: Analyze the Specification
 
 1. Read the feature spec, issue URL, or user description from `$ARGUMENTS`
-2. Analyze the current codebase:
+2. **Check for gstack design docs** — if the spec references a design doc or if
+   `$ARGUMENTS` contains `--from-design`:
+   ```bash
+   SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+   GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
+   if [ -d "$GSTACK_PROJECTS" ]; then
+     echo "=== gstack Design Docs ==="
+     ls -lt "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | head -5
+     echo "=== gstack Test Plans ==="
+     ls -lt "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | head -5
+   fi
+   ```
+   If design docs exist, read the most recent one and extract:
+   - Feature description and scope from the design doc
+   - Technical decisions (especially from Eng Review sections)
+   - Test requirements (from Test Plan artifacts)
+   - Review findings that should become plan constraints
+   - Consensus tables (if /autoplan was used — cross-validated decisions are higher confidence)
+   Incorporate these into the plan as `spec_source` and pre-populate `decisions` array.
+3. Analyze the current codebase:
    - Read `CLAUDE.md` for architecture overview and module map
    - Read `docs/ARCHITECTURE.md` for layer model and boundaries
    - Read `docs/CONVENTIONS.md` for patterns to follow
    - Read `.claude/harness.json` for layer directory mappings (if exists)
    - Identify related existing code and patterns
-3. Surface ambiguities and implicit assumptions
-4. Ask clarifying questions if critical info is missing — do not guess
+4. Surface ambiguities and implicit assumptions
+5. Ask clarifying questions if critical info is missing — do not guess
 
 ### Step 2: Check for Existing Plans
 
@@ -143,6 +162,8 @@ Schema reference: `templates/execution-plan.json` in the oh-my-agents plugin.
   "created": "2026-03-17T00:00:00Z",
   "updated": "2026-03-17T00:00:00Z",
   "spec_source": "issue URL, file path, or inline description",
+  "gstack_design_doc": "path to gstack design doc (if derived from /office-hours)",
+  "gstack_test_plan": "path to gstack test plan (if derived from /plan-eng-review)",
   "overview": "1-2 sentences describing what this feature does and why",
   "risks": [
     {
@@ -437,3 +458,8 @@ When all tasks are done:
   arrays), Observability (logging/metrics tasks), Entropy (structural tests and constraints)
 - **Stale plans get flagged** — plans with no updates in 7+ days are marked `stalled` to
   prevent silent abandonment
+- **gstack design docs are first-class input** — if a design doc exists from `/office-hours`
+  or `/autoplan`, use it as the spec source; extract decisions, scope, and test requirements
+  rather than asking the user to repeat them
+- **gstack review findings become constraints** — findings from `/plan-eng-review` that
+  flag architectural risks should become task constraints in the execution plan

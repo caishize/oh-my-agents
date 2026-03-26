@@ -42,6 +42,38 @@ Parse `$ARGUMENTS` for:
 5. **Harness config** — Read `.claude/harness.json` for project configuration and
    expected module list.
 
+6. **gstack metrics (if available)** — Check for gstack integration data:
+   ```bash
+   SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+   GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
+   GSTACK_ANALYTICS="$HOME/.gstack/analytics"
+
+   echo "=== gstack Integration ==="
+   # Skill usage
+   if [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ]; then
+     echo "Skill usage entries: $(wc -l < "$GSTACK_ANALYTICS/skill-usage.jsonl")"
+   else
+     echo "Skill usage: not available"
+   fi
+
+   # Review logs
+   if [ -d "$GSTACK_PROJECTS" ]; then
+     echo "Review logs: $(cat "$GSTACK_PROJECTS/"*-reviews.jsonl 2>/dev/null | wc -l) entries"
+     echo "Design docs: $(ls "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | wc -l)"
+     echo "Test plans: $(ls "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | wc -l)"
+     echo "QA outcomes: $(ls "$GSTACK_PROJECTS/"*-test-outcome-*.md 2>/dev/null | wc -l)"
+   else
+     echo "Project metrics: not available"
+   fi
+
+   # Eureka moments
+   if [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ]; then
+     echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
+   fi
+   ```
+
+7. **Unified review logs** — Read `.claude/metrics/reviews.jsonl` for combined review data.
+
 ### Step 2: Aggregate
 
 Compute these from the raw data:
@@ -64,6 +96,16 @@ Compute these from the raw data:
 - Doc drift warnings
 - Hook execution failures
 
+**Velocity** — delivery speed metrics (drives continuous improvement):
+- Tasks completed per session (from exec-plan JSON transition timestamps)
+- Average verify-to-review time (from verify.jsonl and reviews.jsonl timestamps)
+- First-pass verify success rate (% of verify runs that return GREEN on first try)
+- Week-over-week trend arrows: ↑ improving, → stable, ↓ declining
+- If multiple weeks of data available, show a 4-week sparkline trend
+
+These metrics directly drive behavior: a declining first-pass success rate signals
+the need for better hooks or more `/encode-mistake` usage.
+
 **Plan Progress** — for each active plan:
 - Plan ID and title
 - Tasks completed vs total
@@ -72,7 +114,7 @@ Compute these from the raw data:
 - Flag plans not updated in 3+ days as stale
 
 **Health Indicators**:
-- Most recent legibility score (out of 21) with date
+- Most recent legibility score (out of 30) with date
 - Most recent entropy finding count with date
 - Nested CLAUDE.md coverage: count of modules with their own CLAUDE.md vs total modules
 - Count of stale plans (not updated in 7+ days)
@@ -90,11 +132,15 @@ Generate the top 3 actionable recommendations based on the data:
 - If enforcement violations are trending up -> recommend `/arch-guard` review
 - If doc drift warnings > 3 -> recommend `/entropy-sweep docs` scope
 - If nested CLAUDE.md coverage < 50% -> recommend `/harness-init` for modules
+- If gstack installed but no dual reviews -> recommend `/unified-review` for next PR
+- If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
+- If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
+- If lifecycle phases are skipped -> recommend `/lifecycle status` to identify gaps
 
 ### Step 4: Output
 
 If `--json` flag is set, output all aggregated data as a single JSON object with keys:
-`dateRange`, `sessions`, `layers`, `enforcement`, `plans`, `health`, `recommendations`.
+`dateRange`, `sessions`, `layers`, `enforcement`, `velocity`, `plans`, `health`, `recommendations`.
 
 If `--plan {id}` flag is set, show a detailed plan view:
 
@@ -150,11 +196,26 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
 | plan-auth-refactor | 4/6 tasks | active | 2 days ago |
 | plan-api-v2 | 1/8 tasks | stale | 9 days ago |
 
+### Velocity
+  Tasks/session:     {N} avg (↑↓→ vs last week)
+  Verify→review:     {N}min avg
+  First-pass GREEN:  {N}% (↑↓→ vs last week)
+  Cycle time:        {N}h avg (plan start → verify pass)
+
 ### Harness Health
   Legibility Score: N/30 (last assessed: [date])
   Entropy Findings: N issues (last sweep: [date])
   Nested CLAUDE.md coverage: N% (N/M modules)
   Stale plans: N
+
+### gstack Integration (if available)
+  Status: {CONNECTED / NOT INSTALLED / NOT CONFIGURED}
+  Skills used (7d): {list of gstack skills used}
+  Reviews: {N} gstack + {N} harness = {N} total ({N} dual-reviewed)
+  Design docs: {N} available
+  Lifecycle coverage: {phases used} / {total phases}
+  Investigate→encode rate: {N}% (root causes converted to rules)
+  Eureka moments: {N} logged
 
 ### Recommendations
 1. [Most impactful recommendation] — run `/skill-name`

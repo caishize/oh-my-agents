@@ -3,7 +3,7 @@ name: taste-encoder
 description: "Encode team expertise into mechanical enforcement — custom lint rules, structural tests, bespoke code reviewers. Each expert's knowledge becomes a multiplier for the agent fleet. Integrates with nested CLAUDE.md and memory for cross-session persistence. Aliases: 品味编码, 规则编码, 编码规范, 知识固化, 团队规范, 自定义lint规则"
 user-invocable: true
 argument-hint: "<what-to-encode: pattern-description or code-example>"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Taste Encoder
