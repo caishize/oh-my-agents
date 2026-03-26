@@ -42,6 +42,38 @@ Parse `$ARGUMENTS` for:
 5. **Harness config** — Read `.claude/harness.json` for project configuration and
    expected module list.
 
+6. **gstack metrics (if available)** — Check for gstack integration data:
+   ```bash
+   SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+   GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
+   GSTACK_ANALYTICS="$HOME/.gstack/analytics"
+
+   echo "=== gstack Integration ==="
+   # Skill usage
+   if [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ]; then
+     echo "Skill usage entries: $(wc -l < "$GSTACK_ANALYTICS/skill-usage.jsonl")"
+   else
+     echo "Skill usage: not available"
+   fi
+
+   # Review logs
+   if [ -d "$GSTACK_PROJECTS" ]; then
+     echo "Review logs: $(cat "$GSTACK_PROJECTS/"*-reviews.jsonl 2>/dev/null | wc -l) entries"
+     echo "Design docs: $(ls "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | wc -l)"
+     echo "Test plans: $(ls "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | wc -l)"
+     echo "QA outcomes: $(ls "$GSTACK_PROJECTS/"*-test-outcome-*.md 2>/dev/null | wc -l)"
+   else
+     echo "Project metrics: not available"
+   fi
+
+   # Eureka moments
+   if [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ]; then
+     echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
+   fi
+   ```
+
+7. **Unified review logs** — Read `.claude/metrics/reviews.jsonl` for combined review data.
+
 ### Step 2: Aggregate
 
 Compute these from the raw data:
@@ -90,6 +122,10 @@ Generate the top 3 actionable recommendations based on the data:
 - If enforcement violations are trending up -> recommend `/arch-guard` review
 - If doc drift warnings > 3 -> recommend `/entropy-sweep docs` scope
 - If nested CLAUDE.md coverage < 50% -> recommend `/harness-init` for modules
+- If gstack installed but no dual reviews -> recommend `/unified-review` for next PR
+- If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
+- If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
+- If lifecycle phases are skipped -> recommend `/lifecycle status` to identify gaps
 
 ### Step 4: Output
 
@@ -155,6 +191,15 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
   Entropy Findings: N issues (last sweep: [date])
   Nested CLAUDE.md coverage: N% (N/M modules)
   Stale plans: N
+
+### gstack Integration (if available)
+  Status: {CONNECTED / NOT INSTALLED / NOT CONFIGURED}
+  Skills used (7d): {list of gstack skills used}
+  Reviews: {N} gstack + {N} harness = {N} total ({N} dual-reviewed)
+  Design docs: {N} available
+  Lifecycle coverage: {phases used} / {total phases}
+  Investigate→encode rate: {N}% (root causes converted to rules)
+  Eureka moments: {N} logged
 
 ### Recommendations
 1. [Most impactful recommendation] — run `/skill-name`

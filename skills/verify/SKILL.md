@@ -98,6 +98,48 @@ For each task in the plan with status `in_progress` or `done`:
 - Map each criterion to the check results (passed/failed)
 - Report: which criteria are confirmed met, which are unconfirmed or failing
 
+### Step 3b: gstack Readiness Signal (if gstack installed)
+
+Check if gstack is available and emit readiness data for the `/ship` workflow:
+
+```bash
+GSTACK_PATH=""
+for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
+  [ -d "$p" ] && GSTACK_PATH="$p" && break
+done
+
+if [ -n "$GSTACK_PATH" ]; then
+  SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+  BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+
+  echo "=== gstack Readiness ==="
+
+  # Check for prior review
+  REVIEW_LOG="$HOME/.gstack/projects/$SLUG/$BRANCH-reviews.jsonl"
+  if [ -f "$REVIEW_LOG" ]; then
+    LAST_REVIEW=$(tail -1 "$REVIEW_LOG")
+    echo "Last review: $LAST_REVIEW"
+  else
+    echo "No review log found — run /review or /unified-review before /ship"
+  fi
+
+  # Check for QA results
+  QA_REPORTS=$(ls .gstack/qa-reports/*.md 2>/dev/null | wc -l | tr -d ' ')
+  echo "QA reports: $QA_REPORTS"
+
+  # Check for benchmark baseline
+  if [ -f ".gstack/benchmark-reports/baselines/baseline.json" ]; then
+    echo "Benchmark baseline: exists"
+  else
+    echo "Benchmark baseline: none (consider /benchmark --baseline)"
+  fi
+fi
+```
+
+Include gstack readiness signals in the verification report. This data feeds into
+gstack's `/ship` pre-flight check at Step 3.5, ensuring architecture compliance
+is verified before merge.
+
 ### Step 4: Report Results
 
 ```
@@ -131,12 +173,18 @@ Plan Acceptance — plan-20260319-auth-feature:
   Task 3 (repo):     ✗ test_feature_repo_persists_data FAILING
   Task 4 (service):  ? test_feature_service not yet run
 
+gstack Readiness (if available):
+  Review status:     {reviewed / not reviewed}
+  QA reports:        {N} available
+  Benchmark baseline: {exists / none}
+
 Next Steps:
-  [GREEN]  All checks pass. Run /harness-review to complete the cycle.
-  [RED]    Fix failing checks before /harness-review.
+  [GREEN]  All checks pass. Run /unified-review (or /harness-review) to complete the cycle.
+  [RED]    Fix failing checks before review.
            Priority: lint → build → test → arch
            Recurring failures? Run /encode-mistake to create a permanent guardrail.
-  [YELLOW] Warnings present. Review before /harness-review.
+  [YELLOW] Warnings present. Review before proceeding.
+  [SHIP]   When ready: /ship (gstack) or create PR manually.
 ```
 
 ### Step 5: Update Plan If Completing (if --plan provided)
@@ -159,3 +207,7 @@ requires human confirmation.
   recommend `/encode-mistake` to convert the pattern into a permanent guardrail
 - **Never editorialize** — report what the tools say; don't soften failures
 - **Run from project root** — ensure commands run from the directory containing CLAUDE.md
+- **gstack readiness is advisory** — emit review/QA/benchmark status for `/ship` consumption
+  but never block verify on gstack data; verify is oh-my-agents' domain
+- **Log results for cross-system use** — write verify results to `.claude/metrics/verify.jsonl`
+  so both `/harness-dashboard` and gstack's `/ship` can reference them

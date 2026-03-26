@@ -1,7 +1,7 @@
 {
   "name": "oh-my-agents",
-  "version": "2.4.1",
-  "description": "Harness engineering plugin for Claude Code — four pillars: architecture guardrails, documentation as system of record, observability & legibility, and entropy management.",
+  "version": "3.0.0",
+  "description": "Harness engineering plugin for Claude Code — four pillars (architecture, documentation, observability, entropy) with deep gstack integration for full-lifecycle AI development.",
   "author": {
     "name": "caishize",
     "url": "https://github.com/caishize"
