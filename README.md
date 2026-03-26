@@ -56,7 +56,7 @@ hooks/                             # Event hook scripts
 └── doc-drift-check.sh             # Warn about documentation drift after session ends
 tests/                             # Plugin self-tests
 ├── test-hooks.sh                  # 47 unit tests for all hooks and shared library
-└── test-skills.sh                 # 154 smoke tests for skill frontmatter, structure, quality
+└── test-skills.sh                 # 168 smoke tests for skill frontmatter, structure, quality
 docs/                              # Template documentation for target projects
 ├── ARCHITECTURE.md                # Layer model, module boundaries, design decisions
 ├── CONVENTIONS.md                 # Naming, file size, error handling, logging patterns
@@ -359,12 +359,12 @@ Run the plugin's self-test suites:
 # self-verify-check, session-metrics, doc-drift-check, and shared library
 bash tests/test-hooks.sh
 
-# Skill smoke tests (132 tests): frontmatter validation,
+# Skill smoke tests (168 tests): frontmatter validation,
 # file size, description quality, i18n, structural integrity, cross-references
 bash tests/test-skills.sh
 ```
 
-179+ total tests covering all hooks and all 14 skills.
+215 total tests covering all hooks and all 14 skills.
 
 ## Configuration (`.claude/harness.json`)
 

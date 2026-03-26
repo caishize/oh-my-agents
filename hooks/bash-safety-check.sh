@@ -68,6 +68,36 @@ if echo "$COMMAND" | grep -iEq '(Authorization|Bearer)[: ]+[A-Za-z0-9_-]{20,}'; 
     fi
 fi
 
+# Stripe keys in commands
+if echo "$COMMAND" | grep -Eq '(sk|pk)_(live|test)_[A-Za-z0-9]{20,}'; then
+    VIOLATIONS="${VIOLATIONS}Security risk: Stripe API key in bash command.\n"
+    VIOLATIONS="${VIOLATIONS}  Fix: Use STRIPE_SECRET_KEY env var.\n\n"
+fi
+
+# Anthropic keys in commands
+if echo "$COMMAND" | grep -Eq 'sk-ant-[A-Za-z0-9_-]{20,}'; then
+    VIOLATIONS="${VIOLATIONS}Security risk: Anthropic API key in bash command.\n"
+    VIOLATIONS="${VIOLATIONS}  Fix: Use ANTHROPIC_API_KEY env var.\n\n"
+fi
+
+# OpenAI keys in commands
+if echo "$COMMAND" | grep -Eq 'sk-proj-[A-Za-z0-9_-]{20,}'; then
+    VIOLATIONS="${VIOLATIONS}Security risk: OpenAI API key in bash command.\n"
+    VIOLATIONS="${VIOLATIONS}  Fix: Use OPENAI_API_KEY env var.\n\n"
+fi
+
+# curl -u user:password (not referencing env var)
+if echo "$COMMAND" | grep -Eq 'curl\s.*-u\s+[^$][A-Za-z0-9_]+:[A-Za-z0-9_]+'; then
+    VIOLATIONS="${VIOLATIONS}Security risk: curl -u with inline credentials.\n"
+    VIOLATIONS="${VIOLATIONS}  Fix: Use -u \"\$USER:\$PASS\" with env vars.\n\n"
+fi
+
+# CLI --password= or -p with inline value (mysql, redis-cli, etc.)
+if echo "$COMMAND" | grep -Eq '\-\-password=[^\$][^ ]+'; then
+    VIOLATIONS="${VIOLATIONS}Security risk: Inline password in CLI flag.\n"
+    VIOLATIONS="${VIOLATIONS}  Fix: Use --password=\$DB_PASSWORD with env var.\n\n"
+fi
+
 if [ -n "$VIOLATIONS" ]; then
     echo -e "$VIOLATIONS" >&2
     exit 2

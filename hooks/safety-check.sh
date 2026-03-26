@@ -28,10 +28,18 @@ case "$FILE_PATH" in
         ;;
 esac
 
-# --- Skip test files, fixtures, and mocks ---
+# --- Skip fixtures and mocks (but still scan test files for real secrets) ---
 case "$FILE_PATH" in
-    */test/*|*/tests/*|*/__tests__/*|*/fixtures/*|*/__fixtures__/*|*/__mocks__/*|*.test.*|*.spec.*)
+    */fixtures/*|*/__fixtures__/*|*/__mocks__/*)
         exit 0
+        ;;
+esac
+
+# Flag for test files: only check token-format patterns, skip generic password= patterns
+IS_TEST_FILE=false
+case "$FILE_PATH" in
+    */test/*|*/tests/*|*/__tests__/*|*.test.*|*.spec.*)
+        IS_TEST_FILE=true
         ;;
 esac
 
@@ -72,6 +80,9 @@ add_violation() {
 
 # --- 1. Hardcoded secrets detection (uses comment-stripped content) ---
 
+# --- Generic credential patterns (skip in test files to reduce false positives) ---
+if [ "$IS_TEST_FILE" = "false" ]; then
+
 # Detect credential assignments in quoted strings
 if echo "$CONTENT_NO_COMMENTS" | grep -iEq 'password\s*=\s*["\x27][^"\x27]+["\x27]'; then
     MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -iE 'password\s*=\s*["\x27][^"\x27]+["\x27]' | head -1 | sed 's/^[[:space:]]*//')
@@ -92,6 +103,8 @@ if echo "$CONTENT_NO_COMMENTS" | grep -iEq 'api[_-]?key\s*=\s*["\x27][^"\x27]+["
     add_violation "Hardcoded API key detected." "$FILE_PATH" "$MATCH" \
         "Use environment variable via process.env instead of inline key."
 fi
+
+fi  # end IS_TEST_FILE guard
 
 # Detect AWS access key (AKIA prefix with 16 uppercase alphanumeric chars)
 if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'AKIA[0-9A-Z]{16}'; then
@@ -135,10 +148,40 @@ if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'AIzaSy[A-Za-z0-9_-]{33}'; then
         "Use GOOGLE_API_KEY env var."
 fi
 
+# --- Modern API token patterns (scanned even in test files — real tokens should never appear) ---
+
+# Stripe keys (sk_live_, sk_test_, pk_live_, pk_test_)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq '(sk|pk)_(live|test)_[A-Za-z0-9]{20,}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE '(sk|pk)_(live|test)_[A-Za-z0-9]{20,}' | head -1)
+    add_violation "Stripe API key detected." "$FILE_PATH" "$MATCH" \
+        "Use STRIPE_SECRET_KEY / STRIPE_PUBLISHABLE_KEY env var."
+fi
+
+# Anthropic API keys (sk-ant-)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'sk-ant-[A-Za-z0-9_-]{20,}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'sk-ant-[A-Za-z0-9_-]{20,}' | head -1)
+    add_violation "Anthropic API key detected." "$FILE_PATH" "$MATCH" \
+        "Use ANTHROPIC_API_KEY env var."
+fi
+
+# OpenAI API keys (sk-proj-, sk-...)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'sk-proj-[A-Za-z0-9_-]{20,}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'sk-proj-[A-Za-z0-9_-]{20,}' | head -1)
+    add_violation "OpenAI API key detected." "$FILE_PATH" "$MATCH" \
+        "Use OPENAI_API_KEY env var."
+fi
+
+# npm tokens (npm_)
+if echo "$CONTENT_NO_COMMENTS" | grep -Eq 'npm_[A-Za-z0-9]{36,}'; then
+    MATCH=$(echo "$CONTENT_NO_COMMENTS" | grep -oE 'npm_[A-Za-z0-9]{36,}' | head -1)
+    add_violation "npm token detected." "$FILE_PATH" "$MATCH" \
+        "Use NPM_TOKEN env var."
+fi
+
 # --- 2. .env file modification with secrets ---
 # Improved: exclude common non-secret patterns (URLs, paths, base64-padded config)
 case "$FILE_PATH" in
-    *.env|*.env.local|*.env.production|*.env.staging)
+    *.env|*.env.*|*secrets.env)
         # Only flag values that look like secrets: high-entropy, no URL scheme, no path separators
         if echo "$CONTENT" | grep -Eq '=\s*["\x27]?[A-Za-z0-9+/=_-]{16,}["\x27]?\s*$' &&
            ! echo "$CONTENT" | grep -Eq '=\s*["\x27]?(https?://|postgresql://|mongodb://|redis://|mysql://|sqlite:)'; then
