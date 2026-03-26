@@ -22,6 +22,9 @@ read_input
 
 PROJECT_DIR=$(get_cwd)
 
+# Early exit if not in a git repository
+git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
+
 # Get files modified in the last commit or staged
 CHANGED_FILES=$(git -C "$PROJECT_DIR" diff --name-only HEAD 2>/dev/null || git -C "$PROJECT_DIR" diff --name-only --staged 2>/dev/null || echo "")
 
@@ -183,10 +186,15 @@ if [ -d "$METRICS_DIR" ] || mkdir -p "$METRICS_DIR" 2>/dev/null; then
     fi
 
     # Build handoff JSON (atomic write via tmp + rename)
+    # Sanitize variables to prevent JSON injection (strip quotes and backslashes)
+    SAFE_BRANCH=$(echo "$BRANCH" | tr -d '"\\\n')
+    SAFE_PLAN=$(echo "$ACTIVE_PLAN" | tr -d '"\\\n')
+    SAFE_VERIFY=$(echo "$LAST_VERIFY" | tr -d '"\\\n')
+    SAFE_FILES=$(echo "$CHANGED_FILES" | head -20 | tr '\n' ',' | sed 's/,$//' | tr -d '"\\\n')
     HANDOFF_TMP="$METRICS_DIR/.handoff-tmp-$$"
-    HANDOFF_FILE="$METRICS_DIR/handoff-${BRANCH}.json"
+    HANDOFF_FILE="$METRICS_DIR/handoff-${SAFE_BRANCH}.json"
     cat > "$HANDOFF_TMP" 2>/dev/null <<HANDOFF_EOF
-{"timestamp":"$TIMESTAMP","branch":"$BRANCH","files_modified":$FILE_COUNT,"active_plan":"$ACTIVE_PLAN","last_verify":"$LAST_VERIFY","changed_files":"$(echo "$CHANGED_FILES" | head -20 | tr '\n' ',' | sed 's/,$//')","has_warnings":$([ -n "$WARNINGS" ] && echo "true" || echo "false")}
+{"timestamp":"$TIMESTAMP","branch":"$SAFE_BRANCH","files_modified":$FILE_COUNT,"active_plan":"$SAFE_PLAN","last_verify":"$SAFE_VERIFY","changed_files":"$SAFE_FILES","has_warnings":$([ -n "$WARNINGS" ] && echo "true" || echo "false")}
 HANDOFF_EOF
     mv "$HANDOFF_TMP" "$HANDOFF_FILE" 2>/dev/null || true
 fi

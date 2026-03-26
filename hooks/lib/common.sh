@@ -21,7 +21,8 @@
 # --- Input ---
 
 read_input() {
-    INPUT=$(cat)
+    # Limit stdin to 100KB to prevent hooks from stalling on large Write payloads
+    INPUT=$(head -c 102400)
 }
 
 # --- JSON parsing: prefer jq, fallback to python3 ---
@@ -108,11 +109,11 @@ load_harness_config() {
     fi
     if command -v jq >/dev/null 2>&1; then
         PROVIDERS_PATH=$(jq -r '.providers_path // ""' "$harness_file" 2>/dev/null || echo "")
-        HARNESS_LAYER_DIRS=$(jq -r '.layer_dirs // empty' "$harness_file" 2>/dev/null || echo "")
+        HARNESS_LAYER_DIRS=$(jq -r '.layer_dirs // .target_layer_model.default_layer_dirs // empty' "$harness_file" 2>/dev/null || echo "")
         SIBLING_LAYERS=$(jq -r '(.sibling_layers // []) | .[]' "$harness_file" 2>/dev/null | tr '\n' ',' || echo "")
     elif command -v python3 >/dev/null 2>&1; then
         PROVIDERS_PATH=$(python3 -c "import json; print(json.load(open('${harness_file}')).get('providers_path',''))" 2>/dev/null || echo "")
-        HARNESS_LAYER_DIRS=$(python3 -c "import json; d=json.load(open('${harness_file}')).get('layer_dirs',{}); print(json.dumps(d) if d else '')" 2>/dev/null || echo "")
+        HARNESS_LAYER_DIRS=$(python3 -c "import json; c=json.load(open('${harness_file}')); d=c.get('layer_dirs') or c.get('target_layer_model',{}).get('default_layer_dirs',{}); print(json.dumps(d) if d else '')" 2>/dev/null || echo "")
         SIBLING_LAYERS=$(python3 -c "import json; print(','.join(json.load(open('${harness_file}')).get('sibling_layers',[])))" 2>/dev/null || echo "")
     fi
 }
