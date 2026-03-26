@@ -40,14 +40,26 @@ if [ -z "$PROJECT_DIR" ]; then
     exit 0
 fi
 
+# --- Check if heavy verification is enabled (off by default) ---
+# Heavy checks (tsc --noEmit, cargo check, go vet) run full compilation passes
+# and add 3-15 seconds per edit. Enable via harness.json: "self_verify_heavy": true
+HEAVY_VERIFY=false
+if find_harness_json "$(dirname "$FILE_PATH")"; then
+    if command -v jq >/dev/null 2>&1; then
+        HEAVY_VERIFY=$(jq -r '.self_verify_heavy // false' "$HARNESS_FILE" 2>/dev/null || echo "false")
+    elif command -v python3 >/dev/null 2>&1; then
+        HEAVY_VERIFY=$(python3 -c "import json; print(str(json.load(open('$HARNESS_FILE')).get('self_verify_heavy', False)).lower())" 2>/dev/null || echo "false")
+    fi
+fi
+
 # --- Run language-specific syntax check ---
+# Default: lightweight syntax checks only (py_compile, node --check) — <100ms
+# Heavy mode: full type-check / compilation (tsc, cargo check, go vet) — 3-15s
 WARNINGS=""
 
 case "$FILE_PATH" in
     *.ts|*.tsx)
-        # TypeScript: run tsc --noEmit on the single file if tsconfig exists
-        if [ -f "${PROJECT_DIR}/tsconfig.json" ]; then
-            # Use npx to avoid global install requirement; timeout after 8s
+        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${PROJECT_DIR}/tsconfig.json" ]; then
             TSC_OUTPUT=$(cd "$PROJECT_DIR" && timeout 8 npx --no-install tsc --noEmit --pretty false 2>&1 | head -5 || true)
             if echo "$TSC_OUTPUT" | grep -qE "error TS[0-9]+" 2>/dev/null; then
                 ERROR_COUNT=$(echo "$TSC_OUTPUT" | grep -cE "error TS[0-9]+" 2>/dev/null || echo "0")
@@ -59,7 +71,7 @@ case "$FILE_PATH" in
         fi
         ;;
     *.py)
-        # Python: run syntax check with py_compile
+        # Lightweight: syntax check only (~50ms)
         if command -v python3 >/dev/null 2>&1; then
             PY_OUTPUT=$(python3 -m py_compile "$FILE_PATH" 2>&1 || true)
             if [ -n "$PY_OUTPUT" ]; then
@@ -69,7 +81,7 @@ case "$FILE_PATH" in
         fi
         ;;
     *.js|*.jsx)
-        # JavaScript: run node --check for syntax validation
+        # Lightweight: syntax check only (~30ms)
         if command -v node >/dev/null 2>&1; then
             JS_OUTPUT=$(node --check "$FILE_PATH" 2>&1 || true)
             if [ -n "$JS_OUTPUT" ]; then
@@ -79,8 +91,7 @@ case "$FILE_PATH" in
         fi
         ;;
     *.rs)
-        # Rust: run cargo check if Cargo.toml exists
-        if [ -f "${PROJECT_DIR}/Cargo.toml" ]; then
+        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${PROJECT_DIR}/Cargo.toml" ]; then
             RS_OUTPUT=$(cd "$PROJECT_DIR" && timeout 15 cargo check --message-format=short 2>&1 | grep "^error" | head -3 || true)
             if [ -n "$RS_OUTPUT" ]; then
                 WARNINGS="Self-verify: Rust compilation errors detected after edit.\n"
@@ -89,8 +100,7 @@ case "$FILE_PATH" in
         fi
         ;;
     *.go)
-        # Go: run go vet on the package
-        if command -v go >/dev/null 2>&1; then
+        if [ "$HEAVY_VERIFY" = "true" ] && command -v go >/dev/null 2>&1; then
             GO_DIR=$(dirname "$FILE_PATH")
             GO_OUTPUT=$(cd "$GO_DIR" && timeout 8 go vet ./... 2>&1 | head -3 || true)
             if [ -n "$GO_OUTPUT" ]; then
