@@ -133,6 +133,53 @@ are_sibling_layers() {
     return 1
 }
 
+# --- gstack integration utilities ---
+
+# Detect gstack installation path
+# Sets: GSTACK_PATH (empty if not found)
+detect_gstack() {
+    GSTACK_PATH=""
+    for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
+        if [ -d "$p" ]; then
+            GSTACK_PATH="$p"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Resolve project slug for gstack artifact paths
+# Tries gstack-slug binary first, falls back to basename of git root
+# Sets: PROJECT_SLUG
+resolve_project_slug() {
+    PROJECT_SLUG=""
+    if [ -n "${GSTACK_PATH:-}" ] && [ -x "$GSTACK_PATH/bin/gstack-slug" ]; then
+        PROJECT_SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null || echo "")
+    fi
+    if [ -z "$PROJECT_SLUG" ]; then
+        PROJECT_SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+    fi
+}
+
+# Resolve gstack artifact paths, reading from integration.json if available, else defaults
+# Requires: PROJECT_SLUG to be set
+# Sets: GSTACK_PROJECTS, GSTACK_ANALYTICS
+resolve_gstack_paths() {
+    local integration_json=".claude/integration.json"
+    GSTACK_PROJECTS=""
+    GSTACK_ANALYTICS=""
+
+    # Try integration.json first
+    if [ -f "$integration_json" ] && command -v jq >/dev/null 2>&1; then
+        GSTACK_PROJECTS=$(jq -r '.bridges.design_docs // ""' "$integration_json" 2>/dev/null | sed "s|{SLUG}|${PROJECT_SLUG:-unknown}|g; s|~|$HOME|g")
+        GSTACK_ANALYTICS=$(jq -r '.bridges.analytics // ""' "$integration_json" 2>/dev/null | sed "s|~|$HOME|g")
+    fi
+
+    # Fall back to defaults
+    [ -z "$GSTACK_PROJECTS" ] && GSTACK_PROJECTS="$HOME/.gstack/projects/${PROJECT_SLUG:-unknown}"
+    [ -z "$GSTACK_ANALYTICS" ] && GSTACK_ANALYTICS="$HOME/.gstack/analytics"
+}
+
 # --- Layer resolution ---
 
 # Canonical layer order

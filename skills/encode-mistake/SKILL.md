@@ -2,7 +2,7 @@
 name: encode-mistake
 description: "Convert an agent mistake or recurring failure into a permanent guardrail — lint rule, structural test, hook, or doc rule. Implements Mitchell Hashimoto's principle: 'Every agent mistake is an encoding opportunity.' Complements /taste-encoder (which starts from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 经验编码, 防止复发"
 user-invocable: true
-argument-hint: "<description of what went wrong> [--hook-output]"
+argument-hint: "<description of what went wrong> [--hook-output] [--from-investigation <id>]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -34,6 +34,24 @@ Take the mistake description from `$ARGUMENTS` and create a permanent enforcemen
 
 If `--hook-output` flag is present, treat `$ARGUMENTS` as a raw hook error message
 and parse it to understand what pattern was violated.
+
+If `--from-investigation <id>` is provided, read the structured investigation artifact
+from `.claude/metrics/investigations.jsonl` to auto-populate the mistake context:
+
+```bash
+if [ -f ".claude/metrics/investigations.jsonl" ]; then
+  # Find the investigation entry matching the provided ID or most recent
+  INVESTIGATION=$(grep "\"id\":\"$ID\"" .claude/metrics/investigations.jsonl 2>/dev/null | tail -1)
+  if [ -z "$INVESTIGATION" ]; then
+    INVESTIGATION=$(tail -1 .claude/metrics/investigations.jsonl)
+  fi
+  echo "Investigation: $INVESTIGATION"
+fi
+```
+
+Extract from the investigation artifact: `error` (what failed), `root_cause` (why),
+`files_involved` (where), and `suggested_rule` (proposed fix). Use these to pre-populate
+Steps 1-2 so the user does not need to manually describe the mistake.
 
 ### Step 1: Understand the Mistake
 
@@ -211,3 +229,9 @@ Future agents will see:
 - **Never weaken existing checks** to reduce noise — fix false positive detection, not threshold
 - **Error messages must answer WHAT, WHERE, HOW, REF** — all four, always
 - **One mistake = one TASTE rule** — don't bundle unrelated fixes into one encoding
+- **Log investigations** — when used with `/investigate`, write structured results to
+  `.claude/metrics/investigations.jsonl` with fields: `id`, `timestamp`, `error`,
+  `root_cause`, `files_involved`, `suggested_rule`, `encoded` (true/false). This enables
+  the investigate-to-encode artifact handoff and dashboard tracking of encode rates.
+- **Auto-scan on improve** — `/lifecycle improve` should scan `investigations.jsonl` for
+  entries where `encoded` is false and suggest encoding each one

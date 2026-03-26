@@ -115,9 +115,11 @@ if [ -n "$GSTACK_PATH" ]; then
   echo "=== gstack Readiness ==="
 
   # Check for prior review
+  REVIEW_STATUS="not_reviewed"
   REVIEW_LOG="$HOME/.gstack/projects/$SLUG/$BRANCH-reviews.jsonl"
   if [ -f "$REVIEW_LOG" ]; then
     LAST_REVIEW=$(tail -1 "$REVIEW_LOG")
+    REVIEW_STATUS="reviewed"
     echo "Last review: $LAST_REVIEW"
   else
     echo "No review log found — run /review or /unified-review before /ship"
@@ -128,17 +130,30 @@ if [ -n "$GSTACK_PATH" ]; then
   echo "QA reports: $QA_REPORTS"
 
   # Check for benchmark baseline
+  BENCHMARK_EXISTS="false"
   if [ -f ".gstack/benchmark-reports/baselines/baseline.json" ]; then
+    BENCHMARK_EXISTS="true"
     echo "Benchmark baseline: exists"
   else
     echo "Benchmark baseline: none (consider /benchmark --baseline)"
   fi
+
+  # Write structured readiness signal for /ship consumption
+  mkdir -p .claude/metrics
+  TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")
+  cat > .claude/metrics/verify-readiness.json <<READINESS_EOF
+{"timestamp":"$TIMESTAMP","branch":"$BRANCH","lint_pass":false,"build_pass":false,"test_pass":false,"arch_pass":false,"review_status":"$REVIEW_STATUS","qa_reports":$QA_REPORTS,"benchmark_baseline":$BENCHMARK_EXISTS}
+READINESS_EOF
 fi
 ```
 
 Include gstack readiness signals in the verification report. This data feeds into
 gstack's `/ship` pre-flight check at Step 3.5, ensuring architecture compliance
 is verified before merge.
+
+**After all checks complete**, update `.claude/metrics/verify-readiness.json` with the
+actual pass/fail results for each check (lint_pass, build_pass, test_pass, arch_pass).
+This makes the readiness signal machine-readable for `/ship` consumption.
 
 ### Step 4: Report Results
 
@@ -182,7 +197,13 @@ Next Steps:
   [GREEN]  All checks pass. Run /unified-review (or /harness-review) to complete the cycle.
   [RED]    Fix failing checks before review.
            Priority: lint → build → test → arch
-           Recurring failures? Run /encode-mistake to create a permanent guardrail.
+
+Recurring Failure Detection:
+  {Scan the last 5 entries in .claude/metrics/verify.jsonl for the same failing
+   test names or error patterns. If a test has failed 2+ times across different
+   sessions, flag it as RECURRING and auto-suggest:}
+  ⚠ RECURRING: {test_name} has failed {N} times across {N} sessions.
+    → Run /encode-mistake "{test_name} fails due to {pattern}" to create a permanent guardrail.
   [YELLOW] Warnings present. Review before proceeding.
   [SHIP]   When ready: /ship (gstack) or create PR manually.
 ```

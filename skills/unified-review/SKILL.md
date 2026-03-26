@@ -95,9 +95,14 @@ Quick entropy scan on changed files:
 - Import complexity (too many imports?)
 - Dependency direction (any new upward dependencies?)
 
-## Step 2: Phase 2 — Structural Review (gstack-style)
+## Step 2: Phase 2 — Structural Review (gstack-delegated or checklist)
 
-Even without gstack installed, apply gstack's review checklist categories:
+**If gstack is installed** (`GSTACK_PATH` is set from Step 0):
+Invoke gstack's `/review` skill for the structural pass. gstack's /review performs
+deeper structural analysis including Greptile integration, enum completeness checking,
+and design consistency validation. Capture its findings and merge them in Step 3.
+
+**If gstack is NOT installed**, apply the structural review checklist manually:
 
 ### 2a: Critical Findings (must fix)
 
