@@ -70,7 +70,7 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
 .claude-plugin/
 ├── plugin.json                           # Plugin manifest
 ├── marketplace.json                      # Marketplace definition for distribution
-skills/                                   # User-invocable slash commands (11 skills)
+skills/                                   # User-invocable slash commands (14 skills)
 ├── harness-init/SKILL.md                 # Initialize the harness
 ├── legibility-score/SKILL.md             # 10-metric readiness assessment
 ├── spec-to-task/SKILL.md                 # Task decomposition with execution plans
@@ -81,13 +81,17 @@ skills/                                   # User-invocable slash commands (11 sk
 ├── entropy-sweep/SKILL.md                # Scan for entropy
 ├── harness-review/SKILL.md               # Harness-aware code review
 ├── harness-dashboard/SKILL.md            # Session metrics and health overview
-└── harness-metrics/SKILL.md              # Deep-dive metric queries
-agents/                                   # Read-only background subagents (5 agents)
+├── harness-metrics/SKILL.md              # Deep-dive metric queries
+├── gstack-sync/SKILL.md                  # Detect gstack, configure bridges, sync metrics
+├── unified-review/SKILL.md               # Dual-system review (harness + gstack)
+└── lifecycle/SKILL.md                    # Full lifecycle orchestrator
+agents/                                   # Read-only background subagents (6 agents)
 ├── arch-guard-agent.md                   # Architectural compliance
 ├── entropy-sweep-agent.md                # Entropy detection
 ├── harness-reviewer.md                   # Code review
 ├── session-observer-agent.md             # Session tracking and shift-handoff
-└── doc-gardening-agent.md                # Documentation gardening and repair
+├── doc-gardening-agent.md                # Documentation gardening and repair
+└── gstack-bridge-agent.md                # Cross-system artifact health monitoring
 hooks/                                    # Event hook scripts (6 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution)
@@ -105,7 +109,8 @@ docs/                                     # Template docs for target projects
 ├── DECISIONS.md                          # Architecture Decision Records
 ├── PROVIDERS.md                          # Cross-cutting interface definition
 ├── OBSERVABILITY.md                      # Logging, metrics, tracing strategy
-└── WORKFLOW.md                           # Full development lifecycle
+├── WORKFLOW.md                           # Full development lifecycle
+└── INTEGRATION.md                        # gstack integration guide and artifact bridges
 templates/                                # Starter templates for target projects
 ├── harness-config.json                   # .claude/harness.json template
 ├── execution-plan.json                   # Execution plan schema
