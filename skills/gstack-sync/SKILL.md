@@ -68,7 +68,7 @@ echo "HARNESS_JSON: $HARNESS_JSON"
 
 # Check gstack project slug
 SLUG=""
-if command -v "$GSTACK_PATH/bin/gstack-slug" &>/dev/null 2>&1; then
+if [ -n "$GSTACK_PATH" ] && [ -x "$GSTACK_PATH/bin/gstack-slug" ]; then
   SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null || echo "")
 fi
 echo "PROJECT_SLUG: $SLUG"
@@ -192,60 +192,20 @@ integrated lifecycle table (with both gstack and oh-my-agents commands).
 
 Create a comprehensive integration guide:
 
-```markdown
-# gstack ↔ oh-my-agents Integration Guide
+Generate `docs/INTEGRATION.md` using the plugin's own `docs/INTEGRATION.md` as a reference
+template, adapting to the specific project's tech stack and directory structure discovered
+in Step 0. The generated file should cover: philosophy, artifact flow map, bridge
+configuration, setup instructions, and workflow modes.
 
-## Philosophy
+Key sections to include:
+- Philosophy (gstack accelerates delivery, oh-my-agents enforces quality)
+- Artifact flow diagram (design doc → exec plan → verify → review → ship)
+- Automated bridge table (source → consumer → trigger → data format)
+- Configuration reference (`.claude/integration.json`)
 
-gstack accelerates delivery (design → ship → deploy → monitor).
-oh-my-agents enforces quality (architecture → entropy → observability → documentation).
-
-Together they form a complete AI engineering stack where:
-- gstack's /office-hours produces design docs → oh-my-agents' /spec-to-task decomposes them
-- gstack's /review catches structural issues → oh-my-agents' /harness-review catches architectural drift
-- gstack's /ship gates on quality → oh-my-agents' /verify provides the quality signals
-- gstack's /investigate finds root causes → oh-my-agents' /encode-mistake makes them permanent
-- gstack's /retro measures velocity → oh-my-agents' /harness-dashboard measures governance health
-
-## Artifact Flow
-
-```
-/office-hours → design doc (~/. gstack/projects/$SLUG/)
-      ↓ (consumed by)
-/spec-to-task → exec plan (docs/exec-plans/active/)
-      ↓ (guides)
-[develop] + hooks (arch-check, safety-check, session-metrics)
-      ↓ (verified by)
-/verify → verification report
-      ↓ (reviewed by)
-/review + /harness-review → dual review reports
-      ↓ (shipped by)
-/ship → VERSION bump, CHANGELOG, PR
-      ↓ (deployed by)
-/land-and-deploy → deploy report
-      ↓ (monitored by)
-/canary → health report
-      ↓ (retrospected by)
-/retro + /harness-dashboard → unified metrics
-      ↓ (improved by)
-/encode-mistake + /entropy-sweep → permanent guardrails
-```
-
-## Automated Bridges
-
-| From | To | Trigger | Data |
-|------|----|---------|------|
-| gstack design doc | /spec-to-task | Manual or /lifecycle | Design doc path |
-| /verify results | /ship readiness gate | Automatic | Pass/fail status |
-| /harness-review findings | /ship PR body | Automatic | Finding summary |
-| /investigate root cause | /encode-mistake | /lifecycle suggest | Error description |
-| gstack review JSONL | /harness-dashboard | /gstack-sync --metrics | Merged metrics |
-| harness session metrics | /retro | /gstack-sync --metrics | Tool usage data |
-
-## Configuration
-
-See `.claude/integration.json` for bridge paths and workflow flags.
-```
+Use the oh-my-agents plugin's `docs/INTEGRATION.md` as the content source — read it and
+adapt the project-specific details (paths, slug, branch names) rather than hardcoding
+a markdown template inline.
 
 ### 2d: Set up .gitignore entries
 
@@ -262,7 +222,18 @@ fi
 ### 3a: Read gstack metrics
 
 ```bash
-SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+# Re-detect gstack path (bash blocks are independent)
+GSTACK_PATH=""
+for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
+  [ -d "$p" ] && GSTACK_PATH="$p" && break
+done
+
+SLUG=""
+if [ -n "$GSTACK_PATH" ] && [ -x "$GSTACK_PATH/bin/gstack-slug" ]; then
+  SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null || echo "")
+fi
+[ -z "$SLUG" ] && SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+
 GSTACK_METRICS="$HOME/.gstack/projects/$SLUG"
 GSTACK_ANALYTICS="$HOME/.gstack/analytics"
 

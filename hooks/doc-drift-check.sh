@@ -161,6 +161,36 @@ while IFS= read -r dir; do
     fi
 done <<< "$NEW_DIRS"
 
+# --- Session handoff note ---
+# Write a structured handoff file so the next session can bootstrap context quickly.
+# This enables /lifecycle next to pick up where the previous session left off.
+METRICS_DIR="$PROJECT_DIR/.claude/metrics"
+if [ -d "$METRICS_DIR" ] || mkdir -p "$METRICS_DIR" 2>/dev/null; then
+    BRANCH=$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || echo "unknown")
+    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")
+    FILE_COUNT=$(echo "$CHANGED_FILES" | grep -c . 2>/dev/null || echo "0")
+
+    # Find active plan
+    ACTIVE_PLAN=""
+    if [ -d "$PROJECT_DIR/docs/exec-plans/active" ]; then
+        ACTIVE_PLAN=$(ls "$PROJECT_DIR/docs/exec-plans/active/"*.json 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    fi
+
+    # Last verify status
+    LAST_VERIFY=""
+    if [ -f "$METRICS_DIR/verify.jsonl" ]; then
+        LAST_VERIFY=$(tail -1 "$METRICS_DIR/verify.jsonl" 2>/dev/null || echo "")
+    fi
+
+    # Build handoff JSON (atomic write via tmp + rename)
+    HANDOFF_TMP="$METRICS_DIR/.handoff-tmp-$$"
+    HANDOFF_FILE="$METRICS_DIR/handoff-${BRANCH}.json"
+    cat > "$HANDOFF_TMP" 2>/dev/null <<HANDOFF_EOF
+{"timestamp":"$TIMESTAMP","branch":"$BRANCH","files_modified":$FILE_COUNT,"active_plan":"$ACTIVE_PLAN","last_verify":"$LAST_VERIFY","changed_files":"$(echo "$CHANGED_FILES" | head -20 | tr '\n' ',' | sed 's/,$//')","has_warnings":$([ -n "$WARNINGS" ] && echo "true" || echo "false")}
+HANDOFF_EOF
+    mv "$HANDOFF_TMP" "$HANDOFF_FILE" 2>/dev/null || true
+fi
+
 # Output warnings if any
 if [ -n "$WARNINGS" ]; then
     echo ""

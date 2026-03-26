@@ -35,14 +35,22 @@ and what gates must pass before proceeding.
 Guide through the lifecycle phase specified in `$ARGUMENTS`.
 
 Valid phases: `ideate`, `plan`, `decompose`, `execute`, `verify`, `review`, `ship`,
-`deploy`, `retro`, `improve`, `status`, `next`
+`deploy`, `retro`, `improve`, `status`, `next`, `recover`
 
 Special arguments:
 - `status` — Show current lifecycle state and next recommended phase
-- `next` — Auto-detect and execute the next appropriate phase
+- `next` — Auto-detect AND EXECUTE the next appropriate phase (not just recommend)
+- `next --auto` — Chain multiple phases automatically: verify→review→ship without pauses when gates pass
+- `recover` — Detect and recover from failed mid-lifecycle state (orphaned version bumps, partial ships)
 - `--from-design <path>` — Start decompose phase with existing design doc
 - `--plan <plan-id>` — Resume from existing execution plan
 - `--skip-ideate` — Start from plan phase (for well-defined tasks)
+
+**CRITICAL: `/lifecycle next` EXECUTES the next phase directly.** It does not just print
+instructions telling the user to run another command. The whole point of the lifecycle
+orchestrator is to reduce context-switching cost. When you determine the next phase,
+immediately invoke the corresponding skill (e.g., call `/verify`, `/unified-review`,
+`/harness-dashboard`) rather than printing "Run: /verify".
 
 ## Step 0: Detect Environment
 
@@ -115,17 +123,24 @@ Reason: {why this phase is next}
 
 ### Phase: `next`
 
-Auto-detect the next phase based on artifact presence:
-1. No design doc → suggest `ideate` (if gstack) or `decompose` (if not)
-2. Design doc exists, no plan → suggest `decompose`
-3. Plan exists with incomplete tasks → suggest `execute`
-4. All tasks done, no verify → suggest `verify`
-5. Verify passed, no review → suggest `review`
-6. Review passed → suggest `ship`
-7. Shipped, not deployed → suggest `deploy`
-8. Deployed → suggest `retro`
+Auto-detect the next phase based on artifact presence, then **immediately execute it**:
 
-Then execute that phase.
+1. No design doc AND gstack installed → **execute** `ideate` phase
+2. No design doc AND no gstack → **execute** `decompose` phase (ask for spec inline)
+3. Design doc exists, no plan → **execute** `decompose` phase (auto-import design doc)
+4. Plan exists with incomplete tasks → **execute** `execute` phase (show next task)
+5. All tasks done, no verify → **execute** `verify` phase (run /verify --plan {id})
+6. Verify passed, no review → **execute** `review` phase (run /unified-review)
+7. Review passed → **execute** `ship` phase (run /ship or guide manual PR)
+8. Shipped, not deployed → **execute** `deploy` phase (run /land-and-deploy)
+9. Deployed → **execute** `retro` phase (run /harness-dashboard)
+
+**With `--auto` flag**: After completing each phase, if the gate passes (e.g., verify
+returns GREEN), immediately proceed to the next phase without waiting. This enables
+the common `verify → review → ship` fast path in a single invocation. Stop auto-chaining
+at any RED gate or phase requiring user input (ideate, plan, execute).
+
+**Do NOT just print "Run: /verify". Actually invoke the skill.**
 
 ### Phase: `ideate`
 
@@ -204,38 +219,27 @@ Guide the developer through task execution:
 
 ### Phase: `verify`
 
-Run oh-my-agents' /verify and prepare for review:
+**Directly invoke /verify.** Find the active plan ID and run verification:
 
-```
-The VERIFY phase runs: lint → build → test → arch check
-
-Run: /verify --plan {active-plan-id}
-
-Gate: All checks must PASS before proceeding to review.
-If RED: Fix failures. Recurring failures? → /encode-mistake
-If YELLOW: Review warnings before proceeding.
-
-Next phase: /lifecycle review
-```
+1. Find the active exec-plan: `ls docs/exec-plans/active/*.json | head -1`
+2. Extract the plan ID from the filename
+3. **Invoke /verify --plan {plan-id}** — actually run the verification, don't just print instructions
+4. After verify completes, evaluate the result:
+   - **GREEN**: Announce "Verify passed" and if `--auto`, immediately proceed to `review` phase
+   - **RED**: Stop and report failures. Suggest `/encode-mistake` for recurring failures
+   - **YELLOW**: Show warnings and ask whether to proceed to review
 
 ### Phase: `review`
 
-Orchestrate dual review:
+**Directly invoke /unified-review.** Run the dual-system review:
 
-```
-The REVIEW phase uses both systems for comprehensive coverage:
-
-Option 1 (recommended): /unified-review --plan {plan-id}
-  Runs both harness and structural review in one pass.
-
-Option 2 (manual):
-  1. /harness-review    — Four-pillar harness review
-  2. /review            — Structural PR review (gstack)
-
-Both reviews must pass before shipping.
-
-Next phase: /lifecycle ship
-```
+1. Find the active plan ID (same as verify phase)
+2. **Invoke /unified-review --plan {plan-id}** — actually run the unified review
+3. If gstack is not installed, **invoke /harness-review** instead
+4. After review completes, evaluate the verdict:
+   - **SHIP IT**: Announce "Review passed" and if `--auto`, proceed to `ship` phase
+   - **FIX AND RESHIP**: Stop, list critical findings, suggest fixing then re-running
+   - **NEEDS REWORK**: Stop, list all findings, suggest going back to `execute` phase
 
 ### Phase: `ship`
 
@@ -276,38 +280,72 @@ Next phase: /lifecycle retro
 
 ### Phase: `retro`
 
-Run combined retrospective:
+**Directly invoke /harness-dashboard.** Run the harness health dashboard:
 
-```
-The RETRO phase measures what happened.
-
-Run both:
-  1. /retro                — Engineering velocity metrics (gstack)
-  2. /harness-dashboard    — Governance health metrics (oh-my-agents)
-
-Together they answer:
-  - How fast did we ship? (retro)
-  - How well did we maintain quality? (dashboard)
-  - What patterns emerged? (both)
-
-Next phase: /lifecycle improve
-```
+1. **Invoke /harness-dashboard** — shows session metrics, plan progress, gstack integration
+2. If gstack is installed, inform the user they can also run `/retro` for velocity metrics
+3. Summarize key findings and suggest next actions
 
 ### Phase: `improve`
 
-Close the feedback loop:
+Guide through the feedback encoding loop:
 
+1. Review the dashboard/retro findings from the previous phase
+2. For each significant issue or pattern:
+   - If it's a recurring agent mistake → suggest `/encode-mistake "{description}"`
+   - If it's a disliked code pattern → suggest `/taste-encoder "{pattern}"`
+   - If it's accumulated entropy → suggest `/entropy-sweep`
+3. After improvements are encoded, announce lifecycle completion:
+   ```
+   Lifecycle complete. Permanent guardrails created: {count}
+   Start a new cycle: /lifecycle next
+   ```
+
+### Phase: `recover`
+
+Detect and recover from failed mid-lifecycle state:
+
+```bash
+echo "=== Recovery Diagnostics ==="
+
+# Check for orphaned version bump (VERSION changed but no PR)
+if git diff HEAD~1 --name-only 2>/dev/null | grep -q "^VERSION$"; then
+  OPEN_PRS=$(git log --oneline HEAD~1..HEAD | head -1)
+  echo "VERSION_CHANGED: yes (commit: $OPEN_PRS)"
+else
+  echo "VERSION_CHANGED: no"
+fi
+
+# Check for uncommitted changes
+UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+echo "UNCOMMITTED_FILES: $UNCOMMITTED"
+
+# Check for failed verify
+if [ -f ".claude/metrics/verify.jsonl" ]; then
+  LAST_VERIFY=$(tail -1 .claude/metrics/verify.jsonl 2>/dev/null)
+  echo "LAST_VERIFY: $LAST_VERIFY"
+fi
+
+# Check exec-plan state
+for plan in docs/exec-plans/active/*.json; do
+  [ -f "$plan" ] && echo "ACTIVE_PLAN: $(basename "$plan")" || true
+done
+
+# Check for stalled plans
+find docs/exec-plans/active -name "*.json" -mtime +7 2>/dev/null | while read f; do
+  echo "STALLED_PLAN: $(basename "$f")"
+done
 ```
-The IMPROVE phase converts lessons into permanent guardrails.
 
-Review the retro findings and for each issue:
-  1. /encode-mistake "{description}" — Convert failures to rules
-  2. /taste-encoder                  — Encode preferences to lint rules
-  3. /entropy-sweep                  — Scan for accumulated entropy
+Based on diagnostics, recommend recovery actions:
 
-This completes the lifecycle. Start a new cycle with:
-  /lifecycle ideate (or /lifecycle decompose for the next feature)
-```
+| State | Recovery |
+|-------|----------|
+| VERSION bumped, no PR | Either create PR manually or `git revert` the version commit |
+| Uncommitted changes after failed /ship | Stage and commit changes, then re-run `/lifecycle ship` |
+| Last verify RED | Fix failing checks, then `/lifecycle verify` |
+| Stalled plans (7+ days) | Review and either `/spec-to-task --continue {id}` or mark as abandoned |
+| Merge conflict on base branch | Run `git merge {base}` and resolve, then resume |
 
 ## Rules
 
@@ -317,3 +355,10 @@ This completes the lifecycle. Start a new cycle with:
 - **Never block on missing gstack** — offer oh-my-agents-only alternatives for each phase
 - **State is inferrable** — detect phase from artifacts, don't require explicit state tracking
 - **One command to continue** — `next` always knows what to do based on current state
+- **EXECUTE, don't recommend** — `/lifecycle next` invokes the next skill directly; it does not
+  print "Run: /skill-name" and wait. The user invoked /lifecycle to avoid typing individual
+  commands. Honor that intent by actually running the skills.
+- **`--auto` chains phases** — when a gate passes (verify GREEN, review SHIP IT), immediately
+  proceed to the next phase without pausing. Stop at RED gates or user-input-required phases.
+- **`recover` is always safe** — it diagnoses but never takes destructive action automatically.
+  It recommends actions and lets the user confirm before executing.

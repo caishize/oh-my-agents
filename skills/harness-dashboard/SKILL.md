@@ -96,6 +96,16 @@ Compute these from the raw data:
 - Doc drift warnings
 - Hook execution failures
 
+**Velocity** — delivery speed metrics (drives continuous improvement):
+- Tasks completed per session (from exec-plan JSON transition timestamps)
+- Average verify-to-review time (from verify.jsonl and reviews.jsonl timestamps)
+- First-pass verify success rate (% of verify runs that return GREEN on first try)
+- Week-over-week trend arrows: ↑ improving, → stable, ↓ declining
+- If multiple weeks of data available, show a 4-week sparkline trend
+
+These metrics directly drive behavior: a declining first-pass success rate signals
+the need for better hooks or more `/encode-mistake` usage.
+
 **Plan Progress** — for each active plan:
 - Plan ID and title
 - Tasks completed vs total
@@ -130,7 +140,7 @@ Generate the top 3 actionable recommendations based on the data:
 ### Step 4: Output
 
 If `--json` flag is set, output all aggregated data as a single JSON object with keys:
-`dateRange`, `sessions`, `layers`, `enforcement`, `plans`, `health`, `recommendations`.
+`dateRange`, `sessions`, `layers`, `enforcement`, `velocity`, `plans`, `health`, `recommendations`.
 
 If `--plan {id}` flag is set, show a detailed plan view:
 
@@ -185,6 +195,12 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
 |------|----------|--------|--------------|
 | plan-auth-refactor | 4/6 tasks | active | 2 days ago |
 | plan-api-v2 | 1/8 tasks | stale | 9 days ago |
+
+### Velocity
+  Tasks/session:     {N} avg (↑↓→ vs last week)
+  Verify→review:     {N}min avg
+  First-pass GREEN:  {N}% (↑↓→ vs last week)
+  Cycle time:        {N}h avg (plan start → verify pass)
 
 ### Harness Health
   Legibility Score: N/30 (last assessed: [date])
