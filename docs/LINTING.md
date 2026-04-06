@@ -1,10 +1,10 @@
 # Linting
 
-Custom lint rules and their rationale. Fill in when running `/taste-encoder`.
+Custom lint rules and their rationale. Fill in when running `/encode-mistake --proactive`.
 
 ## Rule Index
 
-<!-- Add rules as they are encoded via /taste-encoder -->
+<!-- Add rules as they are encoded via /encode-mistake --proactive -->
 
 | ID | Rule | Severity | Enforced By | Added |
 |----|------|----------|-------------|-------|
@@ -12,7 +12,7 @@ Custom lint rules and their rationale. Fill in when running `/taste-encoder`.
 
 ## How to Add a Rule
 
-1. Run `/taste-encoder <pattern-description>`
+1. Run `/encode-mistake --proactive <pattern-description>`
 2. The skill will create the enforcement (lint rule, structural test, or hook)
 3. Add an entry to this table with a TASTE-NNN ID
 4. Include test coverage (both positive and negative cases)

@@ -1,18 +1,14 @@
 ---
 name: harness-dashboard
-description: "High-level harness health overview (use /harness-metrics for deep-dive queries) — aggregates session metrics, enforcement activity, execution plan progress, and entropy/legibility trends. Use when you want to see how the harness is performing, check plan status, or understand development patterns. Aliases: 仪表盘, 看板, 运行状态, 健康检查, harness概览"
+description: "Harness health overview and metric analysis — session metrics, enforcement activity, plan progress, layer balance, trends. Supports deep-dive queries (layer-balance, violations, trends, export). Aliases: 仪表盘, 看板, 运行状态, 指标查询, 度量分析"
 user-invocable: true
-argument-hint: "[--days N] [--plan plan-id] [--json]"
+argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|violations|trends|export]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Harness Dashboard
 
-The Observability pillar's primary user-facing skill. Aggregates harness metrics into
-an actionable overview — session activity, layer balance, enforcement history,
-execution plan progress, and health indicators.
-
-> "If the harness is the immune system, the dashboard is the vital signs monitor."
+Harness health overview and deep-dive metric analysis in one skill.
 
 ## Arguments
 
@@ -20,6 +16,11 @@ Parse `$ARGUMENTS` for:
 - `--days N` — Time range in days (default: 7)
 - `--plan {plan-id}` — Show detailed view of a specific execution plan
 - `--json` — Output raw JSON instead of formatted text
+- `--query {type}` — Deep-dive query: `layer-balance`, `violations`, `trends`, `export`
+
+If `--query` is provided, skip the overview dashboard and run the deep-dive query instead.
+For deep-dive queries, compute detailed analysis with charts, trends, and recommendations.
+See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
 
 ## Task
 
@@ -132,7 +133,7 @@ Generate the top 3 actionable recommendations based on the data:
 - If enforcement violations are trending up -> recommend `/arch-guard` review
 - If doc drift warnings > 3 -> recommend `/entropy-sweep docs` scope
 - If nested CLAUDE.md coverage < 50% -> recommend `/harness-init` for modules
-- If gstack installed but no dual reviews -> recommend `/unified-review` for next PR
+- If gstack installed but no dual reviews -> recommend `/harness-review` for next PR
 - If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
 - If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
 - If lifecycle phases are skipped -> recommend `/lifecycle status` to identify gaps
@@ -251,4 +252,4 @@ New projects will not have metrics yet. Handle gracefully:
 - Bar charts use 10-character width: filled blocks + empty blocks = 10
 - Round percentages to whole numbers
 - Sort plans by last-updated date (most recent first)
-- Reference `/harness-metrics` for users who want deeper analysis
+- Use `--query` flag for deep-dive analysis (layer-balance, violations, trends, export)

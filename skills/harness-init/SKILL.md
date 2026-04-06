@@ -1,837 +1,155 @@
 ---
 name: harness-init
-description: "Initialize your project as an agent-ready harness — CLAUDE.md as table of contents, nested CLAUDE.md per module, docs/ system of record, bootstrap script, and task entry points. The complete AI coding environment setup based on OpenAI's four-pillar harness engineering methodology. Aliases: 初始化, 项目初始化, harness初始化, 环境搭建, 项目配置, AI开发环境"
+description: "Initialize project as agent-ready harness — CLAUDE.md, nested CLAUDE.md per module, docs/ system of record, bootstrap script, pre-commit hooks, architecture tests. Based on OpenAI's four-pillar harness engineering. Aliases: 初始化, 项目初始化, harness初始化, AI开发环境"
 user-invocable: true
 argument-hint: "[project-path] [--quick]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
-# Harness Init v2.0
+# Harness Init
 
-Initialize the harness — the constraints, documentation, observability, feedback loops,
-and entry points that make AI coding agents work reliably. Based on OpenAI's internal
-experiment where 3 engineers shipped ~1M lines of production code via ~1,500 PRs in
-5 months with zero hand-written code, using 88 AGENTS.md files across their codebase.
+Initialize the harness — constraints, documentation, observability, and feedback loops
+that make AI coding agents work reliably.
 
-> "The bottleneck was never the agent's ability to write code, but the lack of structure,
-> tools, and feedback mechanisms surrounding it."
+## Quick Start Mode
 
-## The Four Pillars
+If `$ARGUMENTS` contains `--quick`: run Steps 1-9, then `/legibility-score`, then
+`/arch-guard`. Print a one-paragraph summary with score and top 3 improvements.
 
-This harness is built on OpenAI's **four pillars** of harness engineering:
+## Step 1: Assess Current State
 
-1. **Architecture as Guardrails** — Layer model, module boundaries, dependency rules
-   that prevent agents from creating spaghetti code
-2. **Documentation as System of Record** — Everything an agent needs lives in the repo;
-   anything in Slack, wikis, or people's heads does not exist for the agent
-3. **Observability & Legibility** — Agents and humans can see what happened, why it
-   happened, and where the system stands at any moment
-4. **Entropy Management** — Active resistance against codebase degradation through
-   structural tests, lint rules, file size limits, and layer boundary enforcement
-
-## Task
-
-Set up the harness for this repository following all four pillars.
-If `$ARGUMENTS` specifies a project path, use that; otherwise use the current directory.
-
-### Quick Start Mode
-
-If `$ARGUMENTS` contains `--quick`, run an accelerated setup:
-1. Execute Steps 1-9 below (full harness-init)
-2. Immediately run `/legibility-score` on the project
-3. Immediately run `/arch-guard` on the project
-4. Print a one-paragraph summary: score, top 3 improvement areas, next recommended command
-
-This solves the cold-start problem — new users get the full
-`/harness-init` -> `/legibility-score` -> `/arch-guard` pipeline in a single command.
-
-### Step 1: Assess Current State
-
-Scan the repository and evaluate readiness:
-
-1. **Repository structure** — Identify top-level directories, package manager, language(s),
-   build system, and framework(s)
-2. **Module inventory** — List directories with 5+ source files (candidates for nested CLAUDE.md)
-3. **Existing documentation** — Check for README, CLAUDE.md, docs/, ARCHITECTURE docs,
-   ADRs, or any structured agent guidance
-4. **Entry points** — Check if `build`, `test`, `lint`, `run`, `check` commands exist and work
-5. **Observability status** — Check for logging, metrics, tracing, or monitoring setup
-6. **Entropy indicators** — Look for oversized files, circular dependencies, inconsistent
-   naming, dead code patterns
-7. **gstack detection** — Check if gstack is installed:
+Scan the repository:
+1. Repository structure — directories, package manager, language(s), framework(s)
+2. Module inventory — directories with 5+ source files (candidates for nested CLAUDE.md)
+3. Existing documentation — README, CLAUDE.md, docs/, ADRs
+4. Entry points — do `build`, `test`, `lint`, `run`, `check` commands exist and work?
+5. gstack detection:
    ```bash
-   GSTACK_INSTALLED="no"
-   if [ -d "$HOME/.claude/skills/gstack" ] || [ -d ".claude/skills/gstack" ]; then
-     GSTACK_INSTALLED="yes"
-   fi
-   echo "GSTACK: $GSTACK_INSTALLED"
+   [ -d "$HOME/.claude/skills/gstack" ] || [ -d ".claude/skills/gstack" ] && echo "GSTACK: yes" || echo "GSTACK: no"
    ```
-   If gstack is present, the generated Workflow section in CLAUDE.md will include the
-   full lifecycle (idea → ship → retro). If not, it includes oh-my-agents-only commands.
 
-Produce a brief assessment report before proceeding.
+Produce a brief assessment before proceeding.
 
-### Step 2: Create Root CLAUDE.md (Progressive Disclosure)
+## Step 2: Create Root CLAUDE.md
 
-CLAUDE.md must be **under 100 lines** and function as a **table of contents**, not an
-encyclopedia. This is the principle of **progressive disclosure** — agents start with a
-small, stable entry point and learn where to look next.
+Must be **under 100 lines** — a table of contents, not an encyclopedia. Include:
+- Bootstrap command
+- Commands table (build, test, lint, run, check)
+- Architecture summary with layer model
+- Top 5 conventions
+- Module map with file counts and nested CLAUDE.md status
+- Workflow table (adapt based on gstack detection — full lifecycle if gstack present,
+  oh-my-agents-only if not)
+- Documentation links to docs/
 
-OpenAI found that one massive instruction file **FAILED** — context is scarce and crowds
-out actual task details. They solved this with 88 nested AGENTS.md files. The Claude Code
-analog is **nested CLAUDE.md per directory**.
+## Step 3: Generate Nested CLAUDE.md Files
 
-Template:
+For every module with **5+ source files**, create a CLAUDE.md under **50 lines**:
+- Purpose (1-2 sentences)
+- Layer rules (layer name, allowed/forbidden imports)
+- Key files table
+- Module conventions
+- Common patterns (1-2 code snippets)
 
-```markdown
-# [Project Name]
-
-## Bootstrap
-\`\`\`bash
-./scripts/bootstrap.sh  # single command from zero to running
-\`\`\`
-
-## Commands
-| Command | Purpose |
-|---------|---------|
-| `[build cmd]` | Compile / bundle the project |
-| `[test cmd]` | Run all tests |
-| `[lint cmd]` | Lint and format check |
-| `[run cmd]` | Start the application |
-| `[check cmd]` | Run lint + test + build in sequence |
-
-## Architecture
-[1-2 sentences describing the system]. Full details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-
-Layer model: Types -> Config -> Repo -> Service -> Runtime -> UI
-Sibling layers (e.g., UI imports Types/Utils but not API/Service): noted separately
-Cross-cutting (auth, telemetry, feature flags): via Providers interface
-
-## Key Conventions (Top 5)
-1. [Most important naming/organization rule]
-2. [Error handling pattern]
-3. [File size limit: 300 lines]
-4. [Import/dependency rule]
-5. [Testing requirement]
-
-Full conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
-
-## Module Map
-| Module | Path | Files | Purpose | Nested CLAUDE.md |
-|--------|------|-------|---------|-----------------|
-| [name] | `src/[dir]` | [count] | [1-line purpose] | Yes/No |
-
-## Workflow (Research → Plan → Execute → Verify)
-
-Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md)
-
-**AGENT NOTE**: Include ONLY ONE of the two tables below based on gstack detection in
-Step 1. Remove the conditional headers and the unused table. The rendered CLAUDE.md
-must not contain "If gstack is installed/NOT installed" text.
-
-**If gstack IS installed** — use this table:
-
-| Phase | Command | Purpose |
-|-------|---------|---------|
-| Ideate | `/office-hours` | Product diagnostic, design doc |
-| Plan | `/plan-ceo-review` | Strategy & scope review |
-| Plan | `/plan-eng-review` | Architecture & eng review |
-| Plan | `/plan-design-review` | Design & UX review |
-| Decompose | `/spec-to-task` | Layer-aware execution plan |
-| Execute | [develop] + hooks | Implement with automatic enforcement |
-| Verify | `/verify` | Build, test, lint, arch check |
-| Review | `/review` | PR structural review (SQL, LLM safety) |
-| Review | `/harness-review` | Four-pillar harness review |
-| Ship | `/ship` | Version, changelog, PR |
-| Docs | `/document-release` | Post-ship doc sync |
-| Retro | `/retro` + `/harness-dashboard` | Eng metrics + harness health |
-| Guard | `/encode-mistake` | Convert failures to rules |
-| Sweep | `/entropy-sweep` | Weekly codebase health scan |
-
-**If gstack is NOT installed** — use this table:
-
-| Phase | Command | Purpose |
-|-------|---------|---------|
-| Decompose | `/spec-to-task` | Layer-aware execution plan |
-| Execute | [develop] + hooks | Implement with automatic enforcement |
-| Verify | `/verify` | Build, test, lint, arch check |
-| Review | `/harness-review` | Four-pillar harness review |
-| Guard | `/encode-mistake` | Convert failures to rules |
-| Sweep | `/entropy-sweep` | Weekly codebase health scan |
-| Observe | `/harness-dashboard` | Session metrics & health |
-
-## Documentation
-- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Conventions: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
-- Testing: [docs/TESTING.md](docs/TESTING.md)
-- Linting: [docs/LINTING.md](docs/LINTING.md)
-- Decisions (ADRs): [docs/DECISIONS.md](docs/DECISIONS.md)
-- Providers: [docs/PROVIDERS.md](docs/PROVIDERS.md)
-- Observability: [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)
-- Workflow: [docs/WORKFLOW.md](docs/WORKFLOW.md)
-- Execution Plans: [docs/exec-plans/](docs/exec-plans/)
-```
-
-### Step 3: Generate Nested CLAUDE.md Files
-
-For **every module directory with 5+ source files**, generate a nested CLAUDE.md.
-Each must be **under 50 lines**. This is the direct analog of OpenAI's 88 nested AGENTS.md
-files — scoped context that keeps the root small while giving agents deep module knowledge.
-
-Template for each nested CLAUDE.md:
-
-```markdown
-# [Module Name]
-
-## Purpose
-[1-2 sentences: what this module does and why it exists]
-
-## Layer Rules
-- **Layer**: [Types|Config|Repo|Service|Runtime|UI]
-- **Allowed imports**: [list of layers/modules this can import from]
-- **Forbidden imports**: [list of layers/modules this must NOT import]
-
-## Key Files
-| File | Purpose |
-|------|---------|
-| `[file]` | [1-line description] |
-
-## Module Conventions
-- [Naming pattern specific to this module]
-- [Error handling specifics]
-- [Any module-specific rules]
-
-## Common Patterns
-
-\`\`\`[language]
-// Pattern 1: [name]
-[code snippet showing the dominant pattern in this module]
-\`\`\`
-
-\`\`\`[language]
-// Pattern 2: [name]
-[second common pattern if applicable]
-\`\`\`
-```
-
-After generating, produce a report:
-
-```
-Nested CLAUDE.md Report:
-  Created: src/services/CLAUDE.md (12 source files)
-  Created: src/api/CLAUDE.md (8 source files)
-  Skipped: src/types/ (3 source files, below threshold of 5)
-  Skipped: src/utils/ (2 source files, below threshold of 5)
-```
-
-### Step 4: Create docs/ Directory (System of Record)
-
-The real knowledge base lives in `docs/`. Everything an agent needs to know must live in
-the repository — anything in Slack, Google Docs, or people's heads effectively **does not
-exist** for the agent.
-
-Create the full directory structure:
+## Step 4: Create docs/ Directory
 
 ```
 docs/
-├── ARCHITECTURE.md        # Layer model, module boundaries, dependency rules
-├── CONVENTIONS.md         # Naming, file size limits, error handling patterns
-├── TESTING.md             # Test strategy, structural tests, coverage rules
-├── LINTING.md             # Custom lint rules and their rationale
-├── DECISIONS.md           # ADRs: "we chose X over Y because..." (status: Proposed → Accepted → Superseded/Deprecated)
-├── PROVIDERS.md           # Cross-cutting: auth, telemetry, feature flags
-├── OBSERVABILITY.md       # Logging, metrics, tracing, monitoring strategy
-├── WORKFLOW.md            # Full development lifecycle (oh-my-agents + gstack if present)
-├── design-docs/           # Design documents for major features
-│   └── .gitkeep
-├── exec-plans/            # Execution plans from /spec-to-task
-│   ├── active/            # Plans currently being worked on
-│   │   └── .gitkeep
-│   └── completed/         # Finished plans (moved here when done)
-│       └── .gitkeep
-├── product-specs/         # Product specifications and requirements
-│   └── .gitkeep
-└── references/            # External references, research, vendor docs
-    └── .gitkeep
+├── ARCHITECTURE.md    # Layer model, boundaries, dependency rules
+├── CONVENTIONS.md     # Naming, file size limits, patterns
+├── TESTING.md         # Test strategy, structural tests
+├── LINTING.md         # Custom lint rules (TASTE-NNN entries)
+├── DECISIONS.md       # ADRs (Proposed → Accepted → Superseded)
+├── PROVIDERS.md       # Cross-cutting: auth, telemetry, flags
+├── OBSERVABILITY.md   # Logging, metrics, tracing
+├── WORKFLOW.md        # Development lifecycle (adapt to gstack)
+├── design-docs/       # Design documents
+├── exec-plans/        # Execution plans from /spec-to-task
+│   ├── active/
+│   └── completed/
+├── product-specs/
+└── references/
 ```
 
-**WORKFLOW.md generation:**
-If gstack was detected in Step 1, generate `docs/WORKFLOW.md` using the full integrated
-lifecycle template (Ideate → Plan → Decompose → Execute → Verify → Review → Ship → Docs →
-Retro → Guard). If gstack is not installed, generate a reduced version covering only
-oh-my-agents commands (Decompose → Execute → Verify → Review → Guard). Use the template
-from the oh-my-agents plugin's own `docs/WORKFLOW.md` as a reference, adapting project-specific
-details (commands, paths, framework) discovered in Step 1.
+If gstack detected, WORKFLOW.md includes full lifecycle (Ideate → Ship → Retro).
+Otherwise, oh-my-agents-only (Decompose → Execute → Verify → Review → Guard).
 
-Key rules for documentation:
-- **Sibling layers in ARCHITECTURE.md** — If a layer (like UI) does not fit the linear
-  dependency chain (it imports from Types/Utils but not from API/Service), note it as a
-  sibling layer in the diagram rather than placing it at the end of the linear chain.
-  This prevents agents from incorrectly inferring that UI depends on API.
-- **ADR lifecycle in DECISIONS.md** — Include a brief ADR lifecycle note at the top of
-  DECISIONS.md: `Status flow: Proposed → Accepted → Superseded/Deprecated`.
-- **Structured formats (JSON/YAML) > prose** where agents need to parse rules
-- **Machine-readable** — clear headings, bullet points, code examples
-- **Actionable** — rules an agent can follow, not descriptions
-- **In the repo** — never in Slack, wikis, or Google Docs
-- **Pillar: Documentation as System of Record** — if it's not written down here, it doesn't exist
-- **Pillar: Observability & Legibility** — OBSERVABILITY.md documents how to see system state
+Key rules:
+- Structured formats (JSON/YAML) > prose where agents parse rules
+- Everything in the repo — Slack/wikis don't exist for agents
+- ADR lifecycle: `Proposed → Accepted → Superseded/Deprecated`
+- Sibling layers noted separately in ARCHITECTURE.md
 
-### Step 5: Create `.claude/harness.json` Config
+## Step 5: Create `.claude/harness.json`
 
-Create a machine-readable harness configuration that other skills can reference.
-Use the template at `templates/harness-config.json` (in the oh-my-agents plugin) as
-a starting point, adapting `layer_dirs` to match the actual project structure:
-
+Machine-readable config. Use `templates/harness-config.json` as starting point:
 ```json
 {
   "version": "2.0",
-  "pillars": ["architecture", "documentation", "observability", "entropy"],
   "layers": ["types", "config", "repo", "service", "runtime", "ui"],
-  "layer_dirs": {
-    "types": "src/types",
-    "config": "src/config",
-    "repo": "src/repo",
-    "service": "src/services",
-    "runtime": "src/api",
-    "ui": "src/ui"
-  },
-  "providers_path": null,
+  "layer_dirs": { "types": "src/types", "service": "src/services" },
   "file_size_limit": 300,
   "nested_claude_md_threshold": 5
 }
 ```
+**Layer keys must match actual directory names** (e.g., `"services"` not `"service"`).
 
-Adapt `layer_dirs` to match the actual project structure discovered in Step 1.
-Set `providers_path` if a cross-cutting providers module exists.
+## Step 6: Create Bootstrap Script
 
-**Layer name rule:** Layer keys in `harness.json` must match actual directory names exactly
-(including plural forms). If the directory is `src/services/`, use `"services"` as the key,
-not `"service"`. Mismatched keys cause other skills to fail when resolving layer paths.
+Create `scripts/bootstrap.sh` — single command from zero to running:
+1. Install dependencies
+2. Set up environment (copy .env.example)
+3. Install pre-commit hooks
+4. Run initial build
+5. Verify setup
 
-### Step 6: Create Bootstrap Script
+Make executable: `chmod +x scripts/bootstrap.sh`
+If hardcoded secrets detected, create `.env.example` with placeholders.
 
-Create `scripts/bootstrap.sh` — a single script from zero to running:
+## Step 7: Set Up Pre-Commit Enforcement
 
-```bash
-#!/usr/bin/env bash
-# scripts/bootstrap.sh — one-command project setup
-set -euo pipefail
+Create `.pre-commit-config.yaml` with three tiers:
+1. **Linter + formatter** (~1s)
+2. **Type checker** (~5s)
+3. **Architecture guard** — runs structural tests enforcing TASTE/ARCH rules (~1-2s)
 
-echo "=== Harness Bootstrap ==="
+Adapt to project language. See `templates/` for examples.
 
-echo "[1/5] Installing dependencies..."
-[package-manager install command]
+## Step 7b: Generate Architecture Test Skeleton
 
-echo "[2/5] Setting up environment..."
-cp .env.example .env 2>/dev/null || echo "No .env.example found, skipping"
+Generate the architecture test file if it doesn't already exist:
+- **Python projects**: See [arch-test-python.md](arch-test-python.md)
+- **TypeScript projects**: See [arch-test-typescript.md](arch-test-typescript.md)
 
-echo "[3/5] Setting up pre-commit hooks..."
-if command -v pre-commit &>/dev/null; then
-  pre-commit install
-elif [ -f .pre-commit-config.yaml ]; then
-  pip install pre-commit && pre-commit install
-fi
+Tests include: `test_layer_boundaries`, `test_file_size_limits`, `test_no_circular_imports`.
+Never overwrite existing test files.
 
-echo "[4/5] Running initial build..."
-[build command]
+## Step 8: Create Task Entry Points
 
-echo "[5/5] Verifying setup..."
-[check command if unified check exists, otherwise build + test]
+Ensure build, test, lint, run, check commands exist and work. Create using the project's
+build system if missing. Annotate non-functional commands in CLAUDE.md.
 
-echo ""
-echo "Setup complete. Available commands:"
-echo "  [build cmd]  — Build the project"
-echo "  [test cmd]   — Run tests"
-echo "  [lint cmd]   — Lint and format"
-echo "  [run cmd]    — Start the application"
-echo "  [check cmd]  — Full validation (lint + test + build)"
-```
-
-Make it executable: `chmod +x scripts/bootstrap.sh`
-
-**Secrets handling:** If hardcoded secrets (API keys, passwords, tokens, connection strings)
-are detected in source code during Step 1, create a `.env.example` file listing the required
-environment variables with placeholder values (e.g., `DB_PASSWORD=change_me`,
-`API_KEY=your_key_here`). This ensures that `CONVENTIONS.md` references and the bootstrap
-script's `cp .env.example .env` step are not orphaned.
-
-**Unified check preference:** If a unified check command exists (e.g., `npm run check` =
-lint + test + build), prefer it in the bootstrap script's verification step over running
-build and test separately. This ensures lint is also verified on first setup.
-
-### Step 7: Set Up Pre-Commit Enforcement
-
-Create `.pre-commit-config.yaml` to enforce conventions at commit time. Pre-commit hooks
-are the **second line of defense** — they catch violations before code enters the repository,
-complementing CI (which catches violations on PR) and Claude Code hooks (which catch during
-editing).
-
-The hook config should include **three tiers**:
-
-1. **Linter + formatter** — Fast, catches syntax/style issues (~1s)
-2. **Type checker** — Medium, catches type errors (~5s)
-3. **Architecture guard** — Runs structural tests that enforce TASTE/ARCH rules (~1-2s)
-
-The architecture guard is critical: it mechanically enforces every convention documented
-in `docs/CONVENTIONS.md`. Without it, conventions are just suggestions that agents will
-eventually ignore.
-
-**Template** (adapt to the project's language and tooling):
-
-For **Python** projects:
-```yaml
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.5
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: local
-    hooks:
-      - id: type-check
-        name: type check
-        entry: bash -c '[type-check command, e.g., uv run mypy src/]'
-        language: system
-        files: \.py$
-        types: [python]
-        pass_filenames: false
-
-      - id: architecture-guard
-        name: architecture guard (TASTE + ARCH rules)
-        entry: bash -c '[test command, e.g., uv run pytest tests/test_architecture.py -x -q]'
-        language: system
-        files: ^src/
-        types: [python]
-        pass_filenames: false
-```
-
-For **TypeScript/JavaScript** projects:
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: lint-fix
-        name: eslint
-        entry: npx eslint --fix
-        language: system
-        types: [javascript, typescript]
-
-      - id: type-check
-        name: tsc
-        entry: npx tsc --noEmit
-        language: system
-        files: \.tsx?$
-        pass_filenames: false
-
-      - id: architecture-guard
-        name: architecture guard
-        entry: npx jest tests/architecture.test.ts --passWithNoTests
-        language: system
-        files: ^src/
-        pass_filenames: false
-```
-
-After creating the config, install hooks:
-```bash
-pip install pre-commit && pre-commit install
-# or: npx husky install (for JS projects)
-```
-
-**Why architecture guard in pre-commit?** Structural tests (`test_architecture.py` or
-`architecture.test.ts`) run in ~1 second but catch layer violations, naming drift, file
-size limits, and every TASTE rule. Running them at commit time means violations are caught
-**before** they enter the branch, not after CI fails minutes later. This is the tightest
-enforcement loop possible without real-time Claude Code hooks.
-
-**Bootstrap integration:** Add `pre-commit install` to `scripts/bootstrap.sh` so the hooks
-are active from the first checkout.
-
-### Step 7b: Generate Architecture Test Skeleton
-
-The `.pre-commit-config.yaml` from Step 7 references architecture test files. These **must
-exist** and contain structural tests that enforce the harness rules from `docs/CONVENTIONS.md`
-and `docs/ARCHITECTURE.md`. Without them, the `architecture-guard` pre-commit hook either
-fails (pytest) or silently does nothing (`--passWithNoTests`).
-
-**Guard:** Only generate the file if it does not already exist. Never overwrite an existing
-architecture test file.
-
-**For Python projects** — create `tests/test_architecture.py`:
-
-```python
-"""
-Architecture guard tests — mechanical enforcement of harness rules.
-Generated by /harness-init. Extend with project-specific structural tests.
-Run: pytest tests/test_architecture.py -x -q
-"""
-
-import json
-import os
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent
-HARNESS_PATH = ROOT / ".claude" / "harness.json"
-
-def _load_harness():
-    if HARNESS_PATH.exists():
-        with open(HARNESS_PATH) as f:
-            return json.load(f)
-    return {}
-
-HARNESS = _load_harness()
-LAYER_ORDER = HARNESS.get("layers", ["types", "config", "repo", "service", "runtime", "ui"])
-FILE_SIZE_LIMIT = HARNESS.get("file_size_limit", 300)
-LAYER_DIRS = HARNESS.get("layer_dirs", {})
-
-
-def _resolve_layer(filepath: str) -> int:
-    """Return layer index for a file path, or -1 if not in a known layer."""
-    for idx, layer_name in enumerate(LAYER_ORDER):
-        patterns = LAYER_DIRS.get(layer_name, [])
-        if isinstance(patterns, str):
-            patterns = [patterns]
-        for pattern in patterns:
-            # Simple substring match on directory segments
-            if pattern.strip("*/ ") in filepath:
-                return idx
-    # Fallback heuristic
-    fallback = {
-        "types": 0, "models": 0, "interfaces": 0,
-        "config": 1, "configuration": 1,
-        "repo": 2, "repository": 2, "dal": 2,
-        "service": 3, "services": 3,
-        "runtime": 4, "server": 4, "api": 4,
-        "ui": 5, "components": 5, "pages": 5, "views": 5,
-    }
-    parts = filepath.replace("\\", "/").split("/")
-    for part in parts:
-        if part in fallback:
-            return fallback[part]
-    return -1
-
-
-def _extract_imports(filepath: str) -> list[str]:
-    """Extract import paths from a Python file."""
-    import re
-    imports = []
-    try:
-        with open(filepath) as f:
-            for line in f:
-                m = re.match(r'^\s*(?:from|import)\s+([\w.]+)', line)
-                if m:
-                    imports.append(m.group(1).replace(".", "/"))
-    except (OSError, UnicodeDecodeError):
-        pass
-    return imports
-
-
-def test_layer_boundaries():
-    """No file may import from a higher layer."""
-    violations = []
-    src_dir = ROOT / "src"
-    if not src_dir.exists():
-        return  # No src/ directory, skip
-
-    for py_file in src_dir.rglob("*.py"):
-        rel = str(py_file.relative_to(ROOT))
-        file_layer = _resolve_layer(rel)
-        if file_layer == -1:
-            continue
-        for imp in _extract_imports(str(py_file)):
-            imp_layer = _resolve_layer(imp)
-            if imp_layer != -1 and imp_layer > file_layer:
-                violations.append(
-                    f"{rel} (layer {LAYER_ORDER[file_layer]}) imports from "
-                    f"layer {LAYER_ORDER[imp_layer]}: {imp}"
-                )
-
-    assert not violations, (
-        "Layer boundary violations found:\n" + "\n".join(f"  - {v}" for v in violations)
-    )
-
-
-def test_file_size_limits():
-    """No source file may exceed the configured line limit."""
-    violations = []
-    src_dir = ROOT / "src"
-    if not src_dir.exists():
-        return
-
-    for py_file in src_dir.rglob("*.py"):
-        try:
-            line_count = sum(1 for _ in open(py_file))
-        except (OSError, UnicodeDecodeError):
-            continue
-        if line_count > FILE_SIZE_LIMIT:
-            rel = str(py_file.relative_to(ROOT))
-            violations.append(f"{rel}: {line_count} lines (limit: {FILE_SIZE_LIMIT})")
-
-    assert not violations, (
-        "File size limit exceeded:\n" + "\n".join(f"  - {v}" for v in violations)
-    )
-
-
-def test_no_circular_imports():
-    """Detect circular import chains. TODO: implement full cycle detection."""
-    pass
-```
-
-**For TypeScript/JavaScript projects** — create `tests/architecture.test.ts`:
-
-```typescript
-/**
- * Architecture guard tests — mechanical enforcement of harness rules.
- * Generated by /harness-init. Extend with project-specific structural tests.
- * Run: npx jest tests/architecture.test.ts
- */
-
-import * as fs from 'fs'
-import * as path from 'path'
-
-const ROOT = path.resolve(__dirname, '..')
-const HARNESS_PATH = path.join(ROOT, '.claude', 'harness.json')
-
-interface HarnessConfig {
-  layers?: string[]
-  layer_dirs?: Record<string, string | string[]>
-  file_size_limit?: number
-}
-
-function loadHarness(): HarnessConfig {
-  try {
-    return JSON.parse(fs.readFileSync(HARNESS_PATH, 'utf-8'))
-  } catch {
-    return {}
-  }
-}
-
-const HARNESS = loadHarness()
-const LAYER_ORDER = HARNESS.layers ?? ['types', 'config', 'repo', 'service', 'runtime', 'ui']
-const FILE_SIZE_LIMIT = HARNESS.file_size_limit ?? 300
-const LAYER_DIRS = HARNESS.layer_dirs ?? {}
-
-function resolveLayer(filepath: string): number {
-  const normalized = filepath.replace(/\\/g, '/')
-  for (let idx = 0; idx < LAYER_ORDER.length; idx++) {
-    const layerName = LAYER_ORDER[idx]
-    let patterns = LAYER_DIRS[layerName] ?? []
-    if (typeof patterns === 'string') patterns = [patterns]
-    for (const pattern of patterns) {
-      if (normalized.includes(pattern.replace(/[*/]/g, ''))) return idx
-    }
-  }
-  // Fallback heuristic
-  const fallback: Record<string, number> = {
-    types: 0, models: 0, interfaces: 0,
-    config: 1, configuration: 1,
-    repo: 2, repository: 2, dal: 2,
-    service: 3, services: 3,
-    runtime: 4, server: 4, api: 4,
-    ui: 5, components: 5, pages: 5, views: 5,
-  }
-  const parts = normalized.split('/')
-  for (const part of parts) {
-    if (part in fallback) return fallback[part]
-  }
-  return -1
-}
-
-function extractImports(filepath: string): string[] {
-  try {
-    const content = fs.readFileSync(filepath, 'utf-8')
-    const importRegex = /(?:import|from)\s+['"]([^'"]+)['"]/g
-    const imports: string[] = []
-    let match: RegExpExecArray | null
-    while ((match = importRegex.exec(content)) !== null) {
-      imports.push(match[1])
-    }
-    return imports
-  } catch {
-    return []
-  }
-}
-
-function getAllSourceFiles(dir: string, exts: string[]): string[] {
-  const results: string[] = []
-  if (!fs.existsSync(dir)) return results
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name)
-    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
-      results.push(...getAllSourceFiles(fullPath, exts))
-    } else if (entry.isFile() && exts.some(ext => entry.name.endsWith(ext))) {
-      results.push(fullPath)
-    }
-  }
-  return results
-}
-
-describe('architecture guards', () => {
-  const srcDir = path.join(ROOT, 'src')
-  const sourceFiles = getAllSourceFiles(srcDir, ['.ts', '.tsx', '.js', '.jsx'])
-
-  test('no file imports from a higher layer', () => {
-    const violations: string[] = []
-    for (const file of sourceFiles) {
-      const rel = path.relative(ROOT, file)
-      const fileLayer = resolveLayer(rel)
-      if (fileLayer === -1) continue
-      for (const imp of extractImports(file)) {
-        const impLayer = resolveLayer(imp)
-        if (impLayer !== -1 && impLayer > fileLayer) {
-          violations.push(
-            `${rel} (layer ${LAYER_ORDER[fileLayer]}) imports from layer ${LAYER_ORDER[impLayer]}: ${imp}`
-          )
-        }
-      }
-    }
-    expect(violations).toEqual([])
-  })
-
-  test('no source file exceeds the line limit', () => {
-    const violations: string[] = []
-    for (const file of sourceFiles) {
-      try {
-        const lineCount = fs.readFileSync(file, 'utf-8').split('\n').length
-        if (lineCount > FILE_SIZE_LIMIT) {
-          const rel = path.relative(ROOT, file)
-          violations.push(`${rel}: ${lineCount} lines (limit: ${FILE_SIZE_LIMIT})`)
-        }
-      } catch { /* skip unreadable files */ }
-    }
-    expect(violations).toEqual([])
-  })
-
-  test.todo('no circular imports')
-})
-```
-
-**Selection rule:** Generate the Python version if the project uses Python (detected in
-Step 1). Generate the TypeScript version if the project uses TypeScript/JavaScript. Generate
-both if the project is polyglot.
-
-**Directory creation:** Create the `tests/` directory if it does not already exist.
-
-**Existing violations:** If the project has known pre-existing violations that would cause
-these tests to fail immediately, add `@pytest.mark.skip(reason="TODO: fix existing violations")`
-(Python) or `test.skip` (TypeScript) annotations rather than omitting the tests entirely.
-The tests should be present but acknowledged as aspirational until the violations are cleaned up.
-
-### Step 8: Create Task Entry Points
-
-Ensure the project has consistent, discoverable entry points. These must be documented
-in CLAUDE.md and **actually work** (verify by running each one):
-
-- **build** — Compile or bundle the project
-- **test** — Run all tests
-- **lint** — Lint and format check (with auto-fix option)
-- **run** — Start the application
-- **check** — Run lint + test + build in sequence (the validation harness)
-
-If entry points are missing, create them using the project's build system
-(Makefile, package.json scripts, Cargo.toml, etc.).
-
-**Non-functional command annotation:** If a command cannot be verified (e.g., `npm start`
-requires a missing entry point), annotate it in CLAUDE.md: `npm start` *(not yet functional
-— entry point missing)*. Never list a broken command without qualification.
-
-> "When Codex got stuck, we treated it as an environment design problem — what was
-> missing for the agent to proceed reliably?"
-
-The `check` command is critical for **Pillar: Entropy Management** — it's how agents
-verify their own changes don't degrade the codebase.
-
-### Step 9: Report Summary
-
-After completing all steps, produce a summary report:
+## Step 9: Report Summary
 
 ```
 === Harness Init Summary ===
+Project: [name] | Language: [lang] | Framework: [fw]
 
-Project: [name]
-Language: [language(s)]
-Framework: [framework(s)]
+Files Created: [list all created files]
+Entry Points Verified: [pass/fail for each]
+Four Pillars: [score for each]
+gstack: [yes/no]
 
-Files Created:
-  [x] CLAUDE.md (root, XX lines)
-  [x] src/services/CLAUDE.md (nested, XX lines)
-  [x] src/api/CLAUDE.md (nested, XX lines)
-  ... (list all nested CLAUDE.md files)
-  [x] docs/ARCHITECTURE.md
-  [x] docs/CONVENTIONS.md
-  [x] docs/TESTING.md
-  [x] docs/LINTING.md
-  [x] docs/DECISIONS.md
-  [x] docs/PROVIDERS.md
-  [x] docs/OBSERVABILITY.md
-  [x] docs/WORKFLOW.md (full lifecycle if gstack detected, oh-my-agents-only otherwise)
-  [x] .claude/harness.json
-  [x] .pre-commit-config.yaml (with architecture guard)
-  [x] tests/test_architecture.py or tests/architecture.test.ts
-  [x] scripts/bootstrap.sh
-
-Entry Points Verified:
-  [pass/fail] build: [command]
-  [pass/fail] test: [command]
-  [pass/fail] lint: [command]
-  [pass/fail] run: [command]
-  [pass/fail] check: [command]
-
-Four Pillars Assessment:
-  Architecture as Guardrails:     [score/description]
-  Documentation as System of Record: [score/description]
-  Observability & Legibility:     [score/description]
-  Entropy Management:             [score/description]
-
-Legibility Score: [X/30] (see /legibility-score for details)
-
-Plugins Detected:
-  gstack: [yes/no]
-
-Next Steps:
-  - Review generated docs and fill in project-specific details
-  - Run /legibility-score for detailed assessment
-  - Use /spec-to-task to create execution plans for features
-  - Copy templates/github-actions-harness.yml to .github/workflows/ for CI enforcement
-  [If gstack detected:]
-  - Use /office-hours to brainstorm your next feature
-  - See docs/WORKFLOW.md for the full integrated development lifecycle
+Next Steps: [top 3 recommendations]
 ```
 
 ## Rules
 
-- **CLAUDE.md must stay under 100 lines** — it is the table of contents, not the encyclopedia
-- **Nested CLAUDE.md must stay under 50 lines** — scoped context, not a novel
-- **Every command must actually work** — verify by running each entry point
-- **Use structured formats (JSON/YAML) where agents need to parse rules** — agents comply
-  better with structured rules than prose
-- **Bootstrap script must work from a clean checkout** — the first-run experience matters
-- **All entry points must be documented and functional** — undocumented commands don't exist
-- **Past decisions live in ADRs, not in people's heads** — add them to docs/DECISIONS.md
-- **Execution plans go in `docs/exec-plans/`** — not in `.claude/plans/`
-- **When an agent struggles, treat it as a harness problem, not an agent problem** — improve
-  the environment, documentation, and feedback loops
-- **Four pillars must all be addressed** — Architecture, Documentation, Observability, Entropy;
-  skipping any pillar creates blind spots that compound over time
-- **Nested CLAUDE.md for every module with 5+ source files** — this is how OpenAI scaled to
-  88 instruction files; one root file cannot hold everything
-- **Layer keys must match directory names** — `harness.json` layer keys use the actual
-  directory name including plural forms (`"services"` not `"service"`)
-- **Auto-create `.env.example` when secrets detected** — if hardcoded secrets are found,
-  produce `.env.example` with placeholder values so bootstrap and CONVENTIONS.md refs work
-- **Never list broken commands without annotation** — if a command cannot be verified,
-  qualify it in CLAUDE.md (e.g., *(not yet functional — entry point missing)*)
-- **Module Map includes file counts** — the Files column lets agents assess when a module
-  has grown past the nested CLAUDE.md threshold
-- **Pre-commit must include architecture guard** — lint/format alone is not enough; structural
-  tests that enforce TASTE/ARCH rules must run at commit time, not just in CI
-- **Bootstrap must install pre-commit hooks** — add `pre-commit install` (or equivalent) to
-  `scripts/bootstrap.sh` so hooks are active from the first checkout
-- **Architecture test file must match pre-commit config** — the test file path in
-  `.pre-commit-config.yaml` and the generated skeleton must reference the same path;
-  a mismatch means the guard silently does nothing
-- **Never overwrite existing architecture tests** — if `tests/test_architecture.py` or
-  `tests/architecture.test.ts` already exists, skip generation to preserve manual additions
+- CLAUDE.md under 100 lines, nested CLAUDE.md under 50 lines
+- Every command must actually work — verify by running
+- Bootstrap must work from clean checkout
+- All entry points documented and functional
+- Layer keys match directory names in harness.json
+- Pre-commit must include architecture guard
+- Never overwrite existing architecture tests
+- Four pillars must all be addressed

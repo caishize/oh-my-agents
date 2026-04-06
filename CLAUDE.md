@@ -9,47 +9,40 @@ Deep integration with [gstack](https://github.com/garrytan/gstack.git) for full-
 
 | Command | Pillar | Purpose |
 |---------|--------|---------|
-| `/harness-init` | All | Initialize harness: nested CLAUDE.md, docs/, bootstrap, config |
+| `/harness-init` | All | Initialize harness: CLAUDE.md, docs/, bootstrap, config |
 | `/legibility-score` | All | 10-metric Agent Legibility Score (0-30) |
-| `/spec-to-task` | Documentation | Convert specs to execution plans with lifecycle (auto-imports gstack design docs) |
-| `/verify` | Architecture | Post-execution check: build, test, lint, arch guard + gstack readiness signal |
-| `/encode-mistake` | Entropy | Convert agent mistakes into permanent lint/hook rules |
+| `/spec-to-task` | Documentation | Convert specs to execution plans with lifecycle |
+| `/verify` | Architecture | Post-execution check: build, test, lint, arch guard |
+| `/encode-mistake` | Entropy | Convert mistakes OR expert taste into permanent rules |
 | `/arch-guard` | Architecture | Enforce architectural constraints and Providers |
-| `/taste-encoder` | Architecture | Encode expertise into lint rules and tests (proactive) |
-| `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code, stale plans |
-| `/harness-review` | Entropy | Code review: slop, safety, architecture, plan alignment |
-| `/harness-dashboard` | Observability | Session metrics, plan progress, harness health + gstack metrics |
-| `/harness-metrics` | Observability | Detailed metric queries and analysis |
+| `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
+| `/harness-review` | Entropy | Code review with auto gstack dual-review integration |
+| `/harness-dashboard` | Observability | Metrics overview + deep-dive queries |
 
 ### gstack Integration Skills
 
 | Command | Purpose |
 |---------|---------|
 | `/gstack-sync` | Detect gstack, configure artifact bridges, sync metrics |
-| `/unified-review` | Dual-system review: harness + structural in one pass |
 | `/lifecycle` | Full lifecycle orchestrator: guides through all phases |
 
 ## Agents (Read-only background)
 
-| Agent | Pillar | Purpose |
-|-------|--------|---------|
-| arch-guard-agent | Architecture | Background compliance checking |
-| entropy-sweep-agent | Entropy | Background entropy scanning |
-| harness-reviewer | Entropy | Background code review |
-| session-observer-agent | Observability | Session tracking and shift-handoff |
-| doc-gardening-agent | Documentation | Background documentation gardening and drift repair |
-| gstack-bridge-agent | Integration | Cross-system artifact health monitoring |
+| Agent | Purpose |
+|-------|---------|
+| session-observer-agent | Session tracking and shift-handoff |
+| doc-gardening-agent | Documentation gardening and drift repair |
 
 ## Hooks (Automatic enforcement)
 
-| Hook | Event | Pillar | Behavior |
-|------|-------|--------|----------|
-| arch-check.sh | PreToolUse | Architecture | Blocks layer violations, Providers bypass, sibling layer support |
-| safety-check.sh | PreToolUse | Entropy | Blocks hardcoded secrets and risk patterns |
-| bash-safety-check.sh | PreToolUse | Entropy | Blocks credential leaks in bash commands |
-| self-verify-check.sh | PostToolUse | Architecture | Warns on type/syntax errors after edit (TS, Python, JS, Rust, Go) |
-| session-metrics.sh | PostToolUse | Observability | Records tool usage, hook performance, and effectiveness metrics |
-| doc-drift-check.sh | Stop | Documentation | Warns about documentation drift |
+| Hook | Event | Behavior |
+|------|-------|----------|
+| arch-check.sh | PreToolUse | Blocks layer violations, Providers bypass |
+| safety-check.sh | PreToolUse | Blocks hardcoded secrets and risk patterns |
+| bash-safety-check.sh | PreToolUse | Blocks credential leaks in bash commands |
+| self-verify-check.sh | PostToolUse | Warns on type/syntax errors after edit |
+| session-metrics.sh | PostToolUse | Records tool usage and hook performance |
+| doc-drift-check.sh | Stop | Warns about documentation drift |
 
 ## Four Pillars
 
@@ -67,7 +60,7 @@ Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 
 **Daily cycle (with gstack — full lifecycle):**
 2. `/lifecycle next` (auto-guides) or manually:
-   `/office-hours` → `/autoplan` → `/spec-to-task` → develop → `/verify` → `/unified-review` → `/ship`
+   `/office-hours` → `/autoplan` → `/spec-to-task` → develop → `/verify` → `/harness-review` → `/ship`
 
 **Daily cycle (oh-my-agents only):**
 3. `/spec-to-task` → develop → `/verify` → `/harness-review`
@@ -87,7 +80,7 @@ oh-my-agents and gstack are complementary:
 Key integration points:
 - Design docs from `/office-hours` auto-feed into `/spec-to-task`
 - `/verify` emits readiness signals consumed by gstack's `/ship`
-- `/unified-review` orchestrates both review systems with deduplication
+- `/harness-review` auto-detects gstack for dual-review with deduplication
 - `/harness-dashboard` includes gstack metrics (skills, reviews, lifecycle coverage)
 - `/investigate` → `/encode-mistake` closes the feedback loop permanently
 - `/lifecycle` orchestrates the full cycle regardless of which plugins are installed

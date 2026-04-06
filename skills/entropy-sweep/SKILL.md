@@ -237,6 +237,6 @@ give agents confident but wrong instructions.
 - Never delete code you're not certain is unused — flag for human review
 - When a pattern is violated, also check if enforcement is missing
 - For each finding, include the specific file:line and actionable fix
-- Recommend `/taste-encoder` for patterns that need mechanical enforcement
+- Recommend `/encode-mistake --proactive` for patterns that need mechanical enforcement
 - Recommend `/harness-dashboard` for tracking entropy trends over time
 - This sweep should run weekly or before every major release

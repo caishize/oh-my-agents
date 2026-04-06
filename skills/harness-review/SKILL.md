@@ -1,8 +1,8 @@
 ---
 name: harness-review
-description: "Harness-specific code review (NOT generic code review) — evaluates changes against the four harness pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Checks layer violations, providers bypass, doc drift, safety patterns, slop, and agent context quality. For general code review use a dedicated code-reviewer agent instead. Aliases: harness审查, 四支柱审查, 架构审查, 层级检查, harness代码评审"
+description: "Four-pillar code review with optional gstack structural review integration. Checks slop, safety, architecture, plan alignment, doc drift, and entropy. Auto-detects gstack for dual-system review with deduplicated findings. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
 user-invocable: true
-argument-hint: "[PR-number or file-path]"
+argument-hint: "[PR-number or file-path] [--plan <plan-id>] [--no-gstack]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -166,6 +166,31 @@ Does this change strengthen or weaken the harness?
 - Unused dependencies in package.json/requirements.txt that are never imported in
   source code. Unused dependencies increase bundle size and supply-chain attack surface.
 
+### Review 7: gstack Structural Review (auto-detected)
+
+Unless `--no-gstack` is passed, check for gstack installation:
+
+```bash
+GSTACK_PATH=""
+for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
+  [ -d "$p" ] && GSTACK_PATH="$p" && break
+done
+echo "GSTACK: ${GSTACK_PATH:-not_found}"
+```
+
+**If gstack is installed**: Invoke gstack's `/review` skill for structural analysis
+(SQL injection, LLM trust boundaries, enum completeness, design consistency). Merge
+findings with harness review, deduplicating overlaps. Tag each finding as `[HARNESS]`,
+`[STRUCTURAL]`, or `[BOTH]`. Cross-validated findings (flagged by both) escalate severity.
+
+**If gstack is not installed**: Apply a lightweight structural checklist:
+- Security: SQL injection, XSS, command injection, hardcoded secrets
+- Data integrity: race conditions, missing transactions, unvalidated input
+- Breaking changes: API signature changes without migration
+- Resource leaks: unclosed handles, unbounded growth
+
+Log review results to `.claude/metrics/reviews.jsonl` for dashboard tracking.
+
 ## Output Format
 
 ```markdown
@@ -229,6 +254,9 @@ Does this change strengthen or weaken the harness?
 - Be concise — high-signal, not verbose
 - One pass — catch everything in a single review
 - Don't nitpick style that linters should enforce
-- Flag when a new lint rule should be created via `/taste-encoder`
+- Flag when a new lint rule should be created via `/encode-mistake --proactive`
 - Remember: bad patterns in the codebase multiply via every future agent PR
 - "Waiting is expensive, correction is cheap" — don't block trivial changes
+- Auto-detect gstack for dual-system review; `--no-gstack` to skip
+- Deduplicate cross-system findings; cross-validated issues escalate severity
+- Log results for both `/harness-dashboard` and gstack's `/ship` consumption

@@ -246,7 +246,7 @@ Present the score card, then list the **top 3 improvements** ranked by impact.
 For each improvement, provide specific, actionable steps.
 
 Recommend running `/harness-init` for items scoring 0-1.
-Recommend running `/taste-encoder` for items scoring 2 that need custom rules.
+Recommend running `/encode-mistake --proactive` for items scoring 2 that need custom rules.
 Recommend running `/entropy-sweep` for codebases scoring 21+ that need ongoing maintenance.
 
 ## Rules

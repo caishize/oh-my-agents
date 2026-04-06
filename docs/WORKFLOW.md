@@ -122,25 +122,25 @@ Runs in order: **lint -> build -> test -> arch guard**
 - RED: Fix failures first. Recurring failures? -> `/encode-mistake`
 - YELLOW: Warnings present -> review before proceeding
 
-**Next**: `/unified-review` (recommended) or `/review` + `/harness-review`
+**Next**: `/harness-review` (auto-detects gstack for dual review)
 
 ### 6. Review (both systems)
 
-**Recommended**: `/unified-review` — orchestrates both systems in a single pass:
+**Recommended**: `/harness-review` — auto-detects gstack and orchestrates both systems in a single pass:
 
 | System | Focus | Catches |
 |--------|-------|---------|
 | oh-my-agents (harness) | Four-pillar review | Slop (priority 1), layer violations, plan alignment, doc drift, entropy |
 | gstack (structural) | PR structural review | SQL injection, LLM trust boundaries, scope drift, enum completeness |
 
-The unified review:
+When gstack is detected, `/harness-review` automatically:
 - Runs both review passes
 - Deduplicates findings (same file + line → merge)
 - Cross-validates: issues found by both systems get escalated severity
 - Tags each finding with source: `[HARNESS]`, `[STRUCTURAL]`, or `[BOTH]`
 - Logs to both `.claude/metrics/reviews.jsonl` and gstack's review system
 
-**Alternative**: Run `/harness-review` and `/review` separately.
+Without gstack, `/harness-review` runs the four-pillar harness review only.
 
 **Next**: `/ship` or `/lifecycle ship`
 
@@ -216,13 +216,13 @@ Continuous improvement through rule encoding and entropy management:
 | Command | Trigger | Output |
 |---------|---------|--------|
 | `/encode-mistake` | Agent made a recurring error | Permanent lint rule, hook, or structural test |
-| `/taste-encoder` | Expert dislikes a pattern | Custom TASTE-NNN rule with enforcement |
+| `/encode-mistake --proactive` | Expert dislikes a pattern | Custom TASTE-NNN rule with enforcement |
 | `/entropy-sweep` | Weekly / pre-release scan | Report on slop, drift, dead code, stale plans |
 
 **gstack integration loop**:
 - `/investigate` (gstack) finds root cause → `/encode-mistake` (oh-my-agents) makes it permanent
 - `/qa` (gstack) finds bugs → fix → `/encode-mistake` → never happens again
-- `/design-review` (gstack) finds UI issues → `/taste-encoder` → design rules encoded
+- `/design-review` (gstack) finds UI issues → `/encode-mistake --proactive` → design rules encoded
 
 The key loop: **Bug found → root cause → fix → encode → permanent guardrail → never happens again**
 
@@ -244,7 +244,7 @@ The key loop: **Bug found → root cause → fix → encode → permanent guardr
 /verify ──→ verify report + gstack readiness signal
        │                    │
        ↓                    ↓ (reviewed)
-/unified-review ──→ dual findings (reviews.jsonl + gstack review log)
+/harness-review ──→ dual findings (reviews.jsonl + gstack review log)
        │                    │
        ↓                    ↓ (shipped)
 /ship ──→ VERSION + CHANGELOG + PR
@@ -274,7 +274,7 @@ The key loop: **Bug found → root cause → fix → encode → permanent guardr
 ```
 /lifecycle next                # Auto-detect and guide through phases
 # OR manually:
-/office-hours → /autoplan → /spec-to-task → [develop] → /verify → /unified-review → /ship
+/office-hours → /autoplan → /spec-to-task → [develop] → /verify → /harness-review → /ship
 ```
 
 ### Feature development (oh-my-agents only)

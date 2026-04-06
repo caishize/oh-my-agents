@@ -30,7 +30,7 @@ export interface Providers {
 - All service/runtime code accesses cross-cutting concerns through Providers
 - Never import auth/telemetry/feature-flag libraries directly
 - The Providers interface is the single injection point
-- Enforced by: `arch-guard-agent` and `arch-check.sh` hook
+- Enforced by: `/arch-guard` skill and `arch-check.sh` hook
 
 ## Adding a New Provider
 
@@ -39,4 +39,4 @@ export interface Providers {
 3. Register it in the Providers factory
 4. Update this document
 5. Add a structural test verifying no direct access
-6. Run `/taste-encoder` to create a lint rule if needed
+6. Run `/encode-mistake --proactive` to create a lint rule if needed
