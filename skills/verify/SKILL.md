@@ -122,7 +122,7 @@ if [ -n "$GSTACK_PATH" ]; then
     REVIEW_STATUS="reviewed"
     echo "Last review: $LAST_REVIEW"
   else
-    echo "No review log found — run /review or /unified-review before /ship"
+    echo "No review log found — run /review or /harness-review before /ship"
   fi
 
   # Check for QA results
@@ -194,7 +194,7 @@ gstack Readiness (if available):
   Benchmark baseline: {exists / none}
 
 Next Steps:
-  [GREEN]  All checks pass. Run /unified-review (or /harness-review) to complete the cycle.
+  [GREEN]  All checks pass. Run /harness-review to complete the cycle.
   [RED]    Fix failing checks before review.
            Priority: lint → build → test → arch
 

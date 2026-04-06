@@ -1,8 +1,8 @@
 ---
 name: encode-mistake
-description: "Convert an agent mistake or recurring failure into a permanent guardrail — lint rule, structural test, hook, or doc rule. Implements Mitchell Hashimoto's principle: 'Every agent mistake is an encoding opportunity.' Complements /taste-encoder (which starts from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 经验编码, 防止复发"
+description: "Convert agent mistakes or expert preferences into permanent guardrails — lint rules, structural tests, hooks. Two modes: reactive (from failures) and proactive (from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 品味编码, 规则编码"
 user-invocable: true
-argument-hint: "<description of what went wrong> [--hook-output] [--from-investigation <id>]"
+argument-hint: "<description> [--proactive] [--hook-output] [--from-investigation <id>]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -11,65 +11,52 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 > "Every agent mistake is an encoding opportunity. Each person's expertise becomes
 > a multiplier for the entire team's agent fleet." — Mitchell Hashimoto
 
-Turn a failure into a permanent guardrail. This skill systematically converts agent
-mistakes, recurring `/verify` failures, or observed bad patterns into mechanical
-enforcement — so the same mistake cannot happen twice.
+Turn failures or expert preferences into permanent guardrails. Two modes:
 
-**Difference from `/taste-encoder`:**
-- `/taste-encoder` starts from a *pattern you dislike* (proactive taste encoding)
-- `/encode-mistake` starts from a *specific failure that already happened* (reactive
-  learning from incidents). Both produce the same output: a permanent enforcement rule.
+- **Reactive** (default): A specific failure happened — encode it so it can't recur
+- **Proactive** (`--proactive`): You dislike a pattern — encode your taste as enforcement
+
+Both modes produce the same output: a permanent TASTE rule (lint, test, hook, or doc).
 
 ## When to Use
 
 - An agent made the same mistake twice despite documentation
 - `/verify` shows a recurring test failure across multiple sessions
-- `/harness-review` flagged slop that a linter should have caught automatically
-- A hook fired but the agent worked around it or was confused by the error message
+- `/harness-review` flagged slop that a linter should have caught
+- You see a code pattern you dislike and want to prevent it permanently
 - A security issue was caught in review that should have been blocked earlier
 
 ## Task
 
-Take the mistake description from `$ARGUMENTS` and create a permanent enforcement artifact.
+Take the description from `$ARGUMENTS` and create a permanent enforcement artifact.
 
-If `--hook-output` flag is present, treat `$ARGUMENTS` as a raw hook error message
-and parse it to understand what pattern was violated.
+**Flags:**
+- `--proactive` — Encode a preference/taste (no failure needed, just a pattern you dislike)
+- `--hook-output` — Treat input as raw hook error message
+- `--from-investigation <id>` — Auto-populate from gstack `/investigate` artifact in
+  `.claude/metrics/investigations.jsonl`
 
-If `--from-investigation <id>` is provided, read the structured investigation artifact
-from `.claude/metrics/investigations.jsonl` to auto-populate the mistake context:
+### Step 1: Understand the Pattern
 
-```bash
-if [ -f ".claude/metrics/investigations.jsonl" ]; then
-  # Find the investigation entry matching the provided ID or most recent
-  INVESTIGATION=$(grep "\"id\":\"$ID\"" .claude/metrics/investigations.jsonl 2>/dev/null | tail -1)
-  if [ -z "$INVESTIGATION" ]; then
-    INVESTIGATION=$(tail -1 .claude/metrics/investigations.jsonl)
-  fi
-  echo "Investigation: $INVESTIGATION"
-fi
-```
+**Reactive mode** (default): Parse the failure — what bad pattern occurred, what should
+have happened instead, has it happened before?
 
-Extract from the investigation artifact: `error` (what failed), `root_cause` (why),
-`files_involved` (where), and `suggested_rule` (proposed fix). Use these to pre-populate
-Steps 1-2 so the user does not need to manually describe the mistake.
+**Proactive mode** (`--proactive`): Parse the preference — what code pattern do you
+dislike, what's the preferred alternative, why does it matter?
 
-### Step 1: Understand the Mistake
+Ask clarifying questions if needed:
+1. **Bad pattern** — Show an example of what's wrong or disliked
+2. **Good pattern** — Show the preferred alternative
+3. **Why it matters** — observability, consistency, performance, security
+4. **Severity** — Error (block), warning (flag), or info (suggest)
 
-Parse the input:
-1. What exact bad pattern occurred? (specific code, file, import path, command)
-2. What should have happened instead?
-3. Has this happened before? (search git log for similar fixes)
-4. Is this language/framework-specific or universal to all projects?
-
-Ask clarifying questions if the input is ambiguous. Do not guess.
-
-Classify the mistake type:
+Classify the type:
 - `arch-violation` — layer boundary crossed or Providers bypassed
 - `secret-leak` — hardcoded credential or token
 - `slop` — duplicate logic, copy-paste artifact, over-engineering
 - `doc-gap` — rule in docs but not mechanically enforced
 - `missing-rule` — pattern never documented or enforced
-- `bad-example` — existing code teaching the wrong pattern to future agents
+- `taste` — expert preference not yet encoded (proactive mode)
 
 ### Step 2: Find the Root Cause in the Codebase
 
@@ -235,3 +222,5 @@ Future agents will see:
   the investigate-to-encode artifact handoff and dashboard tracking of encode rates.
 - **Auto-scan on improve** — `/lifecycle improve` should scan `investigations.jsonl` for
   entries where `encoded` is false and suggest encoding each one
+- **Proactive mode is equally valid** — encoding expert taste before failures occur is
+  more efficient than waiting for mistakes; use `--proactive` for preemptive encoding

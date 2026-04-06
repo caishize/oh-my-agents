@@ -10,7 +10,7 @@ Project-level coding conventions. Customize for your project after running `/har
 - **Constants**: UPPER_SNAKE (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`)
 - **Test files**: `[module].test.ts` or `test_[module].py`
 
-> Customize above for your project. Enforce via `/taste-encoder`.
+> Customize above for your project. Enforce via `/encode-mistake --proactive`.
 
 ## File Size
 

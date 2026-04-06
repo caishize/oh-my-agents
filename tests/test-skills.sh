@@ -46,7 +46,7 @@ echo "=== oh-my-agents Skill Tests ==="
 echo ""
 
 # --- Required skills ---
-EXPECTED_SKILLS="harness-init legibility-score spec-to-task verify encode-mistake arch-guard taste-encoder entropy-sweep harness-review harness-dashboard harness-metrics gstack-sync unified-review lifecycle"
+EXPECTED_SKILLS="harness-init legibility-score spec-to-task verify encode-mistake arch-guard entropy-sweep harness-review harness-dashboard gstack-sync lifecycle"
 
 echo "--- Skill existence ---"
 for skill in $EXPECTED_SKILLS; do

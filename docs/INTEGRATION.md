@@ -18,13 +18,13 @@ metric namespaces.
 | Decomposition | — | /spec-to-task (layer-aware) | Design doc auto-imported |
 | Execution | /guard (freeze/careful) | hooks (arch/safety/metrics) | Dual hook systems coexist |
 | Verification | — | /verify (lint→build→test→arch) | Readiness signal for /ship |
-| Review | /review (structural) | /harness-review (four-pillar) | /unified-review orchestrates both |
+| Review | /review (structural) | /harness-review (four-pillar, auto-detects gstack) | /harness-review orchestrates both |
 | Shipping | /ship (version/changelog/PR) | — | Consumes verify + review data |
 | Deployment | /land-and-deploy + /canary | — | Readiness gates include harness data |
 | Documentation | /document-release | doc-drift-check hook | Auto-sync + drift detection |
 | Retrospective | /retro (velocity) | /harness-dashboard (governance) | Unified metrics view |
 | Debugging | /investigate (root cause) | /encode-mistake (permanent rule) | Investigate → encode loop |
-| Quality | /qa + /design-review | /entropy-sweep + /taste-encoder | QA findings → taste rules |
+| Quality | /qa + /design-review | /entropy-sweep + /encode-mistake --proactive | QA findings → encoded rules |
 | Security | /cso (OWASP/STRIDE) | safety hooks (secrets) | Audit + real-time blocking |
 | Performance | /benchmark + /canary | — | Baseline tracking + monitoring |
 
@@ -46,7 +46,7 @@ metric namespaces.
 /verify ────────────────→ verify report + readiness signal
                              │ (.claude/metrics/verify.jsonl)
                              ↓ (reviewed)
-/unified-review ────────→ dual findings
+/harness-review ────────→ dual findings
                              │ (.claude/metrics/reviews.jsonl)
                              │ (~/.gstack/projects/$SLUG/*-reviews.jsonl)
                              ↓ (shipped)
@@ -74,7 +74,7 @@ metric namespaces.
 | /autoplan | Consensus tables | In plan file | /spec-to-task (extracted) |
 | /spec-to-task | Exec plan JSON | `docs/exec-plans/active/*.json` | /verify --plan |
 | /verify | Results JSONL | `.claude/metrics/verify.jsonl` | /ship (readiness) |
-| /unified-review | Findings JSONL | `.claude/metrics/reviews.jsonl` | /ship, /harness-dashboard |
+| /harness-review | Findings JSONL | `.claude/metrics/reviews.jsonl` | /ship, /harness-dashboard |
 | /review | Review log | `~/.gstack/projects/$SLUG/*-reviews.jsonl` | /ship (readiness gate) |
 | session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` | /harness-dashboard, /retro |
 | /qa | Test outcome | `~/.gstack/projects/$SLUG/*-test-outcome-*.md` | /harness-dashboard |
@@ -114,7 +114,7 @@ metric namespaces.
 
 Or manually:
 ```
-/office-hours → /autoplan → /spec-to-task → [develop] → /verify → /unified-review → /ship → /land-and-deploy → /retro + /harness-dashboard → /encode-mistake
+/office-hours → /autoplan → /spec-to-task → [develop] → /verify → /harness-review → /ship → /land-and-deploy → /retro + /harness-dashboard → /encode-mistake
 ```
 
 ### oh-my-agents Only
@@ -151,7 +151,7 @@ Both hook systems run independently and check different dimensions:
 
 ### Verify → Review → Ship Loop
 ```
-/verify (readiness signal) → /unified-review (dual findings) → /ship (consumes both)
+/verify (readiness signal) → /harness-review (dual findings) → /ship (consumes both)
 ```
 
 ### Investigate → Encode Loop
@@ -161,7 +161,7 @@ Both hook systems run independently and check different dimensions:
 
 ### QA → Taste Loop
 ```
-/qa (UI bug found) → /design-review (pattern identified) → /taste-encoder (rule encoded)
+/qa (UI bug found) → /design-review (pattern identified) → /encode-mistake --proactive (rule encoded)
 ```
 
 ### Retro → Improve Loop

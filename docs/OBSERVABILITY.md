@@ -21,7 +21,7 @@ Runtime observability configuration for agent-driven development.
 ## Metrics Collection
 Session metrics are automatically collected by the `session-metrics.sh` hook.
 Stored in `.claude/metrics/session-{date}.jsonl`.
-View with `/harness-dashboard` or `/harness-metrics`.
+View with `/harness-dashboard` or `/harness-dashboard --query`.
 
 ## Verification Patterns
 - API endpoint test: `curl localhost:PORT/health`

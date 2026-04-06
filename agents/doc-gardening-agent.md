@@ -123,3 +123,4 @@ Replace previous gardening summary — do not append indefinitely.
 - Flag but don't judge — report what's stale, let humans decide what to fix
 - Keep memory entries under 30 lines — trends, not raw findings
 - When data is missing, say so plainly — never fabricate observations
+- Recommend `/encode-mistake --proactive` for patterns needing enforcement

@@ -27,7 +27,7 @@ Mechanical enforcement of boundaries so agents can't accidentally violate rules.
 - **Structural tests** validating layer boundaries, naming, file sizes
 - **"Taste invariants"** — encoding team expertise into mechanical rules
 
-Implemented by: `/arch-guard`, `/taste-encoder`, `arch-guard-agent`, `arch-check.sh`
+Implemented by: `/arch-guard`, `/encode-mistake --proactive`, `arch-check.sh`
 
 ### 2. Documentation as System of Record
 
@@ -49,7 +49,7 @@ Agents and humans can see what happened, why it happened, and where the system s
 - **Shift-handoff** — session observer writes structured summaries to agent memory
 - **Nested CLAUDE.md** — module-level context for agent navigation
 
-Implemented by: `/harness-dashboard`, `/harness-metrics`, `session-observer-agent`,
+Implemented by: `/harness-dashboard`, `/harness-dashboard --query`, `session-observer-agent`,
 `session-metrics.sh`
 
 ### 4. Entropy Management ("Garbage Collection")
@@ -61,8 +61,7 @@ Continuous detection and repair of codebase degradation.
 - **Documentation drift detection** — verify docs match reality
 - **Missing enforcement detection** — rules without lint/test enforcement are suggestions
 
-Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
-`harness-reviewer`, `doc-drift-check.sh`, `/encode-mistake`
+Implemented by: `/entropy-sweep`, `/harness-review`, `doc-drift-check.sh`, `/encode-mistake`
 
 ## Plugin Structure
 
@@ -70,28 +69,21 @@ Implemented by: `/entropy-sweep`, `/harness-review`, `entropy-sweep-agent`,
 .claude-plugin/
 ├── plugin.json                           # Plugin manifest
 ├── marketplace.json                      # Marketplace definition for distribution
-skills/                                   # User-invocable slash commands (14 skills)
+skills/                                   # User-invocable slash commands (11 skills)
 ├── harness-init/SKILL.md                 # Initialize the harness
 ├── legibility-score/SKILL.md             # 10-metric readiness assessment
 ├── spec-to-task/SKILL.md                 # Task decomposition with execution plans
 ├── verify/SKILL.md                       # Post-execution verification (build/test/lint/arch)
-├── encode-mistake/SKILL.md               # Convert agent mistakes into guardrails
+├── encode-mistake/SKILL.md               # Convert agent mistakes into guardrails (--proactive for taste encoding)
 ├── arch-guard/SKILL.md                   # Set up constraint enforcement
-├── taste-encoder/SKILL.md                # Encode expertise into rules
 ├── entropy-sweep/SKILL.md                # Scan for entropy
-├── harness-review/SKILL.md               # Harness-aware code review
-├── harness-dashboard/SKILL.md            # Session metrics and health overview
-├── harness-metrics/SKILL.md              # Deep-dive metric queries
+├── harness-review/SKILL.md               # Harness-aware code review (auto-detects gstack for dual review)
+├── harness-dashboard/SKILL.md            # Session metrics and health overview (--query for deep-dive)
 ├── gstack-sync/SKILL.md                  # Detect gstack, configure bridges, sync metrics
-├── unified-review/SKILL.md               # Dual-system review (harness + gstack)
 └── lifecycle/SKILL.md                    # Full lifecycle orchestrator
-agents/                                   # Read-only background subagents (6 agents)
-├── arch-guard-agent.md                   # Architectural compliance
-├── entropy-sweep-agent.md                # Entropy detection
-├── harness-reviewer.md                   # Code review
+agents/                                   # Read-only background subagents (2 agents)
 ├── session-observer-agent.md             # Session tracking and shift-handoff
-├── doc-gardening-agent.md                # Documentation gardening and repair
-└── gstack-bridge-agent.md                # Cross-system artifact health monitoring
+└── doc-gardening-agent.md                # Documentation gardening and repair
 hooks/                                    # Event hook scripts (6 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution)
@@ -131,7 +123,7 @@ This plugin leverages specific Claude Code capabilities:
 | `${CLAUDE_PLUGIN_ROOT}` | hooks.json, hook scripts | Portable path resolution within plugin |
 | `allowed-tools` | legibility-score, harness-review, entropy-sweep | Enforce read-only behavior for review/scan skills |
 | `memory: project` | All agents | Accumulate findings across sessions |
-| `background: true` | arch-guard-agent, entropy-sweep-agent | Run scans without blocking the main conversation |
+| `background: true` | session-observer-agent | Run scans without blocking the main conversation |
 | `disallowedTools` | All agents | Prevent agents from modifying code |
 | `PreToolUse` hooks | arch-check.sh | Block layer violations before Edit/Write |
 | `Stop` hooks | doc-drift-check.sh | Advisory warnings after session ends |
