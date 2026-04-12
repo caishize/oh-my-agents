@@ -23,6 +23,8 @@
 read_input() {
     # Limit stdin to 100KB to prevent hooks from stalling on large Write payloads
     INPUT=$(head -c 102400)
+    # Ensure INPUT is never unset (set -u would kill downstream json_get calls)
+    INPUT="${INPUT:-}"
 }
 
 # --- JSON parsing: prefer jq, fallback to python3 ---
@@ -66,9 +68,12 @@ get_tool_name() {
 }
 
 get_cwd() {
-    json_get \
-        '.cwd // "."' \
-        "import sys,json; print(json.load(sys.stdin).get('cwd','.'))"
+    local result
+    result=$(json_get \
+        '.cwd // ""' \
+        "import sys,json; print(json.load(sys.stdin).get('cwd',''))")
+    # Return empty on bad input — callers must check and exit 0, not guess
+    echo "$result"
 }
 
 # --- Harness config loading ---

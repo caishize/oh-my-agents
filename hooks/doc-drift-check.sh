@@ -22,7 +22,8 @@ read_input
 
 PROJECT_DIR=$(get_cwd)
 
-# Early exit if not in a git repository
+# Early exit if cwd missing or not in a git repository
+[ -z "$PROJECT_DIR" ] && exit 0
 git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
 # Get files modified in the last commit or staged
