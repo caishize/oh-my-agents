@@ -9,7 +9,7 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths
+## Complementary Strengths (v0.18 baseline)
 
 | Dimension | gstack | oh-my-agents | Combined |
 |-----------|--------|-------------|----------|
@@ -17,15 +17,22 @@ metric namespaces.
 | Planning | /autoplan (triple-voice) | — | Consensus tables → plan constraints |
 | Decomposition | — | /spec-to-task (layer-aware) | Design doc auto-imported |
 | Execution | /guard (freeze/careful) | hooks (arch/safety/metrics) | Dual hook systems coexist |
-| Verification | — | /verify (lint→build→test→arch) | Readiness signal for /ship |
-| Review | /review (structural) | /harness-review (four-pillar, auto-detects gstack) | /harness-review orchestrates both |
-| Shipping | /ship (version/changelog/PR) | — | Consumes verify + review data |
-| Deployment | /land-and-deploy + /canary | — | Readiness gates include harness data |
+| Verification | — | /verify (lint→build→test→arch) | **Emits .claude/signals/verify-latest.json** for /ship pre-flight |
+| Review (structural) | /review | — | Composed by /harness-review, tag `[STRUCTURAL]` |
+| Review (architecture/entropy) | — | /harness-review | Owns four-pillar + dedup orchestration |
+| Review (cross-model) | /codex | — | Composed when `--with-codex`, tag `[CROSS-MODEL]` |
+| Review (security deep) | /cso (OWASP/STRIDE) | safety hooks (secrets) | Hooks block at edit-time; /cso owns deep audit, tag `[SECURITY]` |
+| Review (UX) | /ux-audit (v0.17+) | — | Auto-suggested when UI files touched, tag `[UX]` |
+| Shipping | /ship (version/changelog/PR) | — | Reads verify signal + review JSONL |
+| Deployment | /land-and-deploy | — | Readiness gates include harness data |
+| Monitoring | /canary | — | Health report → /harness-dashboard quality trend |
+| Multi-session | conductor.json + .gstack-worktrees/ | **worktree-aware** verify/hooks | No cross-fire across sibling sprints |
+| Confusion (v0.18) | Confusion Protocol | session-metrics + /harness-dashboard | Signals → .claude/metrics/confusion.jsonl |
 | Documentation | /document-release | doc-drift-check hook | Auto-sync + drift detection |
-| Retrospective | /retro (velocity) | /harness-dashboard (governance) | Unified metrics view |
+| Retrospective (velocity) | /retro | — | — |
+| Retrospective (governance) | — | /harness-dashboard | DORA-proxy + dual-review rate |
 | Debugging | /investigate (root cause) | /encode-mistake (permanent rule) | Investigate → encode loop |
 | Quality | /qa + /design-review | /entropy-sweep + /encode-mistake --proactive | QA findings → encoded rules |
-| Security | /cso (OWASP/STRIDE) | safety hooks (secrets) | Audit + real-time blocking |
 | Performance | /benchmark + /canary | — | Baseline tracking + monitoring |
 
 ## Artifact Flow
@@ -65,7 +72,10 @@ metric namespaces.
 /encode-mistake + /entropy-sweep → permanent guardrails
 ```
 
-## Artifact Bridges
+## Artifact Bridges (v1.1 manifest)
+
+All bridges are **read-only**, **glob-based**, and **gracefully degrade** when absent.
+See `.claude/integration.json` for the canonical list.
 
 | Source | Artifact | Location | Consumer |
 |--------|----------|----------|----------|
@@ -73,12 +83,21 @@ metric namespaces.
 | /plan-eng-review | Test plan | `~/.gstack/projects/$SLUG/*-test-plan-*.md` | /spec-to-task (auto) |
 | /autoplan | Consensus tables | In plan file | /spec-to-task (extracted) |
 | /spec-to-task | Exec plan JSON | `docs/exec-plans/active/*.json` | /verify --plan |
-| /verify | Results JSONL | `.claude/metrics/verify.jsonl` | /ship (readiness) |
+| /verify | Results JSONL | `.claude/metrics/verify.jsonl` | /harness-dashboard |
+| /verify | **Readiness signal** | `.claude/signals/verify-latest.json` | /ship pre-flight |
 | /harness-review | Findings JSONL | `.claude/metrics/reviews.jsonl` | /ship, /harness-dashboard |
-| /review | Review log | `~/.gstack/projects/$SLUG/*-reviews.jsonl` | /ship (readiness gate) |
-| session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` | /harness-dashboard, /retro |
+| /review | Review log | `~/.gstack/projects/$SLUG/*-reviews.jsonl` | /ship, /harness-review (dedup) |
+| /codex (v0.15+) | Cross-model report | `~/.gstack/projects/$SLUG/*-codex-*.md` | /harness-review (`[CROSS-MODEL]`) |
+| /cso | Security audit | `~/.gstack/projects/$SLUG/*-cso-*.md` | /harness-review (`[SECURITY]`) |
+| /ux-audit (v0.17+) | UX report | `~/.gstack/projects/$SLUG/*-ux-audit-*.md` | /harness-review (`[UX]`) |
 | /qa | Test outcome | `~/.gstack/projects/$SLUG/*-test-outcome-*.md` | /harness-dashboard |
+| /canary | Health report | `.gstack/canary-reports/*.json` | /harness-dashboard (quality trend) |
+| /land-and-deploy | Deploy report | `.gstack/deploy-reports/*.json` | /harness-dashboard (DORA proxy) |
+| conductor (v0.16+) | Multi-session state | `conductor.json` | /verify, hooks (worktree-aware) |
+| worktrees | Parallel sprint dirs | `.gstack-worktrees/` | /verify, hooks (scope guard) |
 | /investigate | Root cause | Session context | /encode-mistake |
+| session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` | /harness-dashboard, /retro |
+| Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | /harness-dashboard (legibility input) |
 | gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | /harness-dashboard |
 | gstack analytics | Eureka moments | `~/.gstack/analytics/eureka.jsonl` | /harness-dashboard |
 
@@ -169,10 +188,47 @@ Both hook systems run independently and check different dimensions:
 /retro + /harness-dashboard (metrics analysis) → /entropy-sweep (cleanup) → /encode-mistake (rules)
 ```
 
-## Principles
+## Composition Principles & Skill Ownership
+
+Decided in [Team Discussion 2026-04](TEAM-DISCUSSION-2026-04.md). The core rule:
+**composition over duplication**. oh-my-agents does only what gstack cannot, and
+defers cross-cutting concerns that gstack already owns.
+
+| Capability | Owner | Composer behavior |
+|------------|-------|-------------------|
+| Layer / arch enforcement | oh-my-agents (hooks + arch-guard) | always-on |
+| Secrets / bash safety | oh-my-agents (hooks) | edit-time blocking |
+| Entropy & encode rules | oh-my-agents (entropy-sweep + encode-mistake) | weekly + on-demand |
+| Doc drift | oh-my-agents (doc-drift-check) | session end |
+| Legibility scoring | oh-my-agents (legibility-score) | on-demand |
+| Lifecycle orchestration | gstack | oh-my-agents `/lifecycle` only routes & reports gates |
+| Slop deep-check | **gstack /codex** | /harness-review delegates, never duplicates |
+| Security deep-audit | **gstack /cso** | /harness-review delegates; hooks are backstop |
+| UX audit | **gstack /ux-audit** | /harness-review auto-suggests on UI diffs |
+| Cross-model verification | **gstack /codex** | opt-in via `--with-codex` |
+| Ship/Deploy/Canary | gstack | reads `.claude/signals/verify-latest.json` |
+| Velocity retro | gstack /retro | — |
+| Governance retro | oh-my-agents /harness-dashboard | DORA proxy + dual-review rate |
+
+## Anti-Bloat Constraints (hard rules)
+
+1. **No new skills** for integration purposes; modify existing skills only.
+2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers `/entropy-sweep` follow-up.
+3. **Glob over exact path** for every gstack bridge; gstack reorganizes frequently.
+4. **Loose version match**: probe artifact presence, not version strings.
+5. **Read-only bridge**: never write to `~/.gstack/`.
+6. **Quarterly contract review** (`/gstack-sync --contract-check`) — verify assumptions still hold.
+7. Every integration rule must answer: *"Will this still hold after gstack's next release?"*
+   If no — replace with capability detection.
+
+## Foundational Principles
 
 1. **Read-only bridge** — oh-my-agents reads gstack artifacts but never writes to gstack paths
 2. **Graceful degradation** — all features work when either plugin is absent
 3. **No duplicate data** — reference original files, don't copy metrics
-4. **Conversation + artifacts** — within a session, context flows naturally; across sessions, structured artifacts provide continuity
-5. **Rippable integration** — if either plugin updates, the bridge adapts; no tight coupling to specific versions
+4. **Conversation + artifacts** — within a session, context flows naturally;
+   across sessions, structured artifacts provide continuity
+5. **Rippable integration** — if either plugin updates, the bridge adapts; no tight coupling
+6. **Composition over duplication** — defer to gstack when gstack already covers the concern
+7. **Capability detection over version pinning** — probe artifact surface, not version numbers
+8. **Worktree awareness** — never operate across `.gstack-worktrees/` siblings

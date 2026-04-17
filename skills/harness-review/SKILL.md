@@ -1,8 +1,8 @@
 ---
 name: harness-review
-description: "Four-pillar code review with optional gstack structural review integration. Checks slop, safety, architecture, plan alignment, doc drift, and entropy. Auto-detects gstack for dual-system review with deduplicated findings. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
+description: "Four-pillar code review with composition-based gstack integration. Owns architecture/layer/entropy review; delegates deep slop & security to gstack /codex and /cso when available. Auto-deduplicates findings across [HARNESS]/[STRUCTURAL]/[CROSS-MODEL]/[SECURITY]/[UX]/[BOTH+] tags. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
 user-invocable: true
-argument-hint: "[PR-number or file-path] [--plan <plan-id>] [--no-gstack]"
+argument-hint: "[PR-number or file-path] [--plan <plan-id>] [--no-gstack] [--no-codex] [--no-cso] [--ux]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -59,33 +59,27 @@ For each slop finding, note the **agent replication risk**: bad patterns in the 
 multiply via every future agent-generated PR. Example: "Three retry implementations
 exist — an agent encountering this codebase will create a 4th."
 
-### Review 2: Risk & Safety (P0 — alongside Slop)
+### Review 2: Risk & Safety (P0)
 
-Security and safety issues compound just like slop. An agent that sees an insecure
-pattern will replicate it everywhere. Check for:
+**Composition rule (v3.2+)**: deep STRIDE/OWASP analysis is owned by gstack `/cso`.
+This pass does only the **fast secrets + boundary** check; if `/cso` is available
+(detected via gstack presence) and `--no-cso` is not set, recommend (or invoke when
+allowed) `/cso` for any non-trivial security surface. Do not duplicate its work.
 
-**Secrets in code:**
-- API keys, passwords, tokens, or connection strings committed to source
-- `.env` files or credentials accidentally included in the diff
-- Hardcoded secrets even in test files (use fixtures or env vars instead)
+**Always-on local checks (cheap, high-signal):**
+- **Secrets in diff** — API keys, tokens, connection strings, `.env`, hardcoded passwords
+  (even in tests). Hooks already block most of these; this is a backstop.
+- **Obvious unsafe patterns** — string-concatenated SQL, `eval()` of user input,
+  `dangerouslySetInnerHTML` from untrusted source.
+- **New external dependencies** — flag for human review; do not approve unmaintained
+  or unaudited packages.
 
-**Auth/authz bypass patterns:**
-- Endpoints missing authentication middleware
-- Authorization checks skipped or commented out
-- Permission escalation through parameter manipulation
-- JWT validation disabled or weakened
+**Delegate to gstack `/cso` when present:**
+- STRIDE threat modeling, OWASP Top 10 deep coverage, auth/authz bypass patterns,
+  trust-boundary analysis, deserialization risks. Tag delegated findings as `[SECURITY]`.
 
-**Unvalidated input at system boundaries:**
-- HTTP request bodies, query params, or headers used without validation
-- File paths constructed from user input without sanitization
-- Database queries built with string concatenation
-- Deserialization of untrusted data without schema validation
-
-**New external dependencies or network calls:**
-- New packages added — are they maintained, audited, necessary?
-- New outbound HTTP calls — are they to trusted endpoints?
-- New database queries — are they parameterized?
-- New file system access — is the scope appropriately restricted?
+**If gstack absent**, run the legacy full-checklist (auth bypass, input validation,
+deserialization, network calls) inline as fallback.
 
 ### Review 3: Architectural Compliance
 
@@ -166,9 +160,9 @@ Does this change strengthen or weaken the harness?
 - Unused dependencies in package.json/requirements.txt that are never imported in
   source code. Unused dependencies increase bundle size and supply-chain attack surface.
 
-### Review 7: gstack Structural Review (auto-detected)
+### Review 7: gstack Composition (auto-detected, dedupe-first)
 
-Unless `--no-gstack` is passed, check for gstack installation:
+Unless `--no-gstack` is passed, probe gstack and compose its complementary reviews:
 
 ```bash
 GSTACK_PATH=""
@@ -176,20 +170,32 @@ for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
   [ -d "$p" ] && GSTACK_PATH="$p" && break
 done
 echo "GSTACK: ${GSTACK_PATH:-not_found}"
+UI_TOUCHED=$(git diff --name-only 2>/dev/null | grep -Eic '\.(tsx|jsx|vue|svelte|css|html)$' || true)
 ```
 
-**If gstack is installed**: Invoke gstack's `/review` skill for structural analysis
-(SQL injection, LLM trust boundaries, enum completeness, design consistency). Merge
-findings with harness review, deduplicating overlaps. Tag each finding as `[HARNESS]`,
-`[STRUCTURAL]`, or `[BOTH]`. Cross-validated findings (flagged by both) escalate severity.
+**Composition matrix (do not duplicate gstack's work):**
 
-**If gstack is not installed**: Apply a lightweight structural checklist:
+| gstack skill | When to delegate | Tag | Flag to skip |
+|--------------|------------------|-----|--------------|
+| `/review` | structural analysis (SQL injection, enums, design consistency) | `[STRUCTURAL]` | `--no-gstack` |
+| `/codex` | adversarial / cross-model slop & taste verification | `[CROSS-MODEL]` | `--no-codex` |
+| `/cso` | OWASP Top 10 + STRIDE deep security audit | `[SECURITY]` | `--no-cso` |
+| `/ux-audit` | UI / interaction quality (auto-suggest if UI files touched) | `[UX]` | omit `--ux` to skip |
+
+**If gstack is installed**: recommend (or invoke if user opted in) the relevant
+gstack reviews. Merge findings with the harness pass. Apply tags above.
+Cross-validated findings (flagged by ≥2 systems) escalate one severity level
+and get tag `[BOTH+]`. **Never re-run a check that gstack just ran** — defer to
+gstack's output and reference its report path.
+
+**If gstack is not installed**: apply this lightweight structural checklist as fallback:
 - Security: SQL injection, XSS, command injection, hardcoded secrets
 - Data integrity: race conditions, missing transactions, unvalidated input
 - Breaking changes: API signature changes without migration
 - Resource leaks: unclosed handles, unbounded growth
 
-Log review results to `.claude/metrics/reviews.jsonl` for dashboard tracking.
+Log review results to `.claude/metrics/reviews.jsonl`. Reference (don't copy) any
+gstack report paths via `gstack_reports: [...]` field in the JSONL entry.
 
 ## Output Format
 
@@ -257,6 +263,10 @@ Log review results to `.claude/metrics/reviews.jsonl` for dashboard tracking.
 - Flag when a new lint rule should be created via `/encode-mistake --proactive`
 - Remember: bad patterns in the codebase multiply via every future agent PR
 - "Waiting is expensive, correction is cheap" — don't block trivial changes
-- Auto-detect gstack for dual-system review; `--no-gstack` to skip
-- Deduplicate cross-system findings; cross-validated issues escalate severity
+- Auto-detect gstack for composition; `--no-gstack` / `--no-codex` / `--no-cso` to opt out
+- **Composition over duplication**: delegate slop-deep to `/codex`, security-deep to `/cso`,
+  UX to `/ux-audit`; never re-run what gstack just ran
+- Deduplicate cross-system findings; ≥2 systems flagging the same issue → severity +1, tag `[BOTH+]`
+- Tag every finding: `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]`
 - Log results for both `/harness-dashboard` and gstack's `/ship` consumption
+- Reference gstack report paths in JSONL — never copy contents

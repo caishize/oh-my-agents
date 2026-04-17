@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "harness": {
     "plugin": "oh-my-agents",
     "version": "3.1.0",
@@ -8,26 +8,50 @@
   "gstack": {
     "detected": true,
     "path": "/root/.claude/skills/gstack",
-    "version": "0.17.0.0"
+    "version": "0.18.0.0",
+    "version_match": "loose",
+    "min_supported": "0.15.0.0"
   },
   "project": {
     "slug": "oh-my-agents"
   },
   "bridges": {
-    "design_docs": "~/.gstack/projects/oh-my-agents/*-design-*.md",
-    "test_plans": "~/.gstack/projects/oh-my-agents/*-test-plan-*.md",
-    "review_logs": "~/.gstack/projects/oh-my-agents/*-reviews.jsonl",
-    "qa_outcomes": "~/.gstack/projects/oh-my-agents/*-test-outcome-*.md",
-    "exec_plans": "docs/exec-plans/active/*.json",
-    "verify_metrics": ".claude/metrics/verify.jsonl",
-    "review_metrics": ".claude/metrics/reviews.jsonl",
-    "session_metrics": ".claude/metrics/session-*.jsonl",
+    "design_docs":        "~/.gstack/projects/oh-my-agents/*-design-*.md",
+    "test_plans":         "~/.gstack/projects/oh-my-agents/*-test-plan-*.md",
+    "review_logs":        "~/.gstack/projects/oh-my-agents/*-reviews.jsonl",
+    "qa_outcomes":        "~/.gstack/projects/oh-my-agents/*-test-outcome-*.md",
+    "codex_reports":      "~/.gstack/projects/oh-my-agents/*-codex-*.md",
+    "cso_reports":        "~/.gstack/projects/oh-my-agents/*-cso-*.md",
+    "ux_audit_reports":   "~/.gstack/projects/oh-my-agents/*-ux-audit-*.md",
+    "canary_reports":     ".gstack/canary-reports/*.json",
+    "deploy_reports":     ".gstack/deploy-reports/*.json",
+    "conductor_state":    "conductor.json",
+    "worktrees_root":     ".gstack-worktrees/",
+    "exec_plans":         "docs/exec-plans/active/*.json",
+    "verify_metrics":     ".claude/metrics/verify.jsonl",
+    "verify_signal":      ".claude/signals/verify-latest.json",
+    "review_metrics":     ".claude/metrics/reviews.jsonl",
+    "session_metrics":    ".claude/metrics/session-*.jsonl",
+    "confusion_metrics":  ".claude/metrics/confusion.jsonl",
     "gstack_skill_usage": "~/.gstack/analytics/skill-usage.jsonl",
-    "gstack_eureka": "~/.gstack/analytics/eureka.jsonl"
+    "gstack_eureka":      "~/.gstack/analytics/eureka.jsonl"
+  },
+  "composition": {
+    "slop_deep_check":   "gstack:/codex",
+    "security_audit":    "gstack:/cso",
+    "ux_audit":          "gstack:/ux-audit",
+    "cross_model_qa":    "gstack:/codex",
+    "harness_owns":      ["arch-guard", "layer-enforcement", "entropy-sweep", "encode-mistake", "doc-drift", "secrets-hook", "legibility-score"],
+    "gstack_owns":       ["/office-hours", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/retro", "/investigate", "/qa", "/codex", "/cso", "/ux-audit"],
+    "dedup_tags":        ["[HARNESS]", "[STRUCTURAL]", "[CROSS-MODEL]", "[SECURITY]", "[UX]", "[BOTH+]"]
   },
   "policies": {
     "read_only_bridge": true,
     "graceful_degradation": true,
-    "no_duplicate_metrics": true
+    "no_duplicate_metrics": true,
+    "glob_over_exact_path": true,
+    "loose_version_match": true,
+    "worktree_aware": true,
+    "review_contract_quarter": "2026-Q3"
   }
 }
