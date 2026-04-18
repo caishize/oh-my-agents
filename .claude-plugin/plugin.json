@@ -1,7 +1,7 @@
 {
   "name": "oh-my-agents",
-  "version": "3.1.0",
-  "description": "Lean harness engineering plugin for Claude Code — four pillars (architecture, documentation, observability, entropy) with gstack integration for full-lifecycle AI development. 11 skills, 2 agents, 6 hooks.",
+  "version": "3.2.0",
+  "description": "Lean harness engineering plugin for Claude Code — four pillars (architecture, documentation, observability, entropy). Composition-based gstack v0.18 integration: delegates slop-deep to /codex, security to /cso, UX to /ux-audit; worktree-aware; Gate Failure Routing; DORA-proxy metrics. 11 skills, 2 agents, 6 hooks.",
   "author": {
     "name": "caishize",
     "url": "https://github.com/caishize"
@@ -20,6 +20,10 @@
     "four-pillars",
     "claude-code",
     "gstack",
+    "gstack-integration",
+    "composition",
+    "worktree-aware",
+    "dora-metrics",
     "layer-enforcement",
     "progressive-disclosure"
   ],

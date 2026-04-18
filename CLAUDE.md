@@ -1,7 +1,9 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-Implements OpenAI's harness engineering methodology (four pillars) adapted for Claude Code.
-Deep integration with [gstack](https://github.com/garrytan/gstack.git) for full-lifecycle coverage.
+**v3.2.0** — Implements OpenAI's harness engineering methodology (four pillars)
+adapted for Claude Code. **Composition-based** integration with
+[gstack](https://github.com/garrytan/gstack.git) v0.18 — slop-deep / security-deep /
+UX audits delegated to gstack skills; architecture, entropy, legibility owned here.
 
 ## Skills (User-invocable)
 
@@ -16,15 +18,15 @@ Deep integration with [gstack](https://github.com/garrytan/gstack.git) for full-
 | `/encode-mistake` | Entropy | Convert mistakes OR expert taste into permanent rules |
 | `/arch-guard` | Architecture | Enforce architectural constraints and Providers |
 | `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
-| `/harness-review` | Entropy | Code review with auto gstack dual-review integration |
-| `/harness-dashboard` | Observability | Metrics overview + deep-dive queries |
+| `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex`, `/cso`, `/ux-audit` with dedup tags |
+| `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + deep-dive queries |
 
 ### gstack Integration Skills
 
 | Command | Purpose |
 |---------|---------|
-| `/gstack-sync` | Detect gstack, configure artifact bridges, sync metrics |
-| `/lifecycle` | Full lifecycle orchestrator: guides through all phases |
+| `/gstack-sync` | Detect gstack, configure bridges, sync metrics, `--contract-check` for quarterly drift review |
+| `/lifecycle` | Full lifecycle orchestrator with canary phase, worktree awareness, Gate Failure Routing |
 
 ## Agents (Read-only background)
 
@@ -77,10 +79,16 @@ oh-my-agents and gstack are complementary:
 - **gstack** accelerates delivery: ideation → planning → review → shipping → deployment → monitoring
 - **oh-my-agents** enforces quality: architecture → entropy → observability → documentation
 
-Key integration points:
+Key integration points (composition-based, read-only, glob-based, rippable):
 - Design docs from `/office-hours` auto-feed into `/spec-to-task`
-- `/verify` emits readiness signals consumed by gstack's `/ship`
-- `/harness-review` auto-detects gstack for dual-review with deduplication
-- `/harness-dashboard` includes gstack metrics (skills, reviews, lifecycle coverage)
+- `/verify` emits readiness signal (`.claude/signals/verify-latest.json`) for `/ship` pre-flight
+- `/harness-review` delegates slop-deep → `/codex`, security-deep → `/cso`, UX → `/ux-audit`;
+  tags findings `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
+- `/harness-dashboard` includes gstack metrics (skills, reviews, lifecycle, DORA proxy)
 - `/investigate` → `/encode-mistake` closes the feedback loop permanently
-- `/lifecycle` orchestrates the full cycle regardless of which plugins are installed
+- `/lifecycle` orchestrates full cycle + Gate Failure Routing (names exact remediation skill);
+  worktree-aware, never cross-fires across `.gstack-worktrees/` siblings
+- Confusion Protocol (gstack v0.18+) → `.claude/metrics/confusion.jsonl` → legibility input
+
+Full rationale: [docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md).
+Full bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md).
