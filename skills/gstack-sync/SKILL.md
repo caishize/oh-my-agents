@@ -69,7 +69,7 @@ Output this structure (Markdown):
 ```
 ## gstack ↔ oh-my-agents Integration Status
 
-**Plugins**: oh-my-agents v3.1.0  ·  gstack v{version} ({loose-match: ok/warn})
+**Plugins**: oh-my-agents v{harness.version from integration.json}  ·  gstack v{version} ({loose-match: ok/warn})
 **Project slug**: {slug}
 **Worktree context**: {single | N parallel worktrees detected}
 
