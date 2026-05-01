@@ -43,34 +43,44 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
 5. **Harness config** — Read `.claude/harness.json` for project configuration and
    expected module list.
 
-6. **gstack metrics (if available)** — Check for gstack integration data:
+6. **gstack metrics (if available)** — Check for gstack integration data. Each
+   probe is presence-based — never required.
+
    ```bash
    SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
    GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
    GSTACK_ANALYTICS="$HOME/.gstack/analytics"
+   GBRAIN_WT="$HOME/.gstack-brain-worktree"
 
-   echo "=== gstack Integration ==="
-   # Skill usage
-   if [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ]; then
+   # Core usage
+   [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ] && \
      echo "Skill usage entries: $(wc -l < "$GSTACK_ANALYTICS/skill-usage.jsonl")"
-   else
-     echo "Skill usage: not available"
-   fi
 
-   # Review logs
+   # Project artifacts
    if [ -d "$GSTACK_PROJECTS" ]; then
-     echo "Review logs: $(cat "$GSTACK_PROJECTS/"*-reviews.jsonl 2>/dev/null | wc -l) entries"
-     echo "Design docs: $(ls "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | wc -l)"
-     echo "Test plans: $(ls "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | wc -l)"
-     echo "QA outcomes: $(ls "$GSTACK_PROJECTS/"*-test-outcome-*.md 2>/dev/null | wc -l)"
-   else
-     echo "Project metrics: not available"
+     echo "Reviews:    $(cat $GSTACK_PROJECTS/*-reviews.jsonl 2>/dev/null | wc -l)"
+     echo "Designs:    $(ls $GSTACK_PROJECTS/*-design-*.md 2>/dev/null | wc -l)"
+     echo "Test plans: $(ls $GSTACK_PROJECTS/*-test-plan-*.md 2>/dev/null | wc -l)"
+     echo "QA:         $(ls $GSTACK_PROJECTS/*-test-outcome-*.md 2>/dev/null | wc -l)"
+     echo "Landings:   $(ls $GSTACK_PROJECTS/*-landing-*.md 2>/dev/null | wc -l)"
    fi
 
-   # Eureka moments
-   if [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ]; then
-     echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
+   # Local-repo deploy artifacts (v1.11+)
+   LANDING_LOCAL=$(ls .gstack/landing-reports/*.json 2>/dev/null | wc -l)
+   CANARY_LOCAL=$(ls .gstack/canary-reports/*.json 2>/dev/null | wc -l)
+   echo "Landing reports (local): $LANDING_LOCAL"
+   echo "Canary reports (local):  $CANARY_LOCAL"
+
+   # GBrain (v1.12+, federated via worktree v1.17+)
+   if [ -d "$GBRAIN_WT" ]; then
+     echo "GBrain learnings: $(cat $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)"
+     echo "GBrain timeline:  $(cat $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l)"
+     # Unencoded learnings = those without taste_id field — feed encode-mistake
+     echo "Unencoded learnings (proposable to /encode-mistake): $(grep -hv '"taste_id"' $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)"
    fi
+
+   [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ] && \
+     echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
    ```
 
 7. **Unified review logs** — Read `.claude/metrics/reviews.jsonl` for combined review data.
@@ -136,6 +146,9 @@ Generate the top 3 actionable recommendations based on the data:
 - If gstack installed but no dual reviews -> recommend `/harness-review` for next PR
 - If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
 - If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
+- If unencoded GBrain learnings > 5 -> recommend `/encode-mistake --from-gstack-learnings`
+- If gstack version < integration.json min_supported -> recommend `/gstack-sync --contract-check`
+- If landing reports exist but DORA shows [proxy] only -> note the mapping is wired
 - If lifecycle phases are skipped -> recommend `/lifecycle status` to identify gaps
 
 ### Step 4: Output
@@ -211,12 +224,24 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
 
 ### gstack Integration (if available)
   Status: {CONNECTED / NOT INSTALLED / NOT CONFIGURED}
+  gstack version: {X.Y.Z.W}    min_supported: {V}    {OK | DRIFT}
   Skills used (7d): {list of gstack skills used}
   Reviews: {N} gstack + {N} harness = {N} total ({N} dual-reviewed)
   Design docs: {N} available
   Lifecycle coverage: {phases used} / {total phases}
   Investigate→encode rate: {N}% (root causes converted to rules)
+  Learnings→encode rate:   {N}% (gstack learnings hardened to TASTE)
+  Landing reports (7d):    {N}    Canary reports (7d): {N}
+  GBrain federation:       {worktree present | absent}
   Eureka moments: {N} logged
+
+### DORA proxy
+  deployment_frequency:    {N/week}        [grounded if landings present, else proxy]
+  lead_time_p50:           {N days}        [grounded if landings have plan-id refs]
+  change_failure_rate:     {N%}            [grounded if canary reports present]
+  mttr_p50:                {N hours}       [grounded if canary incidents present]
+  Note: each metric is annotated [grounded] when backed by gstack landing/canary
+  reports, [proxy] when estimated from internal signals only.
 
 ### Recommendations
 1. [Most impactful recommendation] — run `/skill-name`

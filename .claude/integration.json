@@ -1,48 +1,62 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "root": "."
   },
   "gstack": {
     "detected": true,
     "path": "/root/.claude/skills/gstack",
-    "version": "0.18.0.0",
+    "version": "1.21.1.0",
     "version_match": "loose",
-    "min_supported": "0.15.0.0"
+    "min_supported": "1.9.0.0",
+    "milestone_pin": "GBrain federation (v1.9+) + workspace-aware ship (v1.11+) + GBrain onboarding (v1.12+) + GBrain worktree (v1.17+)"
   },
   "project": {
     "slug": "oh-my-agents"
   },
   "bridges": {
-    "design_docs":        "~/.gstack/projects/oh-my-agents/*-design-*.md",
-    "test_plans":         "~/.gstack/projects/oh-my-agents/*-test-plan-*.md",
-    "review_logs":        "~/.gstack/projects/oh-my-agents/*-reviews.jsonl",
-    "qa_outcomes":        "~/.gstack/projects/oh-my-agents/*-test-outcome-*.md",
-    "codex_reports":      "~/.gstack/projects/oh-my-agents/*-codex-*.md",
-    "cso_reports":        "~/.gstack/projects/oh-my-agents/*-cso-*.md",
-    "ux_audit_reports":   "~/.gstack/projects/oh-my-agents/*-ux-audit-*.md",
-    "canary_reports":     ".gstack/canary-reports/*.json",
-    "deploy_reports":     ".gstack/deploy-reports/*.json",
-    "conductor_state":    "conductor.json",
-    "worktrees_root":     ".gstack-worktrees/",
-    "exec_plans":         "docs/exec-plans/active/*.json",
-    "verify_metrics":     ".claude/metrics/verify.jsonl",
-    "verify_signal":      ".claude/signals/verify-latest.json",
-    "review_metrics":     ".claude/metrics/reviews.jsonl",
-    "session_metrics":    ".claude/metrics/session-*.jsonl",
-    "confusion_metrics":  ".claude/metrics/confusion.jsonl",
-    "gstack_skill_usage": "~/.gstack/analytics/skill-usage.jsonl",
-    "gstack_eureka":      "~/.gstack/analytics/eureka.jsonl"
+    "design_docs":              "~/.gstack/projects/oh-my-agents/*-design-*.md",
+    "test_plans":               "~/.gstack/projects/oh-my-agents/*-test-plan-*.md",
+    "review_logs":              "~/.gstack/projects/oh-my-agents/*-reviews.jsonl",
+    "qa_outcomes":              "~/.gstack/projects/oh-my-agents/*-test-outcome-*.md",
+    "codex_reports":            "~/.gstack/projects/oh-my-agents/*-codex-*.md",
+    "cso_reports":              "~/.gstack/projects/oh-my-agents/*-cso-*.md",
+    "ux_audit_reports":         "~/.gstack/projects/oh-my-agents/*-ux-audit-*.md",
+    "canary_reports":           ".gstack/canary-reports/*.json",
+    "deploy_reports":           ".gstack/deploy-reports/*.json",
+    "landing_reports_local":    ".gstack/landing-reports/*.json",
+    "landing_reports_project":  "~/.gstack/projects/oh-my-agents/*-landing-*.md",
+    "conductor_state":          "conductor.json",
+    "conductor_workspaces":     "~/conductor/workspaces/",
+    "worktrees_root":           ".gstack-worktrees/",
+    "gbrain_worktree":          "~/.gstack-brain-worktree/",
+    "gbrain_learnings_log":     "~/.gstack-brain-worktree/learnings-*.jsonl",
+    "gbrain_learnings_fallback":"~/.gstack/projects/oh-my-agents/*-learnings-*.jsonl",
+    "gbrain_timeline_log":      "~/.gstack-brain-worktree/timeline-*.jsonl",
+    "gbrain_review_log":        "~/.gstack-brain-worktree/review-*.jsonl",
+    "gbrain_developer_profile": "~/.gstack-brain-worktree/developer-profile-*.json",
+    "gbrain_repo_policy":       "~/.gstack/gbrain-repo-policy.json",
+    "exec_plans":               "docs/exec-plans/active/*.json",
+    "verify_metrics":           ".claude/metrics/verify.jsonl",
+    "verify_signal":            ".claude/signals/verify-latest.json",
+    "review_metrics":           ".claude/metrics/reviews.jsonl",
+    "session_metrics":          ".claude/metrics/session-*.jsonl",
+    "confusion_metrics":        ".claude/metrics/confusion.jsonl",
+    "gstack_skill_usage":       "~/.gstack/analytics/skill-usage.jsonl",
+    "gstack_eureka":            "~/.gstack/analytics/eureka.jsonl"
   },
   "composition": {
     "slop_deep_check":   "gstack:/codex",
     "security_audit":    "gstack:/cso",
     "ux_audit":          "gstack:/ux-audit",
     "cross_model_qa":    "gstack:/codex",
+    "observation_layer": "gstack:learnings-log (read-only)",
+    "deploy_metrics":    "gstack:/landing-report (read-only)",
     "harness_owns":      ["arch-guard", "layer-enforcement", "entropy-sweep", "encode-mistake", "doc-drift", "secrets-hook", "legibility-score"],
-    "gstack_owns":       ["/office-hours", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/retro", "/investigate", "/qa", "/codex", "/cso", "/ux-audit"],
+    "gstack_owns":       ["/office-hours", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/landing-report", "/retro", "/investigate", "/qa", "/codex", "/cso", "/ux-audit", "/setup-gbrain", "/health"],
+    "ignored":           ["/gstack-claude", "/scrape", "/skillify", "/pair-agent", "/open-gstack-browser"],
     "dedup_tags":        ["[HARNESS]", "[STRUCTURAL]", "[CROSS-MODEL]", "[SECURITY]", "[UX]", "[BOTH+]"]
   },
   "policies": {
@@ -52,6 +66,9 @@
     "glob_over_exact_path": true,
     "loose_version_match": true,
     "worktree_aware": true,
-    "review_contract_quarter": "2026-Q3"
+    "gbrain_read_only": true,
+    "contract_lightweight_each_status": true,
+    "review_contract_quarter": "2026-Q3",
+    "principles_anchor": "docs/TEAM-DISCUSSION-2026-04-30.md"
   }
 }

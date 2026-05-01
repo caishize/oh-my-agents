@@ -9,7 +9,12 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths (v0.18 baseline)
+## Complementary Strengths (v1.21+ baseline)
+
+> **Anchor doc**: [TEAM-DISCUSSION-2026-04-30.md](TEAM-DISCUSSION-2026-04-30.md)
+> records the rationale for the v1.21-era bridges (GBrain, /landing-report, conductor
+> workspaces). Quarterly contract review supplemented by **lightweight drift check
+> on every `/gstack-sync --status`** — gstack ships ~daily, so drift is the norm.
 
 | Dimension | gstack | oh-my-agents | Combined |
 |-----------|--------|-------------|----------|
@@ -28,6 +33,11 @@ metric namespaces.
 | Monitoring | /canary | — | Health report → /harness-dashboard quality trend |
 | Multi-session | conductor.json + .gstack-worktrees/ | **worktree-aware** verify/hooks | No cross-fire across sibling sprints |
 | Confusion (v0.18) | Confusion Protocol | session-metrics + /harness-dashboard | Signals → .claude/metrics/confusion.jsonl |
+| **Observation layer (v1.9+)** | GBrain `learnings-log` | `/encode-mistake --from-gstack-learnings` | Learnings (observations) → TASTE rules (enforcement); two layers, single direction |
+| **Cross-machine memory (v1.17+)** | `~/.gstack-brain-worktree/` (git-worktree federation) | `/gstack-sync` + `/harness-dashboard` (read-only) | Agent learning persists across machines without our involvement |
+| **Deploy metrics (v1.11+)** | `/landing-report` | `/harness-dashboard` DORA proxy → grounded | deployment_frequency, lead_time, change_failure_rate sourced from real ships |
+| **Workspace-aware ship (v1.11+)** | `bin/gstack-next-version` + version-gate.yml | `/verify` (no-op; gstack handles parallel-PR safety) | We do not compete with version allocation |
+| **Conductor workspaces (v1.11+)** | `~/conductor/workspaces/` | hooks + verify (presence detection only) | Coexists with `.gstack-worktrees/`; both honored |
 | Documentation | /document-release | doc-drift-check hook | Auto-sync + drift detection |
 | Retrospective (velocity) | /retro | — | — |
 | Retrospective (governance) | — | /harness-dashboard | DORA-proxy + dual-review rate |
@@ -100,6 +110,15 @@ See `.claude/integration.json` for the canonical list.
 | Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | /harness-dashboard (legibility input) |
 | gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | /harness-dashboard |
 | gstack analytics | Eureka moments | `~/.gstack/analytics/eureka.jsonl` | /harness-dashboard |
+| **GBrain (v1.12+)** | Federation worktree | `~/.gstack-brain-worktree/` | /gstack-sync, /harness-dashboard |
+| **GBrain (v1.9+)** | Learnings log | `~/.gstack-brain-worktree/learnings-*.jsonl` (or fallback `~/.gstack/projects/$SLUG/*-learnings-*.jsonl`) | **/encode-mistake (--from-gstack-learnings)** |
+| **GBrain (v1.9+)** | Timeline log | `~/.gstack-brain-worktree/timeline-*.jsonl` | /harness-dashboard |
+| **GBrain (v1.9+)** | Review log | `~/.gstack-brain-worktree/review-*.jsonl` | /harness-dashboard |
+| **GBrain (v1.9+)** | Developer profile | `~/.gstack-brain-worktree/developer-profile-*.json` | /harness-dashboard |
+| **GBrain (v1.12+)** | Repo policy | `~/.gstack/gbrain-repo-policy.json` | /gstack-sync |
+| **/landing-report (v1.11+)** | Post-ship metrics (local) | `.gstack/landing-reports/*.json` | /harness-dashboard (DORA grounded) |
+| **/landing-report (v1.11+)** | Post-ship metrics (project) | `~/.gstack/projects/$SLUG/*-landing-*.md` | /harness-dashboard |
+| **Conductor workspaces (v1.11+)** | Parallel sprint dirs | `~/conductor/workspaces/` | hooks (presence only) |
 
 ## Setup
 
@@ -210,16 +229,27 @@ defers cross-cutting concerns that gstack already owns.
 | Velocity retro | gstack /retro | — |
 | Governance retro | oh-my-agents /harness-dashboard | DORA proxy + dual-review rate |
 
-## Anti-Bloat Constraints (hard rules)
+## Anti-Bloat Constraints (hard rules — v2 after 2026-04-30 review)
 
 1. **No new skills** for integration purposes; modify existing skills only.
-2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers `/entropy-sweep` follow-up.
-3. **Glob over exact path** for every gstack bridge; gstack reorganizes frequently.
+2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers immediate trim
+   (this rule itself caught `spec-to-task` at 465 → trimmed to 317 lines).
+3. **Glob over exact path** for every gstack bridge; gstack reorganizes frequently
+   (~daily releases).
 4. **Loose version match**: probe artifact presence, not version strings.
-5. **Read-only bridge**: never write to `~/.gstack/`.
-6. **Quarterly contract review** (`/gstack-sync --contract-check`) — verify assumptions still hold.
-7. Every integration rule must answer: *"Will this still hold after gstack's next release?"*
-   If no — replace with capability detection.
+5. **Read-only bridge**: never write to `~/.gstack/` or `~/.gstack-brain-worktree/`.
+6. **Lightweight drift check on every `/gstack-sync --status`**; deep contract
+   review still quarterly (`--contract-check`).
+7. **`min_supported` tracks gstack's major capability milestones**, not minor
+   versions. Current floor: **v1.9.0.0** (cross-machine GBrain era).
+8. **Two-layer enforcement model — never collapse**:
+   - gstack writes **observations** (`learnings-log`, `timeline-log`, `review-log`)
+   - oh-my-agents writes **mechanical enforcement** (TASTE rules, hook patterns)
+   - Bridge is one-direction: observation → enforcement, via `/encode-mistake --from-gstack-learnings`
+9. **Osmani principle for review output**: *success silence, failure verbosity*.
+   Passing checks collapse to one line; failures stay verbose.
+10. Every integration rule must answer: *"Will this still hold after gstack's next release?"*
+    If no — replace with capability detection.
 
 ## Foundational Principles
 

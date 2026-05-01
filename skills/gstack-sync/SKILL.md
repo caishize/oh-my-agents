@@ -37,29 +37,55 @@ echo "PROJECT_SLUG: $SLUG"
 
 If not found, suggest installation, list benefits, then stop. Do NOT hard-fail.
 
-### Step 1: Detect gstack capabilities (v0.15+ artifacts)
+### Step 1: Detect gstack capabilities (capability probe, not version probe)
 
 Probe the artifact surface — NOT the command list (commands change too often).
+gstack ships ~daily; rely on **artifact presence**, not version strings.
 
 ```bash
 GSTACK_HOME="$HOME/.gstack"
 PROJ_DIR="$GSTACK_HOME/projects/$SLUG"
 ANALYTICS_DIR="$GSTACK_HOME/analytics"
+GBRAIN_WT="$HOME/.gstack-brain-worktree"
 
-# Capabilities map (presence-only, no version coupling)
+# Core artifacts (legacy, pre-v1)
 CAP_DESIGN=$(ls $PROJ_DIR/*-design-*.md 2>/dev/null | wc -l)
 CAP_TEST_PLAN=$(ls $PROJ_DIR/*-test-plan-*.md 2>/dev/null | wc -l)
 CAP_REVIEW=$(ls $PROJ_DIR/*-reviews.jsonl 2>/dev/null | wc -l)
 CAP_QA=$(ls $PROJ_DIR/*-test-outcome-*.md 2>/dev/null | wc -l)
-CAP_CODEX=$(ls $PROJ_DIR/*-codex-*.md 2>/dev/null | wc -l)        # v0.15+
-CAP_CSO=$(ls $PROJ_DIR/*-cso-*.md 2>/dev/null | wc -l)            # v0.15+
-CAP_UX=$(ls $PROJ_DIR/*-ux-audit-*.md 2>/dev/null | wc -l)        # v0.17+
+CAP_CODEX=$(ls $PROJ_DIR/*-codex-*.md 2>/dev/null | wc -l)
+CAP_CSO=$(ls $PROJ_DIR/*-cso-*.md 2>/dev/null | wc -l)
+CAP_UX=$(ls $PROJ_DIR/*-ux-audit-*.md 2>/dev/null | wc -l)
 CAP_CANARY=$(ls .gstack/canary-reports/*.json 2>/dev/null | wc -l)
 CAP_DEPLOY=$(ls .gstack/deploy-reports/*.json 2>/dev/null | wc -l)
 CAP_CONDUCTOR=$([ -f "conductor.json" ] && echo 1 || echo 0)
 CAP_WORKTREES=$([ -d ".gstack-worktrees" ] && ls -1 .gstack-worktrees | wc -l || echo 0)
-CAP_SKILL_USAGE=$(ls $ANALYTICS_DIR/skill-usage.jsonl 2>/dev/null | wc -l)
-CAP_EUREKA=$(ls $ANALYTICS_DIR/eureka.jsonl 2>/dev/null | wc -l)
+CAP_SKILL_USAGE=$([ -f "$ANALYTICS_DIR/skill-usage.jsonl" ] && echo 1 || echo 0)
+CAP_EUREKA=$([ -f "$ANALYTICS_DIR/eureka.jsonl" ] && echo 1 || echo 0)
+
+# Post-v0.18 additions (v1.x era)
+CAP_LANDING_LOCAL=$(ls .gstack/landing-reports/*.json 2>/dev/null | wc -l)       # v1.11+
+CAP_LANDING_PROJ=$(ls $PROJ_DIR/*-landing-*.md 2>/dev/null | wc -l)              # v1.11+
+CAP_GBRAIN_WT=$([ -d "$GBRAIN_WT" ] && echo 1 || echo 0)                         # v1.17+
+CAP_GBRAIN_LEARNINGS=$(ls $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)
+CAP_GBRAIN_TIMELINE=$(ls $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l)
+CAP_GBRAIN_REVIEWS=$(ls $GBRAIN_WT/review-*.jsonl 2>/dev/null | wc -l)
+CAP_GBRAIN_PROFILE=$(ls $GBRAIN_WT/developer-profile-*.json 2>/dev/null | wc -l)
+CAP_GBRAIN_POLICY=$([ -f "$GSTACK_HOME/gbrain-repo-policy.json" ] && echo 1 || echo 0)  # v1.12+
+# Fallback path if user is pre-v1.17 (learnings still in projects/)
+CAP_LEARNINGS_FB=$(ls $PROJ_DIR/*-learnings-*.jsonl 2>/dev/null | wc -l)
+# Conductor workspaces (v1.11+); presence only — never write
+CAP_CONDUCTOR_WS=$([ -d "$HOME/conductor/workspaces" ] && echo 1 || echo 0)
+```
+
+**Lightweight contract drift check** (auto-run on every `--status`):
+
+```bash
+# Compare detected version to integration.json's min_supported
+MIN_SUPPORTED=$(python3 -c 'import json;print(json.load(open(".claude/integration.json"))["gstack"]["min_supported"])' 2>/dev/null)
+ver_lt() { [ "$(printf '%s\n%s' "$1" "$2" | sort -V | head -1)" = "$1" ] && [ "$1" != "$2" ]; }
+[ -n "$MIN_SUPPORTED" ] && ver_lt "$GSTACK_VERSION" "$MIN_SUPPORTED" && \
+  echo "DRIFT: gstack v$GSTACK_VERSION below min_supported v$MIN_SUPPORTED" || true
 ```
 
 ### Step 2: Status Report (default)
@@ -74,29 +100,45 @@ Output this structure (Markdown):
 **Worktree context**: {single | N parallel worktrees detected}
 
 ### Artifact bridges (presence)
-- design docs: {count}        - test plans: {count}
-- review logs: {count}        - QA outcomes: {count}
-- codex reports: {count}      - cso reports: {count}
-- ux-audit reports: {count}   - canary reports: {count}
-- deploy reports: {count}     - conductor: {present|absent}
+- design docs: {count}            - test plans: {count}
+- review logs: {count}            - QA outcomes: {count}
+- codex reports: {count}          - cso reports: {count}
+- ux-audit reports: {count}       - canary reports: {count}
+- deploy reports: {count}         - landing reports: {local + project count}
+- conductor.json: {present}       - .gstack-worktrees/: {N parallel}
+- conductor workspaces (v1.11+): {present|absent}
+
+### GBrain (v1.12+ memory subsystem, read-only)
+- worktree present       : {yes|no}                      (~/.gstack-brain-worktree/)
+- learnings entries      : {N from worktree, or fallback projects/*-learnings-*.jsonl}
+- timeline entries       : {N}
+- review log entries     : {N}
+- developer profile      : {present|absent}
+- repo policy (schema v2): {present|absent}              (~/.gstack/gbrain-repo-policy.json)
 
 ### Composition (who-owns-what)
-- Slop deep-check     → gstack /codex   (presence: {yes/no})
-- Security audit      → gstack /cso     (presence: {yes/no})
-- UX audit            → gstack /ux-audit (presence: {yes/no})
-- Architecture/layers → harness arch-guard + hooks
-- Entropy/encode      → harness entropy-sweep + encode-mistake
+- Slop deep-check         → gstack /codex          (presence: {yes/no})
+- Security audit          → gstack /cso            (presence: {yes/no})
+- UX audit                → gstack /ux-audit       (presence: {yes/no})
+- Observation/learnings   → gstack GBrain (read)   (presence: {yes/no})
+- Deploy metrics          → gstack /landing-report (presence: {yes/no})
+- Architecture / layers   → harness arch-guard + hooks
+- Entropy / TASTE rules   → harness entropy-sweep + encode-mistake
+- Mechanical enforcement  → harness (TASTE rules in docs/LINTING.md)
 
 ### Recent activity (7d)
 - gstack skill usage : top 5 from skill-usage.jsonl
 - harness hooks fired: top 5 from session-*.jsonl
 - violations blocked : count
-- confusion signals  : count from confusion.jsonl (v0.18+)
+- confusion signals  : count from confusion.jsonl
+- learnings unencoded: count of learnings entries with no matching TASTE-NNN
 
 ### Integration contract
-- Read-only bridge   : enforced
-- Loose version match: {current ok / warn if < min_supported}
-- Quarterly review   : next due {policies.review_contract_quarter}
+- Read-only bridge          : enforced (incl. GBrain — never write)
+- Loose version match       : {current ok / DRIFT warning if < min_supported}
+- min_supported             : {value}  ← bumps with major gstack milestones
+- Lightweight drift check   : runs on every --status
+- Deep contract check       : next due {policies.review_contract_quarter}
 
 ### Recommended next action
 - {context-aware: if no design doc → /office-hours; if plan stalled → /lifecycle status; ...}

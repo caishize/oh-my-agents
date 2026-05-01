@@ -35,6 +35,41 @@ Take the description from `$ARGUMENTS` and create a permanent enforcement artifa
 - `--hook-output` — Treat input as raw hook error message
 - `--from-investigation <id>` — Auto-populate from gstack `/investigate` artifact in
   `.claude/metrics/investigations.jsonl`
+- `--from-gstack-learnings [<n>]` — Scan gstack GBrain `learnings-log` for unencoded
+  observations and propose TASTE rules. Default `n=5` most recent.
+  See **Step 0** below.
+
+### Step 0 (optional): Ingest from gstack GBrain learnings-log
+
+When invoked with `--from-gstack-learnings`, surface the most recent unencoded
+*observations* from gstack and turn each into a candidate TASTE rule. gstack writes
+*observations* (what happened), this skill writes *enforcement* (what cannot happen
+again) — two distinct layers; never collapse them.
+
+```bash
+SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+GBRAIN_WT="$HOME/.gstack-brain-worktree"
+PROJ_DIR="$HOME/.gstack/projects/$SLUG"
+LIMIT="${1:-5}"
+
+# Prefer GBrain worktree (v1.17+); fall back to per-project log.
+if [ -d "$GBRAIN_WT" ]; then
+  LOG=$(ls -t $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | head -1)
+else
+  LOG=$(ls -t $PROJ_DIR/*-learnings-*.jsonl 2>/dev/null | head -1)
+fi
+[ -z "$LOG" ] && echo "No gstack learnings-log present — skipping ingest" && exit 0
+
+# Last N learnings without a `taste_id` field — those are unencoded.
+tail -200 "$LOG" 2>/dev/null \
+  | grep -v '"taste_id"' \
+  | tail -"$LIMIT"
+```
+
+For each unencoded learning, propose a TASTE rule (Steps 1–7 below) and ask the user
+to confirm before writing files. **Never modify the learnings-log itself** — it is a
+read-only source. After encoding, just record `taste_id: TASTE-NNN` in the LINTING.md
+entry's "Origin" field to make the link traceable.
 
 ### Step 1: Understand the Pattern
 
