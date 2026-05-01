@@ -147,7 +147,7 @@ Output this structure (Markdown):
 ### Step 3: Setup (--setup)
 
 1. Ensure `.claude/integration.json` exists (already shipped at v1.1+); if older, migrate.
-2. Update CLAUDE.md workflow section if it lacks the v0.18 commands.
+2. Update CLAUDE.md workflow section if it lacks current gstack lifecycle commands.
 3. Add to `.gitignore` if missing: `.gstack/`, `.gstack-worktrees/`, `conductor.json`,
    `.claude/signals/`, `.claude/metrics/`.
 4. Create `.claude/signals/` directory for verify-readiness signals.

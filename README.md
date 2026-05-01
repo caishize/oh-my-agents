@@ -1,11 +1,12 @@
-# oh-my-agents `v3.2.0`
+# oh-my-agents `v3.3.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
 work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) v0.18 for full-lifecycle coverage
-(slop-deep, security-deep, and UX audits delegated to gstack; architecture, entropy,
-legibility owned by oh-my-agents).
+[gstack](https://github.com/garrytan/gstack.git) v1.21+ for full-lifecycle coverage
+(slop-deep, security-deep, and UX audits delegated to gstack; GBrain learnings and
+`/landing-report` consumed as read-only sensors; architecture, entropy, legibility
+owned by oh-my-agents).
 
 > **11 skills · 2 agents · 6 hooks** — optimized for minimal context window footprint
 > via progressive disclosure.
@@ -50,7 +51,7 @@ git clone https://github.com/caishize/oh-my-agents.git ~/.claude/skills/oh-my-ag
 | `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
 | `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex` (cross-model), `/cso` (security), `/ux-audit` — dedup + severity escalation |
 | `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + `--query` for deep-dive analysis |
-| `/gstack-sync` | Integration | Detect gstack, configure bridges, `--contract-check` for quarterly drift review |
+| `/gstack-sync` | Integration | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
 | `/lifecycle` | Integration | Full lifecycle orchestrator with canary phase, worktree awareness, Gate Failure Routing |
 
 ## Agents
@@ -122,18 +123,26 @@ Key handoffs (composition-based, read-only, glob-based):
 - `/harness-review` composes gstack's `/codex` (cross-model slop), `/cso` (security),
   `/ux-audit` (UI) — tags `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
 - `/investigate` (gstack) → `/encode-mistake` (oh-my-agents) closes the feedback loop permanently
+- **GBrain `learnings-log` (gstack v1.9+) → `/encode-mistake --from-gstack-learnings`** —
+  observation layer (gstack) feeds enforcement layer (oh-my-agents); never collapsed
+- **`/landing-report` (gstack v1.11+) → `/harness-dashboard`** — DORA proxy upgrades to
+  `[grounded]` when real ship/canary data is present
 - `/lifecycle` orchestrates full cycle with Gate Failure Routing — names the exact
   remediation skill on every failed gate so AI-driven flow doesn't stall
-- Worktree-aware: never cross-fires across `.gstack-worktrees/` siblings
+- Worktree-aware: honors both `.gstack-worktrees/` and `~/conductor/workspaces/` (v1.11+)
 - Confusion Protocol (gstack v0.18+) signals → `.claude/metrics/confusion.jsonl`
+- Lightweight contract drift check on every `/gstack-sync --status` (gstack ships ~daily)
 
-See [docs/INTEGRATION.md](docs/INTEGRATION.md) for full bridge manifest and
-[docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md) for composition rationale.
+See [docs/INTEGRATION.md](docs/INTEGRATION.md) for full bridge manifest;
+[docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md) for the original
+composition rationale; and
+[docs/TEAM-DISCUSSION-2026-04-30.md](docs/TEAM-DISCUSSION-2026-04-30.md) for the
+v1.21-era re-alignment (GBrain, landing-report, anti-bloat v2).
 
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.2.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.3.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md

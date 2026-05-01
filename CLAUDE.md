@@ -1,9 +1,10 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.2.0** — Implements OpenAI's harness engineering methodology (four pillars)
+**v3.3.0** — Implements OpenAI's harness engineering methodology (four pillars)
 adapted for Claude Code. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) v0.18 — slop-deep / security-deep /
-UX audits delegated to gstack skills; architecture, entropy, legibility owned here.
+[gstack](https://github.com/garrytan/gstack.git) v1.21+ — slop-deep / security-deep /
+UX audits delegated to gstack skills; GBrain `learnings-log` and `/landing-report`
+consumed as read-only sensors; architecture, entropy, legibility owned here.
 
 ## Skills (User-invocable)
 
@@ -25,7 +26,7 @@ UX audits delegated to gstack skills; architecture, entropy, legibility owned he
 
 | Command | Purpose |
 |---------|---------|
-| `/gstack-sync` | Detect gstack, configure bridges, sync metrics, `--contract-check` for quarterly drift review |
+| `/gstack-sync` | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
 | `/lifecycle` | Full lifecycle orchestrator with canary phase, worktree awareness, Gate Failure Routing |
 
 ## Agents (Read-only background)
@@ -89,6 +90,13 @@ Key integration points (composition-based, read-only, glob-based, rippable):
 - `/lifecycle` orchestrates full cycle + Gate Failure Routing (names exact remediation skill);
   worktree-aware, never cross-fires across `.gstack-worktrees/` siblings
 - Confusion Protocol (gstack v0.18+) → `.claude/metrics/confusion.jsonl` → legibility input
+- **GBrain learnings-log (gstack v1.9+) → `/encode-mistake --from-gstack-learnings`** —
+  observation layer feeds enforcement layer; two-layer model never collapsed
+- **`/landing-report` (gstack v1.11+) → `/harness-dashboard`** — DORA proxy annotates
+  each metric `[grounded]` when backed by real ship data, `[proxy]` otherwise
+- Conductor workspaces (gstack v1.11+) — coexists with `.gstack-worktrees/`; both honored
 
-Full rationale: [docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md).
+Full rationale: [docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md)
+and [docs/TEAM-DISCUSSION-2026-04-30.md](docs/TEAM-DISCUSSION-2026-04-30.md)
+(v1.21-era re-alignment).
 Full bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md).
