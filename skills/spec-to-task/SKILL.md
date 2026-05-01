@@ -150,198 +150,50 @@ For each task, determine:
 ### Step 5: Write Execution Plan JSON
 
 Write the execution plan to `docs/exec-plans/active/{plan-id}.json`.
-The plan ID format is: `plan-YYYYMMDD-feature-name` (lowercase, hyphens).
-Schema reference: `templates/execution-plan.json` in the oh-my-agents plugin.
+Plan ID format: `plan-YYYYMMDD-feature-name` (lowercase, hyphens).
 
-```json
-{
-  "$schema": "execution-plan-v2",
-  "id": "plan-YYYYMMDD-feature-name",
-  "feature": "Feature Name",
-  "status": "active",
-  "created": "2026-03-17T00:00:00Z",
-  "updated": "2026-03-17T00:00:00Z",
-  "spec_source": "issue URL, file path, or inline description",
-  "gstack_design_doc": "path to gstack design doc (if derived from /office-hours)",
-  "gstack_test_plan": "path to gstack test plan (if derived from /plan-eng-review)",
-  "overview": "1-2 sentences describing what this feature does and why",
-  "risks": [
-    {
-      "id": "R1",
-      "description": "Description of the risk",
-      "mitigation": "How to mitigate it",
-      "status": "open"
-    }
-  ],
-  "decisions": [
-    {
-      "id": "D1",
-      "question": "What needs to be decided?",
-      "decision": "What was decided",
-      "alternatives": ["Alternative A", "Alternative B"],
-      "rationale": "Why this decision was made"
-    }
-  ],
-  "test_plan": {
-    "unit": [
-      "test_feature_creates_thing",
-      "test_feature_rejects_invalid_input"
-    ],
-    "integration": [
-      "test_feature_api_endpoint",
-      "test_feature_persists_data"
-    ],
-    "structural": [
-      "Files follow naming convention",
-      "No layer boundary violations",
-      "No file exceeds size limit"
-    ]
-  },
-  "tasks": [
-    {
-      "id": 1,
-      "title": "Define types in src/types/feature.ts",
-      "layer": "types",
-      "phase": 1,
-      "status": "pending",
-      "files": ["src/types/feature.ts"],
-      "depends_on": [],
-      "acceptance": [
-        "test_feature_types passes",
-        "Lint passes with no new warnings"
-      ],
-      "constraints": [
-        "Do not import from service or runtime layers",
-        "Do not add runtime logic to type definitions"
-      ],
-      "context": [
-        "docs/ARCHITECTURE.md — layer model section",
-        "src/types/existing-similar.ts — follow this pattern",
-        "docs/CONVENTIONS.md — naming rules"
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Add config in src/config/feature.ts",
-      "layer": "config",
-      "phase": 1,
-      "status": "pending",
-      "files": ["src/config/feature.ts"],
-      "depends_on": [],
-      "acceptance": [
-        "test_feature_config passes",
-        "Config validates all required fields"
-      ],
-      "constraints": [
-        "Do not hardcode values — use environment variables",
-        "Do not import from layers above config"
-      ],
-      "context": [
-        "src/config/existing-config.ts — follow this pattern",
-        "docs/CONVENTIONS.md — config patterns"
-      ]
-    },
-    {
-      "id": 3,
-      "title": "Repository layer src/repo/feature.ts",
-      "layer": "repo",
-      "phase": 2,
-      "status": "pending",
-      "files": ["src/repo/feature.ts"],
-      "depends_on": [1],
-      "acceptance": [
-        "test_feature_repo passes",
-        "Uses parameterized queries (no SQL injection)"
-      ],
-      "constraints": [
-        "Do not contain business logic — that belongs in service layer",
-        "Do not import from service, runtime, or ui layers"
-      ],
-      "context": [
-        "src/repo/existing-repo.ts — follow this pattern",
-        "src/types/feature.ts — use these types"
-      ]
-    },
-    {
-      "id": 4,
-      "title": "Service logic src/services/feature.ts",
-      "layer": "service",
-      "phase": 3,
-      "status": "pending",
-      "files": ["src/services/feature.ts"],
-      "depends_on": [1, 3],
-      "acceptance": [
-        "test_feature_service passes",
-        "Cross-cutting concerns use Providers interface"
-      ],
-      "constraints": [
-        "Do not access storage directly — use repo layer",
-        "Do not import from runtime or ui layers",
-        "Do not bypass Providers for auth/telemetry/flags"
-      ],
-      "context": [
-        "src/services/existing-service.ts — follow this pattern",
-        "docs/PROVIDERS.md — cross-cutting concern patterns"
-      ]
-    },
-    {
-      "id": 5,
-      "title": "API endpoint src/api/feature.ts",
-      "layer": "runtime",
-      "phase": 4,
-      "status": "pending",
-      "files": ["src/api/feature.ts"],
-      "depends_on": [4],
-      "acceptance": [
-        "test_feature_api passes",
-        "Input validation on all parameters",
-        "Error responses don't leak internals"
-      ],
-      "constraints": [
-        "Do not contain business logic — delegate to service",
-        "Do not import from repo layer directly"
-      ],
-      "context": [
-        "src/api/existing-endpoint.ts — follow this pattern",
-        "docs/CONVENTIONS.md — API response format"
-      ]
-    },
-    {
-      "id": 6,
-      "title": "Verification: all tests pass, docs updated, observability added",
-      "layer": "cross-cutting",
-      "phase": 5,
-      "status": "pending",
-      "files": [],
-      "depends_on": [1, 2, 3, 4, 5],
-      "acceptance": [
-        "All unit tests pass",
-        "All integration tests pass",
-        "All structural tests pass",
-        "Lint clean",
-        "docs/ updated if new patterns introduced",
-        "Observability: logging/metrics added per docs/OBSERVABILITY.md"
-      ],
-      "constraints": [
-        "Do not skip failing tests — fix the implementation",
-        "Do not weaken lint rules to pass"
-      ],
-      "context": [
-        "docs/TESTING.md — coverage requirements",
-        "docs/OBSERVABILITY.md — logging and metrics patterns"
-      ]
-    }
-  ],
-  "metrics": {
-    "tasks_total": 6,
-    "tasks_done": 0,
-    "tasks_blocked": 0
-  }
-}
+**Schema source of truth**: `templates/execution-plan.json` in the oh-my-agents
+plugin. Read it once, then conform — do not paraphrase from memory.
+
+Required top-level fields:
+- `$schema` = `"execution-plan-v2"`, `id`, `feature`, `status`, `created`, `updated`
+- `spec_source` (issue URL, file, or inline)
+- `gstack_design_doc`, `gstack_test_plan` (if derived via Step 1)
+- `overview` (1–2 sentences)
+- `risks[]` — each `{ id, description, mitigation, status }`
+- `decisions[]` — each `{ id, question, decision, alternatives, rationale }`
+- `test_plan` — `{ unit[], integration[], structural[] }`
+- `tasks[]` — see below
+- `metrics` — `{ tasks_total, tasks_done, tasks_blocked }`
+
+Each task object:
+```
+{ id, title, layer, phase, status, files[], depends_on[], acceptance[], constraints[], context[] }
+```
+- `status` transitions: `pending` → `in_progress` → `done` (or `blocked`)
+- `acceptance[]` — explicit pass criteria (test names, lint clean, etc.)
+- `constraints[]` — things the agent must NOT do (just as important as requirements)
+- `context[]` — files the agent must read first (no tacit knowledge)
+
+Layer order (also defines `phase` numbering):
+```
+phase 1: types, config        (parallelizable, no deps)
+phase 2: repo                 (depends on types)
+phase 3: service              (depends on repo + types)
+phase 4: runtime              (depends on service)
+phase 5: ui                   (depends on runtime)
+phase 6: cross-cutting        (verification: tests, docs, observability)
 ```
 
-Each task `status` transitions: `pending` -> `in_progress` -> `done` (or `blocked`).
-New sessions read this file to understand prior work state ("shift handoff").
+Concrete per-layer constraint cheatsheet:
+- **types**: no imports from service/runtime; no runtime logic
+- **config**: no hardcoded values (env vars); no imports from layers above
+- **repo**: no business logic (belongs in service); no imports from service/runtime/ui
+- **service**: no direct storage access (use repo); use Providers for auth/telemetry/flags
+- **runtime**: no business logic (delegate to service); no direct repo imports
+- **cross-cutting**: never skip failing tests; never weaken lint rules to pass
+
+New sessions read the JSON to understand prior work state — this is "shift handoff".
 
 ### Step 6: Generate Human-Readable Markdown Summary
 
