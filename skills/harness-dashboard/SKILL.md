@@ -50,7 +50,12 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
    GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
    GSTACK_ANALYTICS="$HOME/.gstack/analytics"
-   GBRAIN_WT="$HOME/.gstack-brain-worktree"
+
+   # GBrain worktree — dual-value (v1.27.0.0 renamed gstack-brain → gstack-artifacts)
+   GBRAIN_WT=""
+   for d in "$HOME/.gstack-artifacts-worktree" "$HOME/.gstack-brain-worktree"; do
+     [ -d "$d" ] && GBRAIN_WT="$d" && break
+   done
 
    # Core usage
    [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ] && \
@@ -71,13 +76,17 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    echo "Landing reports (local): $LANDING_LOCAL"
    echo "Canary reports (local):  $CANARY_LOCAL"
 
-   # GBrain (v1.12+, federated via worktree v1.17+)
-   if [ -d "$GBRAIN_WT" ]; then
+   # GBrain (v1.12+, federated via worktree v1.17+, renamed v1.27+)
+   if [ -n "$GBRAIN_WT" ]; then
+     echo "GBrain root:      $GBRAIN_WT"
      echo "GBrain learnings: $(cat $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)"
      echo "GBrain timeline:  $(cat $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l)"
      # Unencoded learnings = those without taste_id field — feed encode-mistake
      echo "Unencoded learnings (proposable to /encode-mistake): $(grep -hv '"taste_id"' $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)"
    fi
+
+   # gbrain CLI (v1.26+) federates queries across machines
+   command -v gbrain >/dev/null 2>&1 && echo "gbrain CLI: present (v1.26+)"
 
    [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ] && \
      echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
@@ -146,7 +155,8 @@ Generate the top 3 actionable recommendations based on the data:
 - If gstack installed but no dual reviews -> recommend `/harness-review` for next PR
 - If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
 - If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
-- If unencoded GBrain learnings > 5 -> recommend `/encode-mistake --from-gstack-learnings`
+- If unencoded GBrain learnings > 5 -> recommend `/encode-mistake --from-gbrain learning`
+- If gbrain CLI present and no eureka encoded yet -> note `/encode-mistake --from-gbrain eureka` is also available
 - If gstack version < integration.json min_supported -> recommend `/gstack-sync --contract-check`
 - If landing reports exist but DORA shows [proxy] only -> note the mapping is wired
 - If lifecycle phases are skipped -> recommend `/lifecycle status` to identify gaps

@@ -1,7 +1,7 @@
 {
   "name": "oh-my-agents",
-  "version": "3.3.0",
-  "description": "Lean harness engineering plugin for Claude Code — four pillars (architecture, documentation, observability, entropy). Composition-based gstack v1.21+ integration: delegates slop-deep to /codex, security to /cso, UX to /ux-audit; reads GBrain learnings-log + /landing-report as sensors; worktree-aware (incl. conductor workspaces); Gate Failure Routing; DORA proxy now grounded by landing-report. 11 skills, 2 agents, 6 hooks.",
+  "version": "3.4.0",
+  "description": "Lean harness engineering plugin for Claude Code — four pillars (architecture, documentation, observability, entropy). Composition-based gstack v1.28+ integration: delegates slop-deep to /codex, security to /cso, UX to /ux-audit; dual-value GBrain paths (gstack-artifacts ↔ gstack-brain) survive v1.27 rename; /harness-review emits review-latest.json decision signal so /lifecycle next auto-advances or halts on NEEDS_HUMAN; /encode-mistake --from-gbrain queries 8 memory types via gbrain CLI; explicit no-orchestration anchor. 11 skills, 2 agents, 6 hooks.",
   "author": {
     "name": "caishize",
     "url": "https://github.com/caishize"
@@ -25,7 +25,10 @@
     "worktree-aware",
     "dora-metrics",
     "layer-enforcement",
-    "progressive-disclosure"
+    "progressive-disclosure",
+    "decision-signal",
+    "dual-value-bridge",
+    "no-orchestration"
   ],
   "skills": "./skills/"
 }

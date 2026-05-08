@@ -6,7 +6,13 @@ argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
-# Lifecycle — Full Development Cycle Orchestrator
+# Lifecycle — Lifecycle Router (NOT an Orchestrator)
+
+> **Anti-bloat anchor (v3.4+)**: this skill is a **router and reporter**, not an
+> *executor* of workflow logic. gstack owns lifecycle orchestration via `/office-hours`,
+> `/autoplan`, `/ship`, `/land-and-deploy`, `/canary`, `/retro`. We invoke them by name
+> and route on their gates; we never re-implement a phase. If any logic here starts to
+> *plan* or *deploy* on its own, it must be deleted or moved to the relevant gstack skill.
 
 Guides through the complete lifecycle, ensuring artifact handoffs and naming the
 **exact remediation skill** when a gate fails — so AI-driven flow doesn't stall.
@@ -87,7 +93,7 @@ description, technical decisions, scope. Invoke `/spec-to-task` with context.
 GREEN → write `.claude/signals/verify-latest.json`, proceed.
 RED → stop, route per Gate Failure table. YELLOW → ask user.
 
-### `review` — Composition-aware
+### `review` — Composition-aware; reads decision signal
 
 Always invoke `/harness-review --plan {plan-id}`. Then conditionally:
 - If `UI_TOUCHED > 0` and gstack present and not `--no-ux` → recommend `/ux-audit` (or invoke if `--ux`)
@@ -95,7 +101,27 @@ Always invoke `/harness-review --plan {plan-id}`. Then conditionally:
 - If `--with-cso` and gstack present → recommend invoking `/cso` for deep security
 - Merge findings via `/harness-review`'s dedup tags
 
-SHIP IT → proceed. FIX AND RESHIP → stop. NEEDS REWORK → back to `execute`.
+After invocation, read `.claude/signals/review-latest.json` and route on the
+**decision tag** — this is the flow-efficiency lever that compresses "未决态":
+
+```bash
+SIGNAL=".claude/signals/review-latest.json"
+if [ -f "$SIGNAL" ]; then
+  DECISION=$(python3 -c 'import json;print(json.load(open(".claude/signals/review-latest.json"))["decision"])' 2>/dev/null)
+else
+  DECISION="NEEDS_HUMAN"   # Missing signal = treat as needs human (per Anti-Bloat v3 rule 13)
+fi
+echo "review-decision: $DECISION"
+```
+
+**Routing rules (the agent driving this skill must obey):**
+
+- `APPROVE` → proceed; if `next --auto`, immediately invoke the `ship` phase.
+- `REQUEST_CHANGES` → **stop the auto chain**; surface `.claude/metrics/reviews.jsonl`
+  P0/P1 findings; loop back to `execute` only after the user confirms.
+- `NEEDS_HUMAN` (or signal absent / malformed JSON) → **halt unconditionally**;
+  print the verbose review summary and yield to the user. Do NOT advance
+  regardless of `--auto`. Missing signal is treated identically to `NEEDS_HUMAN`.
 
 ### `ship` — Requires gstack → `/ship` (or guide manual PR)
 
@@ -137,6 +163,8 @@ so the developer (or the next agent invocation) doesn't have to search:
 | deploy | smoke failed | `/canary` (gstack) if available; rollback decision |
 | canary | regression detected | `/investigate` → `/encode-mistake` to prevent recurrence |
 | any (unknown) | confusion signal raised (gstack v0.18+ Confusion Protocol) | log to `.claude/metrics/confusion.jsonl`; surface in next `/harness-dashboard` |
+| review (no decision) | `.claude/signals/review-latest.json` missing or malformed | treat as `NEEDS_HUMAN`; do not silently advance |
+| review (NEEDS_HUMAN) | architectural ambiguity flagged | halt; surface verbose `reviews.jsonl` for user |
 
 ## Rules
 
@@ -150,3 +178,7 @@ so the developer (or the next agent invocation) doesn't have to search:
 - **Composition over duplication**: defer slop-deep / security-deep / UX to gstack skills
 - **Capability detection over version pinning**: probe artifact presence, not version strings
 - Confusion signals (gstack v0.18+) are first-class legibility input — always logged
+- **Router, never executor**: this skill names the next skill to run; if it starts
+  *implementing* a phase (e.g. drafting a CHANGELOG), that logic belongs in gstack
+- **Review decision signal is mandatory**: `next` will not auto-advance past `review`
+  without `.claude/signals/review-latest.json`; missing signal ⇒ `NEEDS_HUMAN`

@@ -4,16 +4,16 @@
     "name": "caishize"
   },
   "metadata": {
-    "description": "Harness engineering toolkit for Claude Code — skills, agents, and hooks implementing OpenAI's methodology for AI-native development, with composition-based gstack v1.21+ integration (GBrain learnings + /landing-report consumed as read-only sensors).",
-    "version": "3.3.0"
+    "description": "Harness engineering toolkit for Claude Code — skills, agents, and hooks implementing OpenAI's methodology for AI-native development, with composition-based gstack v1.28+ integration (dual-value GBrain paths surviving v1.27 rename, gbrain CLI memory queries, decision-signal flow into /lifecycle).",
+    "version": "3.4.0"
   },
   "plugins": [
     {
       "name": "oh-my-agents",
       "source": "./",
-      "description": "Harness engineering skills, agents, and hooks — four pillars: architecture guardrails, documentation as system of record, observability & legibility, entropy management. Composition-based gstack v1.21+ integration: GBrain observation→TASTE enforcement bridge, /landing-report-grounded DORA proxy, worktree + conductor-workspaces awareness, Gate Failure Routing.",
-      "version": "3.3.0",
-      "keywords": ["harness-engineering", "ai-coding", "code-review", "architecture", "gstack-integration", "composition"],
+      "description": "Harness engineering skills, agents, and hooks — four pillars: architecture guardrails, documentation as system of record, observability & legibility, entropy management. Composition-based gstack v1.28+ integration: dual-value bridges (gstack-artifacts ↔ gstack-brain), /harness-review review-latest.json decision signal feeding /lifecycle next auto-advance, /encode-mistake --from-gbrain across 8 memory types, explicit no-orchestration anchor.",
+      "version": "3.4.0",
+      "keywords": ["harness-engineering", "ai-coding", "code-review", "architecture", "gstack-integration", "composition", "decision-signal", "dual-value-bridge"],
       "category": "productivity"
     }
   ]

@@ -11,6 +11,15 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 Initialize the harness — constraints, documentation, observability, and feedback loops
 that make AI coding agents work reliably.
 
+## Task
+
+Walk through Steps 1–9 (or 1–9 + `/legibility-score` + `/arch-guard` in `--quick`
+mode) to bootstrap the four-pillar harness in the target project: assess state,
+write CLAUDE.md (root + nested per-module), populate `docs/` (ARCHITECTURE,
+CONVENTIONS, TESTING, LINTING, DECISIONS, PROVIDERS, OBSERVABILITY), generate
+`.claude/harness.json`, install pre-commit + architecture-test skeletons, and
+emit a summary with score and recommendations.
+
 ## Quick Start Mode
 
 If `$ARGUMENTS` contains `--quick`: run Steps 1-9, then `/legibility-score`, then

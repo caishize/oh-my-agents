@@ -46,7 +46,25 @@ gstack ships ~daily; rely on **artifact presence**, not version strings.
 GSTACK_HOME="$HOME/.gstack"
 PROJ_DIR="$GSTACK_HOME/projects/$SLUG"
 ANALYTICS_DIR="$GSTACK_HOME/analytics"
-GBRAIN_WT="$HOME/.gstack-brain-worktree"
+
+# GBrain worktree — dual-value (v1.27.0.0 renamed gstack-brain → gstack-artifacts).
+# Probe current first; fall back to legacy. First hit wins; both absent = degrade.
+GBRAIN_WT=""
+for d in "$HOME/.gstack-artifacts-worktree" "$HOME/.gstack-brain-worktree"; do
+  [ -d "$d" ] && GBRAIN_WT="$d" && break
+done
+
+# Capability probes (presence > version)
+GBRAIN_CLI=$(command -v gbrain 2>/dev/null || echo "")               # v1.26+ memory ingest CLI
+LLMS_TXT=""
+for f in "$GSTACK_PATH/llms.txt" "$HOME/.claude/skills/gstack/llms.txt"; do
+  [ -f "$f" ] && LLMS_TXT="$f" && break
+done                                                                  # v1.28+
+INGEST_BIN=""
+[ -x "$GSTACK_PATH/bin/gstack-memory-ingest" ] && INGEST_BIN="$GSTACK_PATH/bin/gstack-memory-ingest"  # v1.26+
+ARTIFACTS_REMOTE=""
+[ -f "$HOME/.gstack-artifacts-remote.txt" ] && ARTIFACTS_REMOTE="present"  # v1.27 Path 4 hint
+[ -f "$HOME/.gstack-brain-remote.txt" ] && ARTIFACTS_REMOTE="legacy"
 
 # Core artifacts (legacy, pre-v1)
 CAP_DESIGN=$(ls $PROJ_DIR/*-design-*.md 2>/dev/null | wc -l)
@@ -66,17 +84,21 @@ CAP_EUREKA=$([ -f "$ANALYTICS_DIR/eureka.jsonl" ] && echo 1 || echo 0)
 # Post-v0.18 additions (v1.x era)
 CAP_LANDING_LOCAL=$(ls .gstack/landing-reports/*.json 2>/dev/null | wc -l)       # v1.11+
 CAP_LANDING_PROJ=$(ls $PROJ_DIR/*-landing-*.md 2>/dev/null | wc -l)              # v1.11+
-CAP_GBRAIN_WT=$([ -d "$GBRAIN_WT" ] && echo 1 || echo 0)                         # v1.17+
-CAP_GBRAIN_LEARNINGS=$(ls $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)
-CAP_GBRAIN_TIMELINE=$(ls $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l)
-CAP_GBRAIN_REVIEWS=$(ls $GBRAIN_WT/review-*.jsonl 2>/dev/null | wc -l)
-CAP_GBRAIN_PROFILE=$(ls $GBRAIN_WT/developer-profile-*.json 2>/dev/null | wc -l)
+CAP_GBRAIN_WT=$([ -n "$GBRAIN_WT" ] && echo 1 || echo 0)                         # v1.17+ / v1.27 renamed
+CAP_GBRAIN_LEARNINGS=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l || echo 0)
+CAP_GBRAIN_TIMELINE=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l || echo 0)
+CAP_GBRAIN_REVIEWS=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/review-*.jsonl 2>/dev/null | wc -l || echo 0)
+CAP_GBRAIN_PROFILE=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/developer-profile-*.json 2>/dev/null | wc -l || echo 0)
 CAP_GBRAIN_POLICY=$([ -f "$GSTACK_HOME/gbrain-repo-policy.json" ] && echo 1 || echo 0)  # v1.12+
 # Fallback path if user is pre-v1.17 (learnings still in projects/)
 CAP_LEARNINGS_FB=$(ls $PROJ_DIR/*-learnings-*.jsonl 2>/dev/null | wc -l)
 # Conductor workspaces (v1.11+); presence only — never write
 CAP_CONDUCTOR_WS=$([ -d "$HOME/conductor/workspaces" ] && echo 1 || echo 0)
 ```
+
+**llms.txt preference (v1.28+)**: when `$LLMS_TXT` is non-empty, prefer it over
+hand-rolled skill enumeration. It is gstack's authoritative index of skills/commands
+(47 skills, 75 commands compressed to ~11KB) — saves tokens and stays current.
 
 **Lightweight contract drift check** (auto-run on every `--status`):
 
@@ -108,13 +130,18 @@ Output this structure (Markdown):
 - conductor.json: {present}       - .gstack-worktrees/: {N parallel}
 - conductor workspaces (v1.11+): {present|absent}
 
-### GBrain (v1.12+ memory subsystem, read-only)
-- worktree present       : {yes|no}                      (~/.gstack-brain-worktree/)
+### GBrain (v1.12+ memory subsystem, read-only; v1.26+ ingest, v1.27+ rename)
+- worktree present       : {none | legacy(brain) | current(artifacts)}
+- worktree path          : {resolved $GBRAIN_WT or "—"}
 - learnings entries      : {N from worktree, or fallback projects/*-learnings-*.jsonl}
 - timeline entries       : {N}
 - review log entries     : {N}
 - developer profile      : {present|absent}
 - repo policy (schema v2): {present|absent}              (~/.gstack/gbrain-repo-policy.json)
+- gbrain CLI             : {path | "not on PATH"}        (v1.26+ memory ingest)
+- memory-ingest binary   : {path | "absent"}             (v1.26+)
+- llms.txt index         : {path | "absent"}             (v1.28+; preferred for skill discovery)
+- remote artifacts hint  : {none | legacy file | current file}  (v1.27 Path 4)
 
 ### Composition (who-owns-what)
 - Slop deep-check         → gstack /codex          (presence: {yes/no})
@@ -217,4 +244,9 @@ Quarterly governance gate — run before/after each quarter:
 - **Loose version match** — accept `min_supported` and above; warn but don't fail on drift
 - **Worktree-aware** — if `.gstack-worktrees/` present, scope reports to current worktree
 - **No skill duplication** — never invoke gstack commands; only discover their outputs
+- **Bridge dual-value** — every gstack v1.27+ rename probes BOTH legacy (`gstack-brain*`)
+  and current (`gstack-artifacts*`) paths; first hit wins; both absent = graceful degrade
+- **Prefer llms.txt over enumeration** (v1.28+) — when present, it is gstack's
+  authoritative skill/command index; do not duplicate or stale-cache it locally
+- **No orchestration** — this skill discovers and reports; never executes gstack workflow
 - Quarterly contract check is mandatory; record results in `.claude/metrics/integrated-report.json`

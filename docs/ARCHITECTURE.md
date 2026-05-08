@@ -63,6 +63,27 @@ Continuous detection and repair of codebase degradation.
 
 Implemented by: `/entropy-sweep`, `/harness-review`, `doc-drift-check.sh`, `/encode-mistake`
 
+## Mapping to Anthropic's Three-Agent Harness (2026-Q2)
+
+Anthropic's multi-agent harness (InfoQ, 2026-04) decomposes long-running coding work
+into three agents — **Planner**, **Generator**, **Evaluator** — connected by structured
+handoff artifacts and context resets. oh-my-agents does **not** add a third set of
+agents; instead, the existing 11 skills + 6 hooks project cleanly onto these
+coordinates. This is the narrative anchor users should reach for when reasoning
+about where a concern belongs.
+
+| Anthropic role | oh-my-agents counterpart | gstack counterpart | Handoff artifact |
+|----------------|--------------------------|--------------------|------------------|
+| **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` |
+| **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (PreToolUse hooks) | `/guard` (freeze/careful) | hook block + remediation message in agent context |
+| **Evaluator** | `/verify` + `/harness-review` (decision tag) | `/codex`, `/cso`, `/ux-audit`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` |
+| **Memory between resets** | nested CLAUDE.md, `docs/LINTING.md` (TASTE rules) | GBrain (`learnings-log`, `timeline-log`, `eureka`) | one-direction bridge: observation → enforcement |
+| **Loop closure** | `/encode-mistake --from-gbrain` (human-gated) | `/investigate`, `/retro` | TASTE-NNN rule with `taste_id` ↔ learning-id back-reference |
+
+**Key implication**: when adding capability, ask *which Anthropic role does this serve?*
+If the answer is "none" or "all", the addition is likely outside the harness. If the
+answer is a role gstack already covers, defer to gstack.
+
 ## Plugin Structure
 
 ```
