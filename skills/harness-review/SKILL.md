@@ -197,12 +197,53 @@ gstack's output and reference its report path.
 Log review results to `.claude/metrics/reviews.jsonl`. Reference (don't copy) any
 gstack report paths via `gstack_reports: [...]` field in the JSONL entry.
 
+### Review 8: Decision Signal (mandatory; flow-efficiency lever)
+
+Every `/harness-review` invocation MUST end with exactly one decision label and
+write `.claude/signals/review-latest.json` so `/lifecycle next` can advance without
+human polling. Without a decision signal, lifecycle treats the review as `NEEDS_HUMAN`
+and halts.
+
+**Decision tags (pick one):**
+
+| Tag | Meaning | Lifecycle effect |
+|-----|---------|------------------|
+| `APPROVE` | No P0 issues; P1/P2 may exist but are non-blocking. Safe to ship. | `next` proceeds to ship |
+| `REQUEST_CHANGES` | At least one P0, OR multiple cross-validated `[BOTH+]` findings. | `next` returns to execute |
+| `NEEDS_HUMAN` | Architectural ambiguity, judgment-dependent slop, or composition skipped (`--no-gstack`). | `next` halts; user decides |
+
+**Signal file structure** (write at end of skill, even on early exit):
+
+```bash
+mkdir -p .claude/signals
+cat > .claude/signals/review-latest.json <<EOF
+{
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "decision": "APPROVE | REQUEST_CHANGES | NEEDS_HUMAN",
+  "merge_recommendation": "TRIVIAL | STANDARD | COMPLEX",
+  "p0_count": N, "p1_count": N, "p2_count": N,
+  "tags_present": ["[HARNESS]", "[STRUCTURAL]", ...],
+  "gstack_composed": true|false,
+  "plan_id": "{plan-id or null}",
+  "reason": "one-line rationale (≤120 chars)"
+}
+EOF
+```
+
+This is a **decision artifact**, not a report — keep it ≤500 bytes. The verbose
+markdown stays in `reviews.jsonl` and the agent's stdout. Per Osmani's "success
+silence, failure verbosity": when `decision=APPROVE`, downstream consumers do
+nothing extra; when `REQUEST_CHANGES` or `NEEDS_HUMAN`, the verbose stdout drives
+the human or next agent turn.
+
 ## Output Format
 
 ```markdown
 ## Harness Review
 
-### Verdict: [APPROVE / SLOP — REQUEST CHANGES / SAFETY — REQUEST CHANGES / REQUEST CHANGES / DISCUSS]
+### Decision: [APPROVE | REQUEST_CHANGES | NEEDS_HUMAN]    ← also written to .claude/signals/review-latest.json
+
+### Verdict (legacy): [APPROVE / SLOP — REQUEST CHANGES / SAFETY — REQUEST CHANGES / REQUEST CHANGES / DISCUSS]
 
 ### Merge Recommendation: [TRIVIAL / STANDARD / COMPLEX]
 
@@ -270,3 +311,8 @@ gstack report paths via `gstack_reports: [...]` field in the JSONL entry.
 - Tag every finding: `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]`
 - Log results for both `/harness-dashboard` and gstack's `/ship` consumption
 - Reference gstack report paths in JSONL — never copy contents
+- **Always emit a decision tag** (`APPROVE` / `REQUEST_CHANGES` / `NEEDS_HUMAN`) and
+  write `.claude/signals/review-latest.json`; absence is treated as `NEEDS_HUMAN` by `/lifecycle`
+- **Success silence, failure verbosity** (Osmani 2026): on `APPROVE`, the verbose
+  per-pillar checklist may collapse to one line each; on `REQUEST_CHANGES` or
+  `NEEDS_HUMAN`, keep full verbosity to drive the next turn

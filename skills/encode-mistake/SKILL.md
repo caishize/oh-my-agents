@@ -35,41 +35,70 @@ Take the description from `$ARGUMENTS` and create a permanent enforcement artifa
 - `--hook-output` — Treat input as raw hook error message
 - `--from-investigation <id>` — Auto-populate from gstack `/investigate` artifact in
   `.claude/metrics/investigations.jsonl`
-- `--from-gstack-learnings [<n>]` — Scan gstack GBrain `learnings-log` for unencoded
-  observations and propose TASTE rules. Default `n=5` most recent.
-  See **Step 0** below.
+- `--from-gbrain [<type>] [<n>]` — Scan gstack GBrain memory for unencoded
+  observations and propose TASTE rules. `type` ∈ {`learning` (default), `eureka`,
+  `retro`, `all`}; `n` defaults to 5. See **Step 0** below.
+- `--from-gstack-learnings [<n>]` — Deprecated alias for `--from-gbrain learning [<n>]`,
+  kept for backward compatibility.
 
-### Step 0 (optional): Ingest from gstack GBrain learnings-log
+### Step 0 (optional): Ingest from gstack GBrain memory
 
-When invoked with `--from-gstack-learnings`, surface the most recent unencoded
-*observations* from gstack and turn each into a candidate TASTE rule. gstack writes
-*observations* (what happened), this skill writes *enforcement* (what cannot happen
-again) — two distinct layers; never collapse them.
+When invoked with `--from-gbrain` (or its deprecated alias `--from-gstack-learnings`),
+surface the most recent unencoded *observations* from gstack and turn each into a
+candidate TASTE rule. gstack writes *observations* (what happened), this skill writes
+*enforcement* (what cannot happen again) — two distinct layers; never collapse them.
+
+**Source priority** (capability-first, glob-fallback):
+
+1. **`gbrain` CLI present** (v1.26+) → `gbrain search --type <type> --since 30d --limit <n>`
+   gives federated, queryable results across machines.
+2. **GBrain worktree present** → `tail` the matching JSONL. Probe `~/.gstack-artifacts-worktree/`
+   first (v1.27+ rename), fall back to `~/.gstack-brain-worktree/` (legacy v1.17–v1.26).
+3. **Per-project log fallback** → `~/.gstack/projects/$SLUG/*-learnings-*.jsonl`.
+4. **None** → print "no gbrain source available; skip" and exit 0 (graceful).
 
 ```bash
 SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
-GBRAIN_WT="$HOME/.gstack-brain-worktree"
+TYPE="${1:-learning}"          # learning | eureka | retro | all
+LIMIT="${2:-5}"
 PROJ_DIR="$HOME/.gstack/projects/$SLUG"
-LIMIT="${1:-5}"
 
-# Prefer GBrain worktree (v1.17+); fall back to per-project log.
-if [ -d "$GBRAIN_WT" ]; then
-  LOG=$(ls -t $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | head -1)
-else
+# Dual-value worktree (v1.27 renamed brain → artifacts). First hit wins.
+GBRAIN_WT=""
+for d in "$HOME/.gstack-artifacts-worktree" "$HOME/.gstack-brain-worktree"; do
+  [ -d "$d" ] && GBRAIN_WT="$d" && break
+done
+
+# Prefer CLI when present (v1.26+).
+if command -v gbrain >/dev/null 2>&1; then
+  if [ "$TYPE" = "all" ]; then
+    gbrain search --since 30d --limit "$LIMIT" 2>/dev/null
+  else
+    gbrain search --type "$TYPE" --since 30d --limit "$LIMIT" 2>/dev/null
+  fi
+elif [ -n "$GBRAIN_WT" ]; then
+  case "$TYPE" in
+    learning) PATTERN="learnings-*.jsonl" ;;
+    eureka)   PATTERN="eureka-*.jsonl" ;;
+    retro)    PATTERN="retro-*.jsonl" ;;
+    all)      PATTERN="*-*.jsonl" ;;
+    *)        PATTERN="learnings-*.jsonl" ;;
+  esac
+  LOG=$(ls -t $GBRAIN_WT/$PATTERN 2>/dev/null | head -1)
+  [ -n "$LOG" ] && tail -200 "$LOG" | grep -v '"taste_id"' | tail -"$LIMIT"
+elif [ "$TYPE" = "learning" ] && [ -d "$PROJ_DIR" ]; then
   LOG=$(ls -t $PROJ_DIR/*-learnings-*.jsonl 2>/dev/null | head -1)
+  [ -n "$LOG" ] && tail -200 "$LOG" | grep -v '"taste_id"' | tail -"$LIMIT"
+else
+  echo "No gbrain source available — skipping ingest"
 fi
-[ -z "$LOG" ] && echo "No gstack learnings-log present — skipping ingest" && exit 0
-
-# Last N learnings without a `taste_id` field — those are unencoded.
-tail -200 "$LOG" 2>/dev/null \
-  | grep -v '"taste_id"' \
-  | tail -"$LIMIT"
 ```
 
-For each unencoded learning, propose a TASTE rule (Steps 1–7 below) and ask the user
-to confirm before writing files. **Never modify the learnings-log itself** — it is a
-read-only source. After encoding, just record `taste_id: TASTE-NNN` in the LINTING.md
-entry's "Origin" field to make the link traceable.
+For each candidate observation, propose a TASTE rule (Steps 1–7 below) and **always
+ask the user to confirm before writing files** — auto-generation has been shown to
+hurt agent performance (ETH Zurich, 2026). **Never modify the source log** — it is a
+read-only sensor. After encoding, record `taste_id: TASTE-NNN` in the LINTING.md
+entry's "Origin" field to make the link traceable, but do not write back to gbrain.
 
 ### Step 1: Understand the Pattern
 

@@ -9,12 +9,30 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths (v1.21+ baseline)
+## Complementary Strengths (v1.28+ baseline)
 
-> **Anchor doc**: [TEAM-DISCUSSION-2026-04-30.md](TEAM-DISCUSSION-2026-04-30.md)
-> records the rationale for the v1.21-era bridges (GBrain, /landing-report, conductor
-> workspaces). Quarterly contract review supplemented by **lightweight drift check
-> on every `/gstack-sync --status`** — gstack ships ~daily, so drift is the norm.
+> **Anchor docs**:
+> [TEAM-DISCUSSION-2026-04.md](TEAM-DISCUSSION-2026-04.md) (composition v1),
+> [TEAM-DISCUSSION-2026-04-30.md](TEAM-DISCUSSION-2026-04-30.md) (v1.21 alignment),
+> [TEAM-DISCUSSION-2026-05-08.md](TEAM-DISCUSSION-2026-05-08.md) (**v1.28 + dual-value
+> paths + decision-signal flow + differentiation anchor**).
+> Quarterly contract review is supplemented by **lightweight drift check on every
+> `/gstack-sync --status`** — gstack shipped 7 versions in 8 days through Q2 2026.
+
+## Differentiation Anchor (where oh-my-agents is irreplaceable)
+
+With Anthropic Managed Agents at $0.08/session-hour and OpenAI Agents SDK shipping
+a model-native harness, generic *workflow orchestration* is now commoditized.
+oh-my-agents must explicitly anchor its differentiation. **Locked decisions:**
+
+| Concern | Owner | Rationale |
+|---------|-------|-----------|
+| Mechanical quality constraints (hooks + arch-guard + TASTE) | **oh-my-agents** | Repo-local enforcement; Managed Agents cannot replicate without source access |
+| Two-layer model: observation → enforcement | **oh-my-agents** | ETH Zurich + Osmani back the human-gated TASTE layer |
+| Anti-slop / anti-entropy long-horizon view | **oh-my-agents** | Chroma context-rot evidence; needs persistent project memory |
+| Workflow orchestration (ideate → plan → ship → deploy) | **gstack** | Already commoditized; we *route* via `/lifecycle`, never *execute* |
+| Generic harness runtime | **Managed Agents / Agents SDK** | Don't compete; consume |
+| Auto-generated rules from learnings | **NEVER** | ETH Zurich: −20% tokens, lower performance |
 
 | Dimension | gstack | oh-my-agents | Combined |
 |-----------|--------|-------------|----------|
@@ -110,12 +128,16 @@ See `.claude/integration.json` for the canonical list.
 | Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | /harness-dashboard (legibility input) |
 | gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | /harness-dashboard |
 | gstack analytics | Eureka moments | `~/.gstack/analytics/eureka.jsonl` | /harness-dashboard |
-| **GBrain (v1.12+)** | Federation worktree | `~/.gstack-brain-worktree/` | /gstack-sync, /harness-dashboard |
-| **GBrain (v1.9+)** | Learnings log | `~/.gstack-brain-worktree/learnings-*.jsonl` (or fallback `~/.gstack/projects/$SLUG/*-learnings-*.jsonl`) | **/encode-mistake (--from-gstack-learnings)** |
-| **GBrain (v1.9+)** | Timeline log | `~/.gstack-brain-worktree/timeline-*.jsonl` | /harness-dashboard |
-| **GBrain (v1.9+)** | Review log | `~/.gstack-brain-worktree/review-*.jsonl` | /harness-dashboard |
-| **GBrain (v1.9+)** | Developer profile | `~/.gstack-brain-worktree/developer-profile-*.json` | /harness-dashboard |
+| **GBrain (v1.12+, renamed v1.27)** | Federation worktree | `~/.gstack-artifacts-worktree/` (current) **OR** `~/.gstack-brain-worktree/` (legacy) | /gstack-sync, /harness-dashboard (dual-value glob) |
+| **GBrain (v1.9+, dual)** | Learnings log | `${GBRAIN_WT}/learnings-*.jsonl` (current or legacy) **OR** fallback `~/.gstack/projects/$SLUG/*-learnings-*.jsonl` | **/encode-mistake `--from-gbrain learning`** |
+| **GBrain (v1.9+, dual)** | Timeline log | `${GBRAIN_WT}/timeline-*.jsonl` | /harness-dashboard |
+| **GBrain (v1.9+, dual)** | Review log | `${GBRAIN_WT}/review-*.jsonl` | /harness-dashboard |
+| **GBrain (v1.9+, dual)** | Developer profile | `${GBRAIN_WT}/developer-profile-*.json` | /harness-dashboard |
 | **GBrain (v1.12+)** | Repo policy | `~/.gstack/gbrain-repo-policy.json` | /gstack-sync |
+| **gbrain CLI (v1.26+)** | Memory federation queries | `command -v gbrain` | /encode-mistake (`gbrain search --type {learning|eureka|retro}`) |
+| **llms.txt index (v1.28+)** | Authoritative skill/command index | `<gstack_root>/llms.txt` | /gstack-sync (skill discovery; replaces hand-rolled enumeration) |
+| **memory-ingest binary (v1.26+)** | Internal gstack ingest tool | `<gstack_root>/bin/gstack-memory-ingest` | presence probe only — we never invoke |
+| **review decision signal (v3.4+)** | Decision tag from `/harness-review` | `.claude/signals/review-latest.json` | /lifecycle next (gates auto-advance) |
 | **/landing-report (v1.11+)** | Post-ship metrics (local) | `.gstack/landing-reports/*.json` | /harness-dashboard (DORA grounded) |
 | **/landing-report (v1.11+)** | Post-ship metrics (project) | `~/.gstack/projects/$SLUG/*-landing-*.md` | /harness-dashboard |
 | **Conductor workspaces (v1.11+)** | Parallel sprint dirs | `~/conductor/workspaces/` | hooks (presence only) |
@@ -229,27 +251,39 @@ defers cross-cutting concerns that gstack already owns.
 | Velocity retro | gstack /retro | — |
 | Governance retro | oh-my-agents /harness-dashboard | DORA proxy + dual-review rate |
 
-## Anti-Bloat Constraints (hard rules — v2 after 2026-04-30 review)
+## Anti-Bloat Constraints (hard rules — v3 after 2026-05-08 review)
 
 1. **No new skills** for integration purposes; modify existing skills only.
 2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers immediate trim
    (this rule itself caught `spec-to-task` at 465 → trimmed to 317 lines).
 3. **Glob over exact path** for every gstack bridge; gstack reorganizes frequently
-   (~daily releases).
+   (~daily releases; 7 versions in 8 days during 2026-Q2).
 4. **Loose version match**: probe artifact presence, not version strings.
-5. **Read-only bridge**: never write to `~/.gstack/` or `~/.gstack-brain-worktree/`.
+5. **Read-only bridge**: never write to `~/.gstack/`, `~/.gstack-brain-worktree/`,
+   or `~/.gstack-artifacts-worktree/` (post-v1.27 rename).
 6. **Lightweight drift check on every `/gstack-sync --status`**; deep contract
    review still quarterly (`--contract-check`).
 7. **`min_supported` tracks gstack's major capability milestones**, not minor
-   versions. Current floor: **v1.9.0.0** (cross-machine GBrain era).
+   versions. Current floor: **v1.26.0.0** (Memory Ingest v1).
 8. **Two-layer enforcement model — never collapse**:
-   - gstack writes **observations** (`learnings-log`, `timeline-log`, `review-log`)
+   - gstack writes **observations** (`learnings-log`, `timeline-log`, `review-log`,
+     `eureka`, `retro`, `builder-profile` via `gbrain put`)
    - oh-my-agents writes **mechanical enforcement** (TASTE rules, hook patterns)
-   - Bridge is one-direction: observation → enforcement, via `/encode-mistake --from-gstack-learnings`
+   - Bridge is one-direction: observation → enforcement, via `/encode-mistake --from-gbrain`
 9. **Osmani principle for review output**: *success silence, failure verbosity*.
    Passing checks collapse to one line; failures stay verbose.
 10. Every integration rule must answer: *"Will this still hold after gstack's next release?"*
     If no — replace with capability detection.
+11. **Bridge dual-value (NEW v3)**: every gstack v1.27+ rename is probed at BOTH
+    legacy (`gstack-brain*`) and current (`gstack-artifacts*`) paths; first hit wins;
+    both absent ⇒ graceful degrade; consumers never assume a single path.
+12. **`min_supported` follows core-capability milestones (NEW v3)** — bumped at major
+    surfaces (Memory Ingest v1 = v1.26), not at minor releases.
+13. **No orchestration (NEW v3)** — `/lifecycle` is router + reporter, never executor.
+    Workflow orchestration belongs to gstack; if any skill in this plugin starts
+    *implementing* a phase rather than *invoking* it, that logic is removed.
+14. **No auto-generated rules (NEW v3, ETH Zurich 2026)** — `/encode-mistake` candidates
+    surfaced from gbrain are always human-gated. Auto-writing TASTE-NNN entries is forbidden.
 
 ## Foundational Principles
 

@@ -1,102 +1,61 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.3.0** — Implements OpenAI's harness engineering methodology (four pillars)
-adapted for Claude Code. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) v1.21+ — slop-deep / security-deep /
-UX audits delegated to gstack skills; GBrain `learnings-log` and `/landing-report`
-consumed as read-only sensors; architecture, entropy, legibility owned here.
+**v3.4.0** — Mechanical quality constraints + entropy management for AI-driven
+development. **Composition-based** integration with
+[gstack](https://github.com/garrytan/gstack.git) v1.28+; we own
+*architecture / entropy / observability* and **never orchestrate workflows**
+(gstack does that).
 
-## Skills (User-invocable)
+## Differentiation anchor
 
-### Core Harness Skills
+| oh-my-agents owns | gstack owns | Don't reinvent |
+|---|---|---|
+| hooks, arch-guard, TASTE rules, entropy-sweep | ideate / plan / ship / deploy / canary / retro | Managed Agents / Agents SDK runtime |
+| review **decision signal**, legibility scoring | `/codex` `/cso` `/ux-audit` `/investigate` `/qa` | gstack lifecycle orchestration |
+| two-layer model: observation → mechanical enforcement | observation layer (GBrain memory ingest) | auto-generated rules (ETH Zurich 2026) |
 
-| Command | Pillar | Purpose |
-|---------|--------|---------|
-| `/harness-init` | All | Initialize harness: CLAUDE.md, docs/, bootstrap, config |
-| `/legibility-score` | All | 10-metric Agent Legibility Score (0-30) |
-| `/spec-to-task` | Documentation | Convert specs to execution plans with lifecycle |
-| `/verify` | Architecture | Post-execution check: build, test, lint, arch guard |
-| `/encode-mistake` | Entropy | Convert mistakes OR expert taste into permanent rules |
-| `/arch-guard` | Architecture | Enforce architectural constraints and Providers |
-| `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
-| `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex`, `/cso`, `/ux-audit` with dedup tags |
-| `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + deep-dive queries |
+## Surface
 
-### gstack Integration Skills
+11 user-invocable skills (full details in [docs/WORKFLOW.md](docs/WORKFLOW.md)):
+`harness-init`, `legibility-score`, `spec-to-task`, `verify`, `encode-mistake`,
+`arch-guard`, `entropy-sweep`, `harness-review`, `harness-dashboard`, `gstack-sync`,
+`lifecycle`. 2 read-only background agents in `agents/`. 6 enforcement hooks
+(`arch-check`, `safety-check`, `bash-safety-check`, `self-verify-check`,
+`session-metrics`, `doc-drift-check`).
 
-| Command | Purpose |
-|---------|---------|
-| `/gstack-sync` | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
-| `/lifecycle` | Full lifecycle orchestrator with canary phase, worktree awareness, Gate Failure Routing |
+## Workflow (TL;DR)
 
-## Agents (Read-only background)
+- One-time: `/harness-init --quick` + `/gstack-sync --setup`
+- Daily: `/lifecycle next` (router-only; chains gstack + harness skills, halts on
+  `review-latest.json` decision)
+- Mistake → guardrail: `/investigate` (gstack) → `/encode-mistake --from-gbrain` (here)
+- Weekly: `/entropy-sweep` → `/harness-dashboard` → `/gstack-sync --metrics`
 
-| Agent | Purpose |
-|-------|---------|
-| session-observer-agent | Session tracking and shift-handoff |
-| doc-gardening-agent | Documentation gardening and drift repair |
+Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md).
+Bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md).
+Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Hooks (Automatic enforcement)
+## gstack integration — what's wired (v1.28 baseline)
 
-| Hook | Event | Behavior |
-|------|-------|----------|
-| arch-check.sh | PreToolUse | Blocks layer violations, Providers bypass |
-| safety-check.sh | PreToolUse | Blocks hardcoded secrets and risk patterns |
-| bash-safety-check.sh | PreToolUse | Blocks credential leaks in bash commands |
-| self-verify-check.sh | PostToolUse | Warns on type/syntax errors after edit |
-| session-metrics.sh | PostToolUse | Records tool usage and hook performance |
-| doc-drift-check.sh | Stop | Warns about documentation drift |
+- **Bridge dual-value**: every gstack v1.27+ rename is probed at both legacy
+  (`gstack-brain*`) and current (`gstack-artifacts*`) paths.
+- **`/encode-mistake --from-gbrain {learning|eureka|retro|all}`** — observation →
+  TASTE rule, always human-gated.
+- **`/harness-review` decision signal** → `.claude/signals/review-latest.json` →
+  `/lifecycle next` auto-advances or halts on `NEEDS_HUMAN`.
+- **`/landing-report` grounded DORA proxy** in `/harness-dashboard`.
+- **Confusion Protocol** signals → `.claude/metrics/confusion.jsonl` → legibility input.
+- **Worktree-aware** — `.gstack-worktrees/` and `~/conductor/workspaces/` both honored;
+  never cross-fire.
 
-## Four Pillars
+## Anti-bloat (hard rules)
 
-1. **Architecture as Guardrails** — Layer model, Providers, mechanical enforcement
-2. **Documentation as System of Record** — Nested CLAUDE.md, exec-plans, progressive disclosure
-3. **Observability & Legibility** — Session metrics, dashboard, shift-handoff
-4. **Entropy Management** — Slop detection, doc-gardening, golden principles
+1. No new skills for integration; modify existing only.
+2. SKILL.md ≤ 400 lines; root CLAUDE.md ≤ ~60 lines (Osmani 2026).
+3. Glob over exact path; bridges dual-value (legacy + current).
+4. Read-only across all gstack paths.
+5. No orchestration — `/lifecycle` is router, never executor.
+6. No auto-generated rules — human-gated TASTE encoding only.
 
-## Workflow
-
-Full lifecycle details: [docs/WORKFLOW.md](docs/WORKFLOW.md)
-
-**One-time setup:**
-1. `/harness-init --quick` + `/gstack-sync --setup`
-
-**Daily cycle (with gstack — full lifecycle):**
-2. `/lifecycle next` (auto-guides) or manually:
-   `/office-hours` → `/autoplan` → `/spec-to-task` → develop → `/verify` → `/harness-review` → `/ship`
-
-**Daily cycle (oh-my-agents only):**
-3. `/spec-to-task` → develop → `/verify` → `/harness-review`
-
-**When agents make mistakes:**
-4. `/investigate` (gstack) → `/encode-mistake` (oh-my-agents) → permanent guardrail
-
-**Weekly / pre-release:**
-5. `/entropy-sweep` → `/retro` + `/harness-dashboard` → `/gstack-sync --metrics`
-
-## gstack Integration
-
-oh-my-agents and gstack are complementary:
-- **gstack** accelerates delivery: ideation → planning → review → shipping → deployment → monitoring
-- **oh-my-agents** enforces quality: architecture → entropy → observability → documentation
-
-Key integration points (composition-based, read-only, glob-based, rippable):
-- Design docs from `/office-hours` auto-feed into `/spec-to-task`
-- `/verify` emits readiness signal (`.claude/signals/verify-latest.json`) for `/ship` pre-flight
-- `/harness-review` delegates slop-deep → `/codex`, security-deep → `/cso`, UX → `/ux-audit`;
-  tags findings `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
-- `/harness-dashboard` includes gstack metrics (skills, reviews, lifecycle, DORA proxy)
-- `/investigate` → `/encode-mistake` closes the feedback loop permanently
-- `/lifecycle` orchestrates full cycle + Gate Failure Routing (names exact remediation skill);
-  worktree-aware, never cross-fires across `.gstack-worktrees/` siblings
-- Confusion Protocol (gstack v0.18+) → `.claude/metrics/confusion.jsonl` → legibility input
-- **GBrain learnings-log (gstack v1.9+) → `/encode-mistake --from-gstack-learnings`** —
-  observation layer feeds enforcement layer; two-layer model never collapsed
-- **`/landing-report` (gstack v1.11+) → `/harness-dashboard`** — DORA proxy annotates
-  each metric `[grounded]` when backed by real ship data, `[proxy]` otherwise
-- Conductor workspaces (gstack v1.11+) — coexists with `.gstack-worktrees/`; both honored
-
-Full rationale: [docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md)
-and [docs/TEAM-DISCUSSION-2026-04-30.md](docs/TEAM-DISCUSSION-2026-04-30.md)
-(v1.21-era re-alignment).
-Full bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md).
+Full constraints + rationale: [docs/INTEGRATION.md#anti-bloat-constraints](docs/INTEGRATION.md).
+Latest decision record: [docs/TEAM-DISCUSSION-2026-05-08.md](docs/TEAM-DISCUSSION-2026-05-08.md).

@@ -1,21 +1,22 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.3.0",
+    "version": "3.4.0",
     "root": "."
   },
   "gstack": {
     "detected": true,
     "path": "/root/.claude/skills/gstack",
-    "version": "1.21.1.0",
+    "version": "1.28.0.0",
     "version_match": "loose",
-    "min_supported": "1.9.0.0",
-    "milestone_pin": "GBrain federation (v1.9+) + workspace-aware ship (v1.11+) + GBrain onboarding (v1.12+) + GBrain worktree (v1.17+)"
+    "min_supported": "1.26.0.0",
+    "milestone_pin": "Memory Ingest v1 (v1.26+) + gstack-brain → gstack-artifacts rename (v1.27+) + llms.txt index (v1.28+)"
   },
   "project": {
     "slug": "oh-my-agents"
   },
+  "_bridge_doc": "Paths are dual-value where gstack v1.27.0.0 introduced renames. Consumers glob BOTH legacy and current; first hit wins; absence is graceful degrade.",
   "bridges": {
     "design_docs":              "~/.gstack/projects/oh-my-agents/*-design-*.md",
     "test_plans":               "~/.gstack/projects/oh-my-agents/*-test-plan-*.md",
@@ -31,17 +32,27 @@
     "conductor_state":          "conductor.json",
     "conductor_workspaces":     "~/conductor/workspaces/",
     "worktrees_root":           ".gstack-worktrees/",
-    "gbrain_worktree":          "~/.gstack-brain-worktree/",
-    "gbrain_learnings_log":     "~/.gstack-brain-worktree/learnings-*.jsonl",
+    "gbrain_worktree_current":  "~/.gstack-artifacts-worktree/",
+    "gbrain_worktree_legacy":   "~/.gstack-brain-worktree/",
+    "gbrain_learnings_current": "~/.gstack-artifacts-worktree/learnings-*.jsonl",
+    "gbrain_learnings_legacy":  "~/.gstack-brain-worktree/learnings-*.jsonl",
     "gbrain_learnings_fallback":"~/.gstack/projects/oh-my-agents/*-learnings-*.jsonl",
-    "gbrain_timeline_log":      "~/.gstack-brain-worktree/timeline-*.jsonl",
-    "gbrain_review_log":        "~/.gstack-brain-worktree/review-*.jsonl",
-    "gbrain_developer_profile": "~/.gstack-brain-worktree/developer-profile-*.json",
+    "gbrain_timeline_current":  "~/.gstack-artifacts-worktree/timeline-*.jsonl",
+    "gbrain_timeline_legacy":   "~/.gstack-brain-worktree/timeline-*.jsonl",
+    "gbrain_review_current":    "~/.gstack-artifacts-worktree/review-*.jsonl",
+    "gbrain_review_legacy":     "~/.gstack-brain-worktree/review-*.jsonl",
+    "gbrain_profile_current":   "~/.gstack-artifacts-worktree/developer-profile-*.json",
+    "gbrain_profile_legacy":    "~/.gstack-brain-worktree/developer-profile-*.json",
     "gbrain_repo_policy":       "~/.gstack/gbrain-repo-policy.json",
+    "gbrain_cli_probe":         "command -v gbrain",
+    "gstack_llms_txt":          "<gstack_root>/llms.txt",
+    "gstack_memory_ingest_bin": "<gstack_root>/bin/gstack-memory-ingest",
+    "gstack_artifacts_remote":  "~/.gstack-artifacts-remote.txt",
     "exec_plans":               "docs/exec-plans/active/*.json",
     "verify_metrics":           ".claude/metrics/verify.jsonl",
     "verify_signal":            ".claude/signals/verify-latest.json",
     "review_metrics":           ".claude/metrics/reviews.jsonl",
+    "review_signal":            ".claude/signals/review-latest.json",
     "session_metrics":          ".claude/metrics/session-*.jsonl",
     "confusion_metrics":        ".claude/metrics/confusion.jsonl",
     "gstack_skill_usage":       "~/.gstack/analytics/skill-usage.jsonl",
@@ -52,12 +63,14 @@
     "security_audit":    "gstack:/cso",
     "ux_audit":          "gstack:/ux-audit",
     "cross_model_qa":    "gstack:/codex",
-    "observation_layer": "gstack:learnings-log (read-only)",
+    "observation_layer": "gstack:learnings-log + gbrain search (read-only, dual-value path)",
     "deploy_metrics":    "gstack:/landing-report (read-only)",
-    "harness_owns":      ["arch-guard", "layer-enforcement", "entropy-sweep", "encode-mistake", "doc-drift", "secrets-hook", "legibility-score"],
-    "gstack_owns":       ["/office-hours", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/landing-report", "/retro", "/investigate", "/qa", "/codex", "/cso", "/ux-audit", "/setup-gbrain", "/health"],
-    "ignored":           ["/gstack-claude", "/scrape", "/skillify", "/pair-agent", "/open-gstack-browser"],
-    "dedup_tags":        ["[HARNESS]", "[STRUCTURAL]", "[CROSS-MODEL]", "[SECURITY]", "[UX]", "[BOTH+]"]
+    "memory_ingest":     "gstack:bin/gstack-memory-ingest (gstack-internal; we never invoke or write)",
+    "harness_owns":      ["arch-guard", "layer-enforcement", "entropy-sweep", "encode-mistake", "doc-drift", "secrets-hook", "legibility-score", "review-decision-signal"],
+    "gstack_owns":       ["/office-hours", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/landing-report", "/retro", "/investigate", "/qa", "/codex", "/cso", "/ux-audit", "/setup-gbrain", "/sync-gbrain", "/health"],
+    "ignored":           ["/gstack-claude", "/scrape", "/skillify", "/pair-agent", "/open-gstack-browser", "/browse", "/setup-deploy"],
+    "dedup_tags":        ["[HARNESS]", "[STRUCTURAL]", "[CROSS-MODEL]", "[SECURITY]", "[UX]", "[BOTH+]"],
+    "decision_tags":     ["APPROVE", "REQUEST_CHANGES", "NEEDS_HUMAN"]
   },
   "policies": {
     "read_only_bridge": true,
@@ -67,8 +80,11 @@
     "loose_version_match": true,
     "worktree_aware": true,
     "gbrain_read_only": true,
+    "bridge_dual_value": true,
+    "no_orchestration": true,
+    "human_gated_rule_encoding": true,
     "contract_lightweight_each_status": true,
     "review_contract_quarter": "2026-Q3",
-    "principles_anchor": "docs/TEAM-DISCUSSION-2026-04-30.md"
+    "principles_anchor": "docs/TEAM-DISCUSSION-2026-05-08.md"
   }
 }
