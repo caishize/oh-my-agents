@@ -212,29 +212,30 @@ and halts.
 | `REQUEST_CHANGES` | At least one P0, OR multiple cross-validated `[BOTH+]` findings. | `next` returns to execute |
 | `NEEDS_HUMAN` | Architectural ambiguity, judgment-dependent slop, or composition skipped (`--no-gstack`). | `next` halts; user decides |
 
-**Signal file structure** (write at end of skill, even on early exit):
+**Signal file schema** — write `.claude/signals/review-latest.json` at end of skill,
+even on early exit. Keep it ≤500 bytes (decision artifact, not report):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | string (ISO-8601 UTC) | When the review concluded |
+| `decision` | enum | `APPROVE` \| `REQUEST_CHANGES` \| `NEEDS_HUMAN` |
+| `merge_recommendation` | enum | `TRIVIAL` \| `STANDARD` \| `COMPLEX` |
+| `p0_count` / `p1_count` / `p2_count` | integer | Issue counts by severity |
+| `tags_present` | string[] | Subset of `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]` |
+| `gstack_composed` | boolean | True if any gstack skill was composed |
+| `plan_id` | string \| null | Active exec-plan id, if any |
+| `reason` | string (≤120 chars) | One-line rationale for the decision |
 
 ```bash
 mkdir -p .claude/signals
-cat > .claude/signals/review-latest.json <<EOF
-{
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "decision": "APPROVE | REQUEST_CHANGES | NEEDS_HUMAN",
-  "merge_recommendation": "TRIVIAL | STANDARD | COMPLEX",
-  "p0_count": N, "p1_count": N, "p2_count": N,
-  "tags_present": ["[HARNESS]", "[STRUCTURAL]", ...],
-  "gstack_composed": true|false,
-  "plan_id": "{plan-id or null}",
-  "reason": "one-line rationale (≤120 chars)"
-}
-EOF
+# Compute fields above, then write JSON. Use python3 / jq / printf to ensure valid
+# escaping; do NOT use unquoted heredocs with literal placeholders.
 ```
 
-This is a **decision artifact**, not a report — keep it ≤500 bytes. The verbose
-markdown stays in `reviews.jsonl` and the agent's stdout. Per Osmani's "success
-silence, failure verbosity": when `decision=APPROVE`, downstream consumers do
-nothing extra; when `REQUEST_CHANGES` or `NEEDS_HUMAN`, the verbose stdout drives
-the human or next agent turn.
+The verbose markdown report stays in `reviews.jsonl` and the agent's stdout. Per
+Osmani's "success silence, failure verbosity": when `decision=APPROVE`, downstream
+consumers do nothing extra; when `REQUEST_CHANGES` or `NEEDS_HUMAN`, the verbose
+stdout drives the human or next agent turn.
 
 ## Output Format
 

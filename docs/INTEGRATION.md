@@ -51,8 +51,8 @@ oh-my-agents must explicitly anchor its differentiation. **Locked decisions:**
 | Monitoring | /canary | — | Health report → /harness-dashboard quality trend |
 | Multi-session | conductor.json + .gstack-worktrees/ | **worktree-aware** verify/hooks | No cross-fire across sibling sprints |
 | Confusion (v0.18) | Confusion Protocol | session-metrics + /harness-dashboard | Signals → .claude/metrics/confusion.jsonl |
-| **Observation layer (v1.9+)** | GBrain `learnings-log` | `/encode-mistake --from-gstack-learnings` | Learnings (observations) → TASTE rules (enforcement); two layers, single direction |
-| **Cross-machine memory (v1.17+)** | `~/.gstack-brain-worktree/` (git-worktree federation) | `/gstack-sync` + `/harness-dashboard` (read-only) | Agent learning persists across machines without our involvement |
+| **Observation layer (v1.9+, ingest v1.26+)** | GBrain memory (`learnings`, `eureka`, `retro`, `timeline` via `gbrain put`) | `/encode-mistake --from-gbrain [type]` | Observations → TASTE rules (enforcement); two layers, single direction; human-gated |
+| **Cross-machine memory (v1.17+, renamed v1.27)** | `~/.gstack-artifacts-worktree/` (current) **OR** `~/.gstack-brain-worktree/` (legacy) | `/gstack-sync` + `/harness-dashboard` (read-only, dual-value glob) | Agent learning persists across machines; survives gstack rename |
 | **Deploy metrics (v1.11+)** | `/landing-report` | `/harness-dashboard` DORA proxy → grounded | deployment_frequency, lead_time, change_failure_rate sourced from real ships |
 | **Workspace-aware ship (v1.11+)** | `bin/gstack-next-version` + version-gate.yml | `/verify` (no-op; gstack handles parallel-PR safety) | We do not compete with version allocation |
 | **Conductor workspaces (v1.11+)** | `~/conductor/workspaces/` | hooks + verify (presence detection only) | Coexists with `.gstack-worktrees/`; both honored |

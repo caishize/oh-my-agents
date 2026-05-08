@@ -109,16 +109,19 @@ SIGNAL=".claude/signals/review-latest.json"
 if [ -f "$SIGNAL" ]; then
   DECISION=$(python3 -c 'import json;print(json.load(open(".claude/signals/review-latest.json"))["decision"])' 2>/dev/null)
 else
-  DECISION="NEEDS_HUMAN"   # Missing signal = treat as needs human (per Anti-Bloat v3 rule 11)
+  DECISION="NEEDS_HUMAN"   # Missing signal = treat as needs human (per Anti-Bloat v3 rule 13)
 fi
-case "$DECISION" in
-  APPROVE)         echo "→ proceed to ship" ;;
-  REQUEST_CHANGES) echo "→ back to execute; see reviews.jsonl" ;;
-  NEEDS_HUMAN|*)   echo "→ HALT; user decision required" ;;
-esac
+echo "review-decision: $DECISION"
 ```
 
-SHIP IT → proceed. FIX AND RESHIP → stop. NEEDS REWORK → back to `execute`.
+**Routing rules (the agent driving this skill must obey):**
+
+- `APPROVE` → proceed; if `next --auto`, immediately invoke the `ship` phase.
+- `REQUEST_CHANGES` → **stop the auto chain**; surface `.claude/metrics/reviews.jsonl`
+  P0/P1 findings; loop back to `execute` only after the user confirms.
+- `NEEDS_HUMAN` (or signal absent / malformed JSON) → **halt unconditionally**;
+  print the verbose review summary and yield to the user. Do NOT advance
+  regardless of `--auto`. Missing signal is treated identically to `NEEDS_HUMAN`.
 
 ### `ship` — Requires gstack → `/ship` (or guide manual PR)
 

@@ -1,12 +1,19 @@
-# oh-my-agents `v3.3.0`
+# oh-my-agents `v3.4.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
 work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) v1.21+ for full-lifecycle coverage
-(slop-deep, security-deep, and UX audits delegated to gstack; GBrain learnings and
-`/landing-report` consumed as read-only sensors; architecture, entropy, legibility
-owned by oh-my-agents).
+[gstack](https://github.com/garrytan/gstack.git) v1.28+ for full-lifecycle coverage
+(slop-deep, security-deep, and UX audits delegated to gstack; GBrain memory ingest
++ `/landing-report` consumed as read-only sensors; architecture, entropy, legibility,
+and **review decision signaling** owned by oh-my-agents).
+
+**Differentiation anchor**: with Anthropic Managed Agents and OpenAI Agents SDK
+commoditizing generic harness runtimes, this plugin doubles down on what is
+*irreplaceable* — repo-local mechanical constraints (hooks + arch-guard + TASTE
+rules) and the two-layer model (gstack writes observations → we encode mechanical
+enforcement). We **never** orchestrate workflows; gstack does that. `/lifecycle`
+is a router, not an executor.
 
 > **11 skills · 2 agents · 6 hooks** — optimized for minimal context window footprint
 > via progressive disclosure.
@@ -117,32 +124,43 @@ oh-my-agents and gstack are complementary:
 - **gstack** accelerates delivery: ideation → planning → review → shipping → deployment → monitoring
 - **oh-my-agents** enforces quality: architecture → entropy → observability → documentation
 
-Key handoffs (composition-based, read-only, glob-based):
+Key handoffs (composition-based, read-only, glob-based, **dual-value where applicable**):
 - Design docs from `/office-hours` → `/spec-to-task` (auto-imported)
 - `/verify` readiness signal (`.claude/signals/verify-latest.json`) → `/ship` pre-flight
+- **`/harness-review` decision signal (v3.4+)** → `.claude/signals/review-latest.json`
+  with `APPROVE | REQUEST_CHANGES | NEEDS_HUMAN` → `/lifecycle next` auto-advances
+  or halts. Compresses "未决态" — the AI-automation flow no longer waits for the
+  user to read findings and decide.
 - `/harness-review` composes gstack's `/codex` (cross-model slop), `/cso` (security),
   `/ux-audit` (UI) — tags `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
 - `/investigate` (gstack) → `/encode-mistake` (oh-my-agents) closes the feedback loop permanently
-- **GBrain `learnings-log` (gstack v1.9+) → `/encode-mistake --from-gstack-learnings`** —
-  observation layer (gstack) feeds enforcement layer (oh-my-agents); never collapsed
+- **GBrain memory (v1.9+, dual-value path post-v1.27)** → `/encode-mistake --from-gbrain
+  [learning|eureka|retro|all]` — uses `gbrain` CLI when present (v1.26+), falls back
+  through `~/.gstack-artifacts-worktree/` (v1.27+) → `~/.gstack-brain-worktree/`
+  (legacy) → per-project log. Always **human-gated** (ETH Zurich 2026: auto-generated
+  rules hurt agent performance).
 - **`/landing-report` (gstack v1.11+) → `/harness-dashboard`** — DORA proxy upgrades to
   `[grounded]` when real ship/canary data is present
-- `/lifecycle` orchestrates full cycle with Gate Failure Routing — names the exact
-  remediation skill on every failed gate so AI-driven flow doesn't stall
+- `/lifecycle` is a **router** with Gate Failure Routing — names the exact remediation
+  skill on every failed gate; never re-implements a phase
 - Worktree-aware: honors both `.gstack-worktrees/` and `~/conductor/workspaces/` (v1.11+)
 - Confusion Protocol (gstack v0.18+) signals → `.claude/metrics/confusion.jsonl`
-- Lightweight contract drift check on every `/gstack-sync --status` (gstack ships ~daily)
+- Lightweight contract drift check on every `/gstack-sync --status` (gstack shipped
+  7 versions in 8 days during 2026-Q2; drift is the norm)
+- **`llms.txt` index (gstack v1.28+)** → preferred over hand-rolled skill enumeration
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for full bridge manifest;
-[docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md) for the original
-composition rationale; and
-[docs/TEAM-DISCUSSION-2026-04-30.md](docs/TEAM-DISCUSSION-2026-04-30.md) for the
-v1.21-era re-alignment (GBrain, landing-report, anti-bloat v2).
+[docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md) (original
+composition rationale),
+[docs/TEAM-DISCUSSION-2026-04-30.md](docs/TEAM-DISCUSSION-2026-04-30.md)
+(v1.21-era re-alignment), and
+[docs/TEAM-DISCUSSION-2026-05-08.md](docs/TEAM-DISCUSSION-2026-05-08.md)
+(v1.28-era dual-value bridges + decision signal + differentiation anchor).
 
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.3.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.4.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md

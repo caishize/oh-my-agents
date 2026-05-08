@@ -57,10 +57,14 @@ candidate TASTE rule. gstack writes *observations* (what happened), this skill w
 3. **Per-project log fallback** → `~/.gstack/projects/$SLUG/*-learnings-*.jsonl`.
 4. **None** → print "no gbrain source available; skip" and exit 0 (graceful).
 
+**Argument parsing**: from `$ARGUMENTS`, extract the token after `--from-gbrain`
+as `TYPE` (default `learning`), and the next token as `LIMIT` (default `5`).
+The deprecated alias `--from-gstack-learnings <n>` sets `TYPE=learning, LIMIT=<n>`.
+
 ```bash
 SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
-TYPE="${1:-learning}"          # learning | eureka | retro | all
-LIMIT="${2:-5}"
+TYPE="${TYPE:-learning}"       # learning | eureka | retro | all (set by parsing above)
+LIMIT="${LIMIT:-5}"
 PROJ_DIR="$HOME/.gstack/projects/$SLUG"
 
 # Dual-value worktree (v1.27 renamed brain → artifacts). First hit wins.
