@@ -45,7 +45,7 @@ oh-my-agents must explicitly anchor its differentiation. **Locked decisions:**
 | Review (architecture/entropy) | — | /harness-review | Owns four-pillar + dedup orchestration |
 | Review (cross-model) | /codex | — | Composed when `--with-codex`, tag `[CROSS-MODEL]` |
 | Review (security deep) | /cso (OWASP/STRIDE) | safety hooks (secrets) | Hooks block at edit-time; /cso owns deep audit, tag `[SECURITY]` |
-| Review (UX) | /ux-audit (v0.17+) | — | Auto-suggested when UI files touched, tag `[UX]` |
+| Review (UX/DX) | /design-review + /devex-review | — | Auto-suggested when UI files touched, tag `[UX]` |
 | Shipping | /ship (version/changelog/PR) | — | Reads verify signal + review JSONL |
 | Deployment | /land-and-deploy | — | Readiness gates include harness data |
 | Monitoring | /canary | — | Health report → /harness-dashboard quality trend |
@@ -117,7 +117,7 @@ See `.claude/integration.json` for the canonical list.
 | /review | Review log | `~/.gstack/projects/$SLUG/*-reviews.jsonl` | /ship, /harness-review (dedup) |
 | /codex (v0.15+) | Cross-model report | `~/.gstack/projects/$SLUG/*-codex-*.md` | /harness-review (`[CROSS-MODEL]`) |
 | /cso | Security audit | `~/.gstack/projects/$SLUG/*-cso-*.md` | /harness-review (`[SECURITY]`) |
-| /ux-audit (v0.17+) | UX report | `~/.gstack/projects/$SLUG/*-ux-audit-*.md` | /harness-review (`[UX]`) |
+| /design-review | UX report | `~/.gstack/projects/$SLUG/*-design-review-*.md` | /harness-review (`[UX]`) |
 | /qa | Test outcome | `~/.gstack/projects/$SLUG/*-test-outcome-*.md` | /harness-dashboard |
 | /canary | Health report | `.gstack/canary-reports/*.json` | /harness-dashboard (quality trend) |
 | /land-and-deploy | Deploy report | `.gstack/deploy-reports/*.json` | /harness-dashboard (DORA proxy) |
@@ -245,7 +245,7 @@ defers cross-cutting concerns that gstack already owns.
 | Lifecycle orchestration | gstack | oh-my-agents `/lifecycle` only routes & reports gates |
 | Slop deep-check | **gstack /codex** | /harness-review delegates, never duplicates |
 | Security deep-audit | **gstack /cso** | /harness-review delegates; hooks are backstop |
-| UX audit | **gstack /ux-audit** | /harness-review auto-suggests on UI diffs |
+| UX / DX audit | **gstack /design-review + /devex-review** | /harness-review auto-suggests on UI diffs |
 | Cross-model verification | **gstack /codex** | opt-in via `--with-codex` |
 | Ship/Deploy/Canary | gstack | reads `.claude/signals/verify-latest.json` |
 | Velocity retro | gstack /retro | — |
@@ -270,6 +270,12 @@ defers cross-cutting concerns that gstack already owns.
      `eureka`, `retro`, `builder-profile` via `gbrain put`)
    - oh-my-agents writes **mechanical enforcement** (TASTE rules, hook patterns)
    - Bridge is one-direction: observation → enforcement, via `/encode-mistake --from-gbrain`
+   - **"taste" naming hazard**: gstack's `gstack-taste-update` learns *soft, decaying*
+     design preferences (the observation layer); the harness `TASTE-NNN` rule is a
+     *permanent, human-gated, mechanical* guardrail (the enforcement layer). Same word,
+     opposite half-life. The collision *reinforces* the two-layer model when named
+     precisely — gstack-taste is a candidate **feed** for a harness TASTE-NNN rule —
+     but the two must never be equated in logs, prompts, or prose.
 9. **Osmani principle for review output**: *success silence, failure verbosity*.
    Passing checks collapse to one line; failures stay verbose.
 10. Every integration rule must answer: *"Will this still hold after gstack's next release?"*
@@ -284,6 +290,16 @@ defers cross-cutting concerns that gstack already owns.
     *implementing* a phase rather than *invoking* it, that logic is removed.
 14. **No auto-generated rules (NEW v3, ETH Zurich 2026)** — `/encode-mistake` candidates
     surfaced from gbrain are always human-gated. Auto-writing TASTE-NNN entries is forbidden.
+15. **`llms.txt` is the capability oracle (NEW v3.5)** — gstack ships an authoritative
+    skill/command index at `<gstack_root>/llms.txt` (v1.28+). Hand-maintained command
+    names in `integration.json.composition` are **capability bindings, not pins**;
+    `/gstack-sync --contract-check` reconciles them against `llms.txt` when present.
+    Hand-rolled command lists are the drift source (this is how `/ux-audit` and `/health`
+    went stale) — prefer the oracle, and degrade gracefully when it is absent.
+16. **Sunset legacy dual-value paths on schedule (NEW v3.5)** — globbing both
+    `gstack-brain*` (legacy) and `gstack-artifacts*` (current) forever is unbounded
+    entropy, against our own anti-entropy mission. `integration.json.policies.legacy_sunset`
+    pins the floor (v1.27); when `min_supported` rises above it, drop every `*_legacy` bridge.
 
 ## Foundational Principles
 

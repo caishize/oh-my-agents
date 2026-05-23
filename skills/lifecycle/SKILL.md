@@ -88,15 +88,20 @@ description, technical decisions, scope. Invoke `/spec-to-task` with context.
 
 ### `execute` — Guide through task execution from active plan
 
-### `verify` — Invoke `/verify --plan {plan-id}`
+### `verify` — Invoke `/verify --plan {plan-id}`, then read its signal
 
-GREEN → write `.claude/signals/verify-latest.json`, proceed.
-RED → stop, route per Gate Failure table. YELLOW → ask user.
+`/verify` owns the decision and writes `.claude/signals/verify-latest.json`. After
+invocation, read the signal and route on `decision` — symmetric to the review gate:
+
+- `GREEN` → proceed.
+- `RED` → stop; route per Gate Failure table.
+- `YELLOW` → ask the user.
+- signal missing / malformed → treat as "re-run `/verify`"; do NOT advance under `--auto`.
 
 ### `review` — Composition-aware; reads decision signal
 
 Always invoke `/harness-review --plan {plan-id}`. Then conditionally:
-- If `UI_TOUCHED > 0` and gstack present and not `--no-ux` → recommend `/ux-audit` (or invoke if `--ux`)
+- If `UI_TOUCHED > 0` and gstack present and not `--no-ux` → recommend `/design-review` (or invoke if `--ux`); `/devex-review` for DX-heavy changes
 - If `--with-codex` and gstack present → recommend invoking `/codex` for cross-model audit
 - If `--with-cso` and gstack present → recommend invoking `/cso` for deep security
 - Merge findings via `/harness-review`'s dedup tags
@@ -157,7 +162,7 @@ so the developer (or the next agent invocation) doesn't have to search:
 | verify (arch) | layer violation | refactor per `/arch-guard` output |
 | review (slop) | duplicates / over-engineering | refactor; if pattern → `/encode-mistake --proactive` |
 | review (security) | secrets / OWASP issue | run `/cso` (gstack) for deep audit; fix root cause |
-| review (UX) | UI quality flag | run `/ux-audit` (gstack); apply suggestions |
+| review (UX) | UI quality flag | run `/design-review` (gstack); apply suggestions |
 | review (cross-model) | `/codex` disagrees | reconcile; if model preference issue → discuss in `/retro` |
 | ship (CI red) | PR build failed | `/investigate` (gstack); then re-`/verify` |
 | deploy | smoke failed | `/canary` (gstack) if available; rollback decision |

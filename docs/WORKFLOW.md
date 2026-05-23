@@ -108,18 +108,21 @@ Update task status in the execution plan JSON as you complete each task.
 
 **Command**: `/verify [--plan <plan-id>]`
 **Input**: Current working directory state
-**Output**: Structured report (PASS/FAIL/WARN/SKIP per check) + gstack readiness signal
+**Output**: Structured report (PASS/FAIL/WARN/SKIP per check) + decision signal
 
 Runs in order: **lint -> build -> test -> arch guard**
 
-**gstack integration**: `/verify` now also:
-- Emits readiness signals for gstack's `/ship` pre-flight gate
-- Checks for prior review status in gstack's review logs
-- Reports QA and benchmark baseline availability
-- Logs results to `.claude/metrics/verify.jsonl` for cross-system consumption
+**Decision signal (the gate)**: `/verify` writes `.claude/signals/verify-latest.json`
+with a `decision` enum (`GREEN` / `YELLOW` / `RED`) — the canonical artifact `/lifecycle`
+and gstack's `/ship` pre-flight read. A missing/stale signal means "re-run `/verify`"
+(mirrors the review gate's default-deny). It also appends each run to
+`.claude/metrics/verify.jsonl` (history for recurring-failure detection + dashboard velocity).
+
+**gstack context (advisory only)**: prior-review / QA presence is surfaced in the report
+text for `/ship`, never folded into the decision and never blocking.
 
 - GREEN: All checks pass -> proceed to review
-- RED: Fix failures first. Recurring failures? -> `/encode-mistake`
+- RED: Fix failures first. Root cause unclear? -> `/investigate` (gstack). Recurring? -> `/encode-mistake`
 - YELLOW: Warnings present -> review before proceeding
 
 **Next**: `/harness-review` (auto-detects gstack for dual review)

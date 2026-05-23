@@ -1,17 +1,17 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.4.0** — Mechanical quality constraints + entropy management for AI-driven
+**v3.5.0** — Mechanical quality constraints + entropy management for AI-driven
 development. **Composition-based** integration with
 [gstack](https://github.com/garrytan/gstack.git) v1.28+; we own
 *architecture / entropy / observability* and **never orchestrate workflows**
-(gstack does that).
+(gstack does that). Coordination is ceded to native Claude Code **Agent Teams**.
 
 ## Differentiation anchor
 
 | oh-my-agents owns | gstack owns | Don't reinvent |
 |---|---|---|
 | hooks, arch-guard, TASTE rules, entropy-sweep | ideate / plan / ship / deploy / canary / retro | Managed Agents / Agents SDK runtime |
-| review **decision signal**, legibility scoring | `/codex` `/cso` `/ux-audit` `/investigate` `/qa` | gstack lifecycle orchestration |
+| verify + review **decision signals**, legibility scoring | `/codex` `/cso` `/design-review` `/investigate` `/qa` | gstack lifecycle orchestration |
 | two-layer model: observation → mechanical enforcement | observation layer (GBrain memory ingest) | auto-generated rules (ETH Zurich 2026) |
 
 ## Surface
@@ -58,4 +58,4 @@ Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCH
 6. No auto-generated rules — human-gated TASTE encoding only.
 
 Full constraints + rationale: [docs/INTEGRATION.md#anti-bloat-constraints](docs/INTEGRATION.md).
-Latest decision record: [docs/TEAM-DISCUSSION-2026-05-08.md](docs/TEAM-DISCUSSION-2026-05-08.md).
+Latest decision record: [docs/TEAM-DISCUSSION-2026-05-23.md](docs/TEAM-DISCUSSION-2026-05-23.md).

@@ -1,4 +1,4 @@
-# oh-my-agents `v3.4.0`
+# oh-my-agents `v3.5.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
@@ -56,7 +56,7 @@ git clone https://github.com/caishize/oh-my-agents.git ~/.claude/skills/oh-my-ag
 | `/encode-mistake` | Entropy | Mistakes or taste → permanent guardrails (TASTE-NNN) |
 | `/arch-guard` | Architecture | Set up layer enforcement + Providers pattern |
 | `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
-| `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex` (cross-model), `/cso` (security), `/ux-audit` — dedup + severity escalation |
+| `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex` (cross-model), `/cso` (security), `/design-review` — dedup + severity escalation |
 | `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + `--query` for deep-dive analysis |
 | `/gstack-sync` | Integration | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
 | `/lifecycle` | Integration | Full lifecycle orchestrator with canary phase, worktree awareness, Gate Failure Routing |
@@ -126,13 +126,15 @@ oh-my-agents and gstack are complementary:
 
 Key handoffs (composition-based, read-only, glob-based, **dual-value where applicable**):
 - Design docs from `/office-hours` → `/spec-to-task` (auto-imported)
-- `/verify` readiness signal (`.claude/signals/verify-latest.json`) → `/ship` pre-flight
+- **`/verify` decision signal (v3.5+)** (`.claude/signals/verify-latest.json`) with
+  `GREEN | YELLOW | RED` → `/ship` pre-flight and `/lifecycle next`; a missing/stale
+  signal means "re-run /verify" (mirrors the review-gate default-deny).
 - **`/harness-review` decision signal (v3.4+)** → `.claude/signals/review-latest.json`
   with `APPROVE | REQUEST_CHANGES | NEEDS_HUMAN` → `/lifecycle next` auto-advances
   or halts. Compresses "未决态" — the AI-automation flow no longer waits for the
   user to read findings and decide.
 - `/harness-review` composes gstack's `/codex` (cross-model slop), `/cso` (security),
-  `/ux-audit` (UI) — tags `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
+  `/design-review` (UI) — tags `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
 - `/investigate` (gstack) → `/encode-mistake` (oh-my-agents) closes the feedback loop permanently
 - **GBrain memory (v1.9+, dual-value path post-v1.27)** → `/encode-mistake --from-gbrain
   [learning|eureka|retro|all]` — uses `gbrain` CLI when present (v1.26+), falls back
@@ -155,12 +157,15 @@ composition rationale),
 [docs/TEAM-DISCUSSION-2026-04-30.md](docs/TEAM-DISCUSSION-2026-04-30.md)
 (v1.21-era re-alignment), and
 [docs/TEAM-DISCUSSION-2026-05-08.md](docs/TEAM-DISCUSSION-2026-05-08.md)
-(v1.28-era dual-value bridges + decision signal + differentiation anchor).
+(v1.28-era dual-value bridges + decision signal + differentiation anchor), and
+[docs/TEAM-DISCUSSION-2026-05-23.md](docs/TEAM-DISCUSSION-2026-05-23.md)
+(verify-signal contract fix + native Agent Teams + llms.txt capability oracle +
+OpenAI-component mapping).
 
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.4.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.5.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md

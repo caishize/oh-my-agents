@@ -48,6 +48,14 @@ surface the most recent unencoded *observations* from gstack and turn each into 
 candidate TASTE rule. gstack writes *observations* (what happened), this skill writes
 *enforcement* (what cannot happen again) — two distinct layers; never collapse them.
 
+> **"taste" is an overloaded word — keep the two senses apart.** gstack's
+> `gstack-taste-update` learns *soft, decaying design preferences* (≈5%/week half-life)
+> — that is the **observation** layer. The harness `TASTE-NNN` rule is a *permanent,
+> human-gated, mechanical guardrail* — the **enforcement** layer. They are not the same
+> thing and must never be equated in logs or prose: gstack-taste is a candidate *feed*
+> for a harness TASTE-NNN rule, the way any observation feeds enforcement. The grep
+> token `TASTE-NNN` stays distinct; the hazard is purely in human/agent wording.
+
 **Source priority** (capability-first, glob-fallback):
 
 1. **`gbrain` CLI present** (v1.26+) → `gbrain search --type <type> --since 30d --limit <n>`

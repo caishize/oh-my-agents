@@ -180,7 +180,7 @@ UI_TOUCHED=$(git diff --name-only 2>/dev/null | grep -Eic '\.(tsx|jsx|vue|svelte
 | `/review` | structural analysis (SQL injection, enums, design consistency) | `[STRUCTURAL]` | `--no-gstack` |
 | `/codex` | adversarial / cross-model slop & taste verification | `[CROSS-MODEL]` | `--no-codex` |
 | `/cso` | OWASP Top 10 + STRIDE deep security audit | `[SECURITY]` | `--no-cso` |
-| `/ux-audit` | UI / interaction quality (auto-suggest if UI files touched) | `[UX]` | omit `--ux` to skip |
+| `/design-review` | UI / interaction quality (auto-suggest if UI files touched; `/devex-review` for DX) | `[UX]` | omit `--ux` to skip |
 
 **If gstack is installed**: recommend (or invoke if user opted in) the relevant
 gstack reviews. Merge findings with the harness pass. Apply tags above.
@@ -307,7 +307,7 @@ stdout drives the human or next agent turn.
 - "Waiting is expensive, correction is cheap" — don't block trivial changes
 - Auto-detect gstack for composition; `--no-gstack` / `--no-codex` / `--no-cso` to opt out
 - **Composition over duplication**: delegate slop-deep to `/codex`, security-deep to `/cso`,
-  UX to `/ux-audit`; never re-run what gstack just ran
+  UX to `/design-review`; never re-run what gstack just ran
 - Deduplicate cross-system findings; ≥2 systems flagging the same issue → severity +1, tag `[BOTH+]`
 - Tag every finding: `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]`
 - Log results for both `/harness-dashboard` and gstack's `/ship` consumption

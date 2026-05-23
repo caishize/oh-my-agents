@@ -73,7 +73,7 @@ CAP_REVIEW=$(ls $PROJ_DIR/*-reviews.jsonl 2>/dev/null | wc -l)
 CAP_QA=$(ls $PROJ_DIR/*-test-outcome-*.md 2>/dev/null | wc -l)
 CAP_CODEX=$(ls $PROJ_DIR/*-codex-*.md 2>/dev/null | wc -l)
 CAP_CSO=$(ls $PROJ_DIR/*-cso-*.md 2>/dev/null | wc -l)
-CAP_UX=$(ls $PROJ_DIR/*-ux-audit-*.md 2>/dev/null | wc -l)
+CAP_DESIGN_REVIEW=$(ls $PROJ_DIR/*-design-review-*.md 2>/dev/null | wc -l)  # was /ux-audit pre-v1.x
 CAP_CANARY=$(ls .gstack/canary-reports/*.json 2>/dev/null | wc -l)
 CAP_DEPLOY=$(ls .gstack/deploy-reports/*.json 2>/dev/null | wc -l)
 CAP_CONDUCTOR=$([ -f "conductor.json" ] && echo 1 || echo 0)
@@ -125,7 +125,7 @@ Output this structure (Markdown):
 - design docs: {count}            - test plans: {count}
 - review logs: {count}            - QA outcomes: {count}
 - codex reports: {count}          - cso reports: {count}
-- ux-audit reports: {count}       - canary reports: {count}
+- design-review reports: {count}  - canary reports: {count}
 - deploy reports: {count}         - landing reports: {local + project count}
 - conductor.json: {present}       - .gstack-worktrees/: {N parallel}
 - conductor workspaces (v1.11+): {present|absent}
@@ -144,10 +144,11 @@ Output this structure (Markdown):
 - remote artifacts hint  : {none | legacy file | current file}  (v1.27 Path 4)
 
 ### Composition (who-owns-what)
-- Slop deep-check         → gstack /codex          (presence: {yes/no})
-- Security audit          → gstack /cso            (presence: {yes/no})
-- UX audit                → gstack /ux-audit       (presence: {yes/no})
-- Observation/learnings   → gstack GBrain (read)   (presence: {yes/no})
+- Slop deep-check         → gstack /codex                       (presence: {yes/no})
+- Security audit          → gstack /cso                         (presence: {yes/no})
+- UX / DX audit           → gstack /design-review + /devex-review (presence: {yes/no})
+- Isolated bug repro      → gstack /investigate + /qa           (presence: {yes/no})
+- Observation/learnings   → gstack GBrain + /learn (read)        (presence: {yes/no})
 - Deploy metrics          → gstack /landing-report (presence: {yes/no})
 - Architecture / layers   → harness arch-guard + hooks
 - Entropy / TASTE rules   → harness entropy-sweep + encode-mistake
@@ -177,7 +178,8 @@ Output this structure (Markdown):
 2. Update CLAUDE.md workflow section if it lacks current gstack lifecycle commands.
 3. Add to `.gitignore` if missing: `.gstack/`, `.gstack-worktrees/`, `conductor.json`,
    `.claude/signals/`, `.claude/metrics/`.
-4. Create `.claude/signals/` directory for verify-readiness signals.
+4. Create `.claude/signals/` directory for verify + review decision signals
+   (`verify-latest.json`, `review-latest.json`).
 5. Print summary; do not modify gstack files.
 
 ### Step 4: Metrics Sync (--metrics)
@@ -231,8 +233,15 @@ Quarterly governance gate — run before/after each quarter:
 
 1. List integration contract assumptions (from this file + integration.json).
 2. For each, probe whether gstack still satisfies it (artifact presence, path stability).
-3. Surface drift: paths moved, artifact format changed, gstack version below `min_supported`.
-4. Output a remediation checklist; do NOT auto-modify integration.json (human decides).
+3. **Reconcile command bindings against the capability oracle.** When `$LLMS_TXT` is
+   present, it is gstack's authoritative skill/command index — diff every slash-command
+   string in `integration.json.composition` (`gstack_owns`, `*_audit`, `slop_deep_check`,
+   …) against it. Any binding whose command no longer appears in `llms.txt` is **drift**
+   (this is exactly how `/ux-audit` and `/health` went stale). Hand-maintained command
+   lists are the drift source; `llms.txt` is the truth.
+4. Surface drift: command bindings missing from `llms.txt`, paths moved, artifact format
+   changed, gstack version below `min_supported`, legacy paths past `legacy_sunset`.
+5. Output a remediation checklist; do NOT auto-modify integration.json (human decides).
 
 ## Rules
 
