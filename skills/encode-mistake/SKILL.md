@@ -2,7 +2,7 @@
 name: encode-mistake
 description: "Convert agent mistakes or expert preferences into permanent guardrails — lint rules, structural tests, hooks. Two modes: reactive (from failures) and proactive (from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 品味编码, 规则编码"
 user-invocable: true
-argument-hint: "<description> [--proactive] [--hook-output] [--from-investigation <id>]"
+argument-hint: "<description> [--proactive] [--hook-output] [--from-investigation <id>] [--from-gbrain [type] [n]]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -47,6 +47,14 @@ When invoked with `--from-gbrain` (or its deprecated alias `--from-gstack-learni
 surface the most recent unencoded *observations* from gstack and turn each into a
 candidate TASTE rule. gstack writes *observations* (what happened), this skill writes
 *enforcement* (what cannot happen again) — two distinct layers; never collapse them.
+
+> **"taste" is an overloaded word — keep the two senses apart.** gstack's
+> `gstack-taste-update` learns *soft, decaying design preferences* (≈5%/week half-life)
+> — that is the **observation** layer. The harness `TASTE-NNN` rule is a *permanent,
+> human-gated, mechanical guardrail* — the **enforcement** layer. They are not the same
+> thing and must never be equated in logs or prose: gstack-taste is a candidate *feed*
+> for a harness TASTE-NNN rule, the way any observation feeds enforcement. The grep
+> token `TASTE-NNN` stays distinct; the hazard is purely in human/agent wording.
 
 **Source priority** (capability-first, glob-fallback):
 

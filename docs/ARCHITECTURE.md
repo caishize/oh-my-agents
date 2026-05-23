@@ -63,26 +63,56 @@ Continuous detection and repair of codebase degradation.
 
 Implemented by: `/entropy-sweep`, `/harness-review`, `doc-drift-check.sh`, `/encode-mistake`
 
-## Mapping to Anthropic's Three-Agent Harness (2026-Q2)
+## Mapping to the Planner / Generator / Evaluator topology
 
-Anthropic's multi-agent harness (InfoQ, 2026-04) decomposes long-running coding work
-into three agents — **Planner**, **Generator**, **Evaluator** — connected by structured
-handoff artifacts and context resets. oh-my-agents does **not** add a third set of
-agents; instead, the existing 11 skills + 6 hooks project cleanly onto these
-coordinates. This is the narrative anchor users should reach for when reasoning
-about where a concern belongs.
+The multi-agent harness pattern (InfoQ, 2026-04) decomposes long-running coding work
+into three roles — **Planner**, **Generator**, **Evaluator** — connected by structured
+handoff artifacts and context resets. As of **Feb 2026, Claude Code ships this topology
+natively** as **Agent Teams** (a team-lead session coordinating peer sessions via a
+shared task list + mailbox; gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`). gstack
+adds the same kind of parallelism through Conductor workspaces.
 
-| Anthropic role | oh-my-agents counterpart | gstack counterpart | Handoff artifact |
-|----------------|--------------------------|--------------------|------------------|
+oh-my-agents does **not** reimplement this coordination — that is now a platform/gstack
+concern. Instead, oh-my-agents is the **per-role guardrail + evidence layer that a team
+runs *inside***: it constrains the Generator (PreToolUse hooks), supplies the Evaluator
+its decision artifacts (`verify-latest.json`, `review-latest.json` — exactly what a
+team-lead routes on), and persists memory between context resets (TASTE rules, nested
+CLAUDE.md). This is the narrative anchor for *where a concern belongs*.
+
+| Role | What oh-my-agents contributes | gstack / native counterpart | Handoff artifact |
+|------|-------------------------------|-----------------------------|------------------|
+| **Coordination** | — (deliberately none) | **native Agent Teams**; gstack Conductor | shared task list / mailbox |
 | **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` |
 | **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (PreToolUse hooks) | `/guard` (freeze/careful) | hook block + remediation message in agent context |
-| **Evaluator** | `/verify` + `/harness-review` (decision tag) | `/codex`, `/cso`, `/ux-audit`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` |
+| **Evaluator** | `/verify` + `/harness-review` (decision signals) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` |
 | **Memory between resets** | nested CLAUDE.md, `docs/LINTING.md` (TASTE rules) | GBrain (`learnings-log`, `timeline-log`, `eureka`) | one-direction bridge: observation → enforcement |
 | **Loop closure** | `/encode-mistake --from-gbrain` (human-gated) | `/investigate`, `/retro` | TASTE-NNN rule with `taste_id` ↔ learning-id back-reference |
 
-**Key implication**: when adding capability, ask *which Anthropic role does this serve?*
-If the answer is "none" or "all", the addition is likely outside the harness. If the
-answer is a role gstack already covers, defer to gstack.
+**Key implication**: when adding capability, ask *which role does this serve, and is it
+already served by the platform or gstack?* If coordination — defer to native Agent Teams.
+If a role gstack covers — defer to gstack. oh-my-agents only owns the constraint + evidence
+surfaces that are repo-local and mechanical.
+
+## Mapping the Four Pillars to OpenAI's harness-engineering components
+
+OpenAI's published harness-engineering writeup (openai.com, Feb 2026) names ~six
+components. Our Four Pillars cover four of them directly; the other two are **delegated
+to gstack by composition** rather than reimplemented. This table makes coverage —
+and deliberate non-coverage — auditable:
+
+| OpenAI component | Four-Pillar / harness home | Owner |
+|------------------|----------------------------|-------|
+| Architectural constraints (mechanical rules + structural tests) | Pillar 1 — Architecture as Guardrails | **oh-my-agents** (hooks, arch-guard, TASTE) |
+| Documentation as System of Record | Pillar 2 — Documentation as System of Record | **oh-my-agents** (`/harness-init`, docs/) |
+| Observability integration (logs/metrics/spans) | Pillar 3 — Observability & Legibility | **oh-my-agents** (session-metrics, dashboard) |
+| Entropy / quality maintenance | Pillar 4 — Entropy Management | **oh-my-agents** (`/entropy-sweep`, `/encode-mistake`) |
+| **Structured feedback loops** (PR / CI) | decision signals (`verify-latest.json`, `review-latest.json`) + CI template | **shared** — harness emits signals; gstack `/ship` consumes; CI via `templates/github-actions-harness.yml` |
+| **Isolated testing** (reproduce bugs in isolation) | *not reimplemented* | **gstack** `/investigate` + `/qa` (delegated) |
+
+The role-shift OpenAI describes — engineers move from *implementing code* to *specifying
+intent and giving structured feedback* — is realized as `/spec-to-task` (intent capture)
+plus the decision-signal gates (structured, machine-readable feedback that drives the
+next agent turn without a human round-trip).
 
 ## Plugin Structure
 

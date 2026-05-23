@@ -1,7 +1,7 @@
 {
   "name": "oh-my-agents",
-  "version": "3.4.0",
-  "description": "Lean harness engineering plugin for Claude Code — four pillars (architecture, documentation, observability, entropy). Composition-based gstack v1.28+ integration: delegates slop-deep to /codex, security to /cso, UX to /ux-audit; dual-value GBrain paths (gstack-artifacts ↔ gstack-brain) survive v1.27 rename; /harness-review emits review-latest.json decision signal so /lifecycle next auto-advances or halts on NEEDS_HUMAN; /encode-mistake --from-gbrain queries 8 memory types via gbrain CLI; explicit no-orchestration anchor. 11 skills, 2 agents, 6 hooks.",
+  "version": "3.5.0",
+  "description": "Lean harness-engineering plugin for Claude Code: four pillars (architecture, documentation, observability, entropy) enforced as repo-local mechanical constraints. Composes with gstack for delivery workflow — never orchestrates. Emits verify/review decision signals so AI-driven flow advances without human round-trips. 11 skills, 2 agents, 6 hooks.",
   "author": {
     "name": "caishize",
     "url": "https://github.com/caishize"

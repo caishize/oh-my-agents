@@ -1,6 +1,6 @@
 ---
 name: verify
-description: "Post-execution verification — runs build, test, lint, and architecture checks then reports structured results. Implements the Verify phase of Research→Plan→Execute→Verify. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
+description: "Post-execution verification — runs build, test, lint, and architecture checks, then writes a GREEN/YELLOW/RED decision signal (.claude/signals/verify-latest.json) that /lifecycle and gstack /ship gate on. Implements the Verify phase of Research→Plan→Execute→Verify. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
 user-invocable: true
 argument-hint: "[scope: all|build|test|lint|arch] [--plan <plan-id>]"
 allowed-tools: Read, Glob, Grep, Bash
@@ -98,62 +98,53 @@ For each task in the plan with status `in_progress` or `done`:
 - Map each criterion to the check results (passed/failed)
 - Report: which criteria are confirmed met, which are unconfirmed or failing
 
-### Step 3b: gstack Readiness Signal (if gstack installed)
+### Step 3b: Write the Decision Signal + History Log (mandatory)
 
-Check if gstack is available and emit readiness data for the `/ship` workflow:
+Verify is a **gate**: downstream consumers (`/lifecycle next`, gstack `/ship`
+pre-flight) must read the outcome without re-deriving it from raw output. After the
+Step 2 checks complete, compute the overall **decision** and write the canonical
+signal. This mirrors `/harness-review`'s `review-latest.json` contract — same
+default-deny discipline, so an automated chain never advances on a missing signal.
+
+Decision from the check results:
+
+- **GREEN** — every in-scope check PASS (WARN allowed)
+- **YELLOW** — no FAIL, but at least one WARN
+- **RED** — any in-scope check FAILED
 
 ```bash
-GSTACK_PATH=""
-for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
-  [ -d "$p" ] && GSTACK_PATH="$p" && break
-done
-
-if [ -n "$GSTACK_PATH" ]; then
-  SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
-  BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-
-  echo "=== gstack Readiness ==="
-
-  # Check for prior review
-  REVIEW_STATUS="not_reviewed"
-  REVIEW_LOG="$HOME/.gstack/projects/$SLUG/$BRANCH-reviews.jsonl"
-  if [ -f "$REVIEW_LOG" ]; then
-    LAST_REVIEW=$(tail -1 "$REVIEW_LOG")
-    REVIEW_STATUS="reviewed"
-    echo "Last review: $LAST_REVIEW"
-  else
-    echo "No review log found — run /review or /harness-review before /ship"
-  fi
-
-  # Check for QA results
-  QA_REPORTS=$(ls .gstack/qa-reports/*.md 2>/dev/null | wc -l | tr -d ' ')
-  echo "QA reports: $QA_REPORTS"
-
-  # Check for benchmark baseline
-  BENCHMARK_EXISTS="false"
-  if [ -f ".gstack/benchmark-reports/baselines/baseline.json" ]; then
-    BENCHMARK_EXISTS="true"
-    echo "Benchmark baseline: exists"
-  else
-    echo "Benchmark baseline: none (consider /benchmark --baseline)"
-  fi
-
-  # Write structured readiness signal for /ship consumption
-  mkdir -p .claude/metrics
-  TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")
-  cat > .claude/metrics/verify-readiness.json <<READINESS_EOF
-{"timestamp":"$TIMESTAMP","branch":"$BRANCH","lint_pass":false,"build_pass":false,"test_pass":false,"arch_pass":false,"review_status":"$REVIEW_STATUS","qa_reports":$QA_REPORTS,"benchmark_baseline":$BENCHMARK_EXISTS}
-READINESS_EOF
-fi
+mkdir -p .claude/signals .claude/metrics
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
+BRANCH=$(git branch --show-current 2>/dev/null || echo unknown)
+# Compute DECISION (GREEN|YELLOW|RED), per-check LINT/BUILD/TEST/ARCH (PASS|FAIL|WARN|SKIP),
+# PLAN_ID (from --plan or null), and REASON (≤120 chars) from Step 2 results.
+# first_pass = true when no prior RED exists for this plan/branch in verify.jsonl
+# during the current plan cycle (grep verify.jsonl before writing).
+# Build the JSON with python3 / jq / printf for correct escaping — never an
+# unquoted heredoc with literal placeholders.
 ```
 
-Include gstack readiness signals in the verification report. This data feeds into
-gstack's `/ship` pre-flight check at Step 3.5, ensuring architecture compliance
-is verified before merge.
+**Canonical signal** — `.claude/signals/verify-latest.json` (latest only, ≤500 bytes):
 
-**After all checks complete**, update `.claude/metrics/verify-readiness.json` with the
-actual pass/fail results for each check (lint_pass, build_pass, test_pass, arch_pass).
-This makes the readiness signal machine-readable for `/ship` consumption.
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | string (ISO-8601 UTC) | When verify concluded |
+| `decision` | enum | `GREEN` \| `YELLOW` \| `RED` |
+| `scope` | string | `all` \| `build` \| `test` \| `lint` \| `arch` |
+| `lint` / `build` / `test` / `arch` | enum | `PASS` \| `FAIL` \| `WARN` \| `SKIP` |
+| `first_pass` | boolean | GREEN on the first verify for this plan/branch |
+| `plan_id` | string \| null | Active exec-plan id, if `--plan` given |
+| `branch` | string | Current git branch |
+| `reason` | string (≤120 chars) | One-line rationale, e.g. `3 tests failed` |
+
+**History log** — append the same record (plus failing-test names) as one line to
+`.claude/metrics/verify.jsonl`. This is the history that recurring-failure detection
+(Step 4) and `/harness-dashboard` velocity metrics (first-pass-GREEN rate,
+verify→review time) read — both already assume this writer exists.
+
+**gstack readiness (advisory, only if gstack present)**: surface prior-review and QA
+presence in the report *text* for `/ship` context, but never block on it and never
+fold it into the decision signal — verify owns the decision; gstack data is context.
 
 ### Step 4: Report Results
 
@@ -203,7 +194,8 @@ Recurring Failure Detection:
    test names or error patterns. If a test has failed 2+ times across different
    sessions, flag it as RECURRING and auto-suggest:}
   ⚠ RECURRING: {test_name} has failed {N} times across {N} sessions.
-    → Run /encode-mistake "{test_name} fails due to {pattern}" to create a permanent guardrail.
+    → If root cause is unclear, run /investigate (gstack) for isolated reproduction.
+    → Then run /encode-mistake "{test_name} fails due to {pattern}" to create a permanent guardrail.
   [YELLOW] Warnings present. Review before proceeding.
   [SHIP]   When ready: /ship (gstack) or create PR manually.
 ```
@@ -230,5 +222,10 @@ requires human confirmation.
 - **Run from project root** — ensure commands run from the directory containing CLAUDE.md
 - **gstack readiness is advisory** — emit review/QA/benchmark status for `/ship` consumption
   but never block verify on gstack data; verify is oh-my-agents' domain
-- **Log results for cross-system use** — write verify results to `.claude/metrics/verify.jsonl`
-  so both `/harness-dashboard` and gstack's `/ship` can reference them
+- **Always write the decision signal** — `.claude/signals/verify-latest.json` with a
+  `decision` enum (`GREEN`/`YELLOW`/`RED`) is mandatory, even on early exit. `/lifecycle`
+  and gstack `/ship` gate on it; a missing/stale signal is treated as "re-run /verify"
+  (the verify-side mirror of harness-review's "missing signal ⇒ NEEDS_HUMAN")
+- **Log results for cross-system use** — append each run to `.claude/metrics/verify.jsonl`
+  so both `/harness-dashboard` (first-pass-GREEN, verify→review) and recurring-failure
+  detection can reference them; the signal is latest-only, the jsonl is history
