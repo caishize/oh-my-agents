@@ -2,7 +2,7 @@
 name: encode-mistake
 description: "Convert agent mistakes or expert preferences into permanent guardrails — lint rules, structural tests, hooks. Two modes: reactive (from failures) and proactive (from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 品味编码, 规则编码"
 user-invocable: true
-argument-hint: "<description> [--proactive] [--hook-output] [--from-investigation <id>]"
+argument-hint: "<description> [--proactive] [--hook-output] [--from-investigation <id>] [--from-gbrain [type] [n]]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
