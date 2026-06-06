@@ -320,15 +320,21 @@ defers cross-cutting concerns that gstack already owns.
     - **Distribution vs capability:** a saved workflow is a *distribution* primitive, not a
       *capability* primitive — it does not breach the ZERO-new-skills cap, but it is counted
       here so the discipline cannot leak into an ungoverned directory.
-    - **Structural read-only, not textual:** because a workflow's IO happens inside
-      model-turn `agent()` calls, a grep self-test cannot prove read-only-ness — `agent()`
-      calls may pass ONLY the four read-only audit skills' toolsets (Read/Glob/Grep/Bash-read),
-      never an open-ended prompt that could request a Write/commit/PR.
-    - **Status:** NONE shipped as of v3.6.0. The `/harness-audit` candidate is gated behind a
-      verified `agent()`→`.claude/signals/` write path (Dynamic Workflow scripts cannot do
-      FS/shell; only agents do IO) and a measured A/B showing adversarial fan-out beats
-      sequential `/entropy-sweep` + `/harness-review` runs. When shipped it emits
-      `review-latest.json` (reusing the existing enum), not a new artifact.
+    - **Structural read-only, mechanically:** every audit/verify `agent()` uses
+      `agentType:'Explore'`, which cannot Write/Edit/NotebookEdit — a real mechanism, not a
+      grep self-test.
+    - **Accountable-writer principle (v3.7.0, proven by the 2026-06-07 spike):** the workflow
+      RETURNS a `review-latest.json`-shaped decision; it does NOT relay-write the signal. A
+      relay agent that did not itself derive the verdict is *correctly blocked by the safety
+      classifier* from emitting a decision signal (it reads as a fabricated audit result). The
+      accountable invoker (a human, or `/harness-review`) persists the returned signal. This is
+      the empirical answer to the prior "can a workflow agent write the signal?" open question:
+      it can do FS, but it MUST NOT write a verdict it didn't earn.
+    - **Status: ONE shipped — `.claude/workflows/harness-audit.js` (v3.7.0).** A read-only,
+      fan-out, four-pillar governance audit. The A/B spike cleared the evidence gate: vs a
+      single sequential pass it found **ZERO-overlap, additive** findings (3× recall) and
+      adversarial verification filtered ~17% false positives. Use it for governance/release
+      audits; use single-pass `/harness-review` for PR/hotfix validation.
     - **Corollary:** `/lifecycle` is NEVER reimplemented as a workflow.
 
 ## Foundational Principles

@@ -1,4 +1,4 @@
-# oh-my-agents `v3.6.0`
+# oh-my-agents `v3.7.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
@@ -16,7 +16,7 @@ plugin doubles down on what is *irreplaceable* — repo-local mechanical constra
 delivery; gstack does that. `/lifecycle` NAMES the next skill, never invokes it. (Progressive
 disclosure is an implementation practice gstack now ships too — kept, but not the moat.)
 
-> **11 skills · 1 agent · 6 hooks** — minimal context-window footprint; a Gate API, not an orchestrator.
+> **11 skills · 1 agent · 6 hooks · 1 audit workflow** — minimal context-window footprint; a Gate API, not an orchestrator.
 
 ## The Four Pillars
 
@@ -82,6 +82,14 @@ agent was a redundant third layer.)
 | `self-verify-check.sh` | PostToolUse (Edit/Write) | Warns on type/syntax errors after edit |
 | `session-metrics.sh` | PostToolUse (Edit/Write/Bash) | Records tool usage and hook performance |
 | `doc-drift-check.sh` | Stop | Warns about documentation drift |
+
+## Dynamic Workflows
+
+| Workflow | Purpose |
+|----------|---------|
+| `/harness-audit` | Read-only four-pillar **governance audit** — fan-out `Explore` agents (cannot write) + adversarial verification; **returns** a `review-latest.json`-shaped decision (the accountable invoker persists it — never a relay write). Use for release/quarterly audits (the A/B spike found 3× the recall of a single pass, zero overlap); use `/harness-review` for PR validation. Requires native Dynamic Workflows (Claude Code v2.1.154+); degrades to `/harness-review` when absent. |
+
+Governed by anti-bloat **rule 17** (≤1 workflow, read-only, audit-only, returns — never writes — the signal; SIGNAL-not-ARTIFACT bright line). See [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md) (§ spike addendum) for the evidence.
 
 ## Workflow
 
@@ -172,7 +180,7 @@ OpenAI-component mapping), and
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.6.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.7.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md
@@ -186,6 +194,7 @@ agents/                            # 1 read-only background agent (session-obser
 hooks/                             # 6 event-driven shell scripts
 ├── hooks.json                     # Hook event bindings
 ├── lib/common.sh                  # Shared utilities
+.claude/workflows/harness-audit.js # 1 Dynamic Workflow (rule 17: read-only governance audit)
 docs/                              # Progressive disclosure references
 templates/                         # Config templates
 tests/                             # Plugin self-tests

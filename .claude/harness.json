@@ -24,6 +24,7 @@
     }
   },
   "providers_path": null,
+  "_config_note": "These thresholds intentionally diverge from templates/harness-config.json (file_size_limit 300, nested_claude_md_threshold 5). This repo is a markdown/shell PLUGIN (SKILL.md is separately capped at 400 by anti-bloat rule 2), so file_size_limit is generous (800); nested_claude_md_threshold is stricter (3) because the plugin is small and densely modular. The template ships the OpenAI source-project defaults for NEW projects. providers_path is null because this plugin has no Providers interface to enforce on itself.",
   "file_size_limit": 800,
   "nested_claude_md_threshold": 3,
   "plan_stale_days": 7,

@@ -181,6 +181,36 @@ assert_contains "harness-review writes schema_version" "$REVIEW_MD" "schema_vers
 assert_contains "harness-review references SIGNALS.md" "$REVIEW_MD" "SIGNALS.md"
 assert_contains "harness-review sets needs_human_kind" "$REVIEW_MD" "needs_human_kind"
 
+# --- Dynamic Workflows (anti-bloat rule 17) ---
+echo ""
+echo "--- Workflows (rule 17) ---"
+
+WF_DIR="${SCRIPT_DIR}/../.claude/workflows"
+WF_COUNT=$(ls "$WF_DIR"/*.js 2>/dev/null | wc -l | tr -d ' ')
+TOTAL=$((TOTAL + 1))
+if [ "$WF_COUNT" -le 1 ]; then
+    PASS=$((PASS + 1)); echo "PASS: rule17 cap: $WF_COUNT workflow(s) <= 1"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: rule17 cap: $WF_COUNT workflows > 1"
+fi
+
+AUDIT_WF="${WF_DIR}/harness-audit.js"
+if [ -f "$AUDIT_WF" ]; then
+    # Read-only guarantee: audit/verify agents must use the Explore agentType.
+    assert_contains "rule17: harness-audit uses Explore agents" "$AUDIT_WF" "agentType: 'Explore'"
+    # No delivery orchestration / mutation (SIGNAL-not-ARTIFACT bright line).
+    for forbidden in "git commit" "git push" "/ship" "/land-and-deploy" "/canary"; do
+        TOTAL=$((TOTAL + 1))
+        if grep -qF "$forbidden" "$AUDIT_WF" 2>/dev/null; then
+            FAIL=$((FAIL + 1)); echo "FAIL: rule17 no-delivery: harness-audit references '$forbidden'"
+        else
+            PASS=$((PASS + 1)); echo "PASS: rule17 no-delivery: harness-audit free of '$forbidden'"
+        fi
+    done
+    # Accountable-writer: the workflow RETURNS a signal rather than relay-writing it.
+    assert_contains "rule17: harness-audit returns a signal" "$AUDIT_WF" "return \{"
+fi
+
 # =============================================
 # Summary
 # =============================================

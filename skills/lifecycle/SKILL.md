@@ -104,7 +104,8 @@ symmetric to the review gate:
 - `GREEN` → proceed.
 - `RED` → stop; route per Gate Failure table.
 - `YELLOW` → ask the user.
-- signal missing / malformed → treat as "re-run `/verify`"; do NOT advance under `--auto`.
+- signal missing / malformed JSON / **unknown `schema_version`** → **default-deny**: treat as
+  "re-run `/verify`"; do NOT advance under `--auto` (symmetric to the review gate; docs/SIGNALS.md).
 
 ### `review` — Composition-aware; reads decision signal
 
@@ -173,6 +174,7 @@ so the developer (or the next agent invocation) doesn't have to search:
 | verify (build) | build broken | fix; if env issue → `/investigate` (gstack) |
 | verify (test) | test red | fix; if flaky → `/encode-mistake` for retry policy |
 | verify (arch) | layer violation | refactor per `/arch-guard` output |
+| verify (no decision) | `verify-latest.json` missing / malformed / unknown `schema_version` | default-deny: re-run `/verify`; never advance under `--auto` (docs/SIGNALS.md) |
 | review (slop) | duplicates / over-engineering | refactor; if pattern → `/encode-mistake --proactive` |
 | review (security) | secrets / OWASP issue | run `/cso` (gstack) for deep audit; fix root cause |
 | review (UX) | UI quality flag | run `/design-review` (gstack); apply suggestions |
