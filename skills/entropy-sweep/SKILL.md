@@ -23,6 +23,12 @@ The sweep is organized around the **four pillars**:
 3. **Observability & Legibility** — nested CLAUDE.md health, logging gaps
 4. **Entropy Management** — execution plan health, missing enforcement, slop
 
+**Scope vs related skills** — Sweep 1's slop detection is **shared by design** with
+`/harness-review` Review 1 (same taxonomy, different trigger), not accidental duplication.
+`/entropy-sweep` = the **weekly / scheduled** GC scan; `/harness-review` = the same slop check
+**per-PR / pre-ship** (the review gate); `/harness-audit` = **fanned-out at repo scale** for
+release/governance audits. Pick the one matching your moment.
+
 ## What Is Entropy?
 
 In agent-driven codebases, entropy accumulates faster because:

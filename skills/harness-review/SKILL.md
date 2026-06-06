@@ -25,6 +25,13 @@ Two guiding philosophies:
 > and merge process."** This is the initial agent pass — providing high-signal,
 > actionable feedback for the human engineer's final decision.
 
+**Scope vs related skills** — the slop taxonomy in Review 1 is **shared by design** with
+`/entropy-sweep` Sweep 1 (same definition, different trigger), not accidental duplication.
+Pick the one that matches the moment: `/harness-review` = **per-PR / pre-ship** (the review
+gate that writes `review-latest.json`); `/entropy-sweep` = **weekly / scheduled** GC scan;
+`/harness-audit` = **fanned-out at repo scale** for release/governance audits. Run one per
+context — don't stack all three on the same diff.
+
 ## Task
 
 Review the current changes (staged/unstaged diff, or PR via $ARGUMENTS).
@@ -88,7 +95,9 @@ Check changes against the layer model and constraints:
 1. **Layer violations** — Do new imports respect the dependency flow?
    (Types -> Config -> Repo -> Service -> Runtime -> UI)
 2. **Provider bypass** — Does it access auth/telemetry/feature-flags directly
-   instead of through the Providers interface?
+   instead of through the Providers interface? *(Graceful degrade: if the target has no
+   Providers config — `providers_path` is null in `.claude/harness.json` — skip this check
+   and note "no providers configured"; do not flag.)*
 3. **Module boundaries** — Are internal implementation details leaking?
 4. **New dependencies** — Are cross-module dependencies justified?
 5. **Direct instantiation** — Check for direct instantiation of services in
