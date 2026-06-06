@@ -2,7 +2,7 @@
   "version": "1.5",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.7.0",
+    "version": "3.7.1",
     "root": "."
   },
   "gstack": {

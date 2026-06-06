@@ -1,6 +1,6 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.7.0** — Mechanical quality constraints + entropy management for AI-driven dev.
+**v3.7.1** — Mechanical quality constraints + entropy management for AI-driven dev.
 **Composition-based** integration with [gstack](https://github.com/garrytan/gstack.git)
 (v1.46+ floor, v1.56 current); we own *architecture / entropy / observability* and **never
 orchestrate delivery**. Coordination ceded to native **Agent Teams** + **Dynamic Workflows**;
