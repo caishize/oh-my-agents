@@ -75,7 +75,7 @@ Before scanning the codebase, check for project-specific configuration:
 Based on the analysis (or `harness.json` if present), define a clear dependency flow:
 
 ```
-Types -> Config -> Repository -> Service -> Runtime -> UI
+Types -> Config -> Repo -> Service -> Runtime -> UI
 ```
 
 Rules:
