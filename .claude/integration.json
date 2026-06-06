@@ -1,25 +1,26 @@
 {
-  "version": "1.4",
+  "version": "1.5",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.5.0",
+    "version": "3.6.0",
     "root": "."
   },
   "gstack": {
     "detected": true,
     "path": "/root/.claude/skills/gstack",
-    "version": "1.28.0.0",
+    "version": "1.56.0.0",
     "version_match": "loose",
-    "min_supported": "1.26.0.0",
-    "milestone_pin": "Memory Ingest v1 (v1.26+) + gstack-brain → gstack-artifacts rename (v1.27+) + llms.txt index (v1.28+)"
+    "min_supported": "1.46.0.0",
+    "milestone_pin": "eval-first floor across all skills + on-demand content loading (v1.46), shared redaction engine (v1.53), /spec intent→spec 5-phase (v1.47). Memory Ingest (v1.26) and gstack-brain→gstack-artifacts rename (v1.27) are now BELOW the floor — legacy gstack-brain* dual-value bridges sunset in v3.6.0."
   },
   "project": {
     "slug": "oh-my-agents"
   },
-  "_bridge_doc": "Paths are dual-value where gstack v1.27.0.0 introduced renames. Consumers glob BOTH legacy and current; first hit wins; absence is graceful degrade.",
+  "_bridge_doc": "Paths probe gstack's CURRENT (post-v1.27) surface only. The gstack-brain* legacy dual-value paths were dropped once min_supported (1.46) rose above the v1.27 rename floor (legacy_sunset FIRED). Consumers glob; absence is graceful degrade. A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets them on the same rule.",
   "bridges": {
     "design_docs":              "~/.gstack/projects/oh-my-agents/*-design-*.md",
     "test_plans":               "~/.gstack/projects/oh-my-agents/*-test-plan-*.md",
+    "spec_artifacts":           "~/.gstack/projects/oh-my-agents/*-spec-*.md",
     "review_logs":              "~/.gstack/projects/oh-my-agents/*-reviews.jsonl",
     "qa_outcomes":              "~/.gstack/projects/oh-my-agents/*-test-outcome-*.md",
     "codex_reports":            "~/.gstack/projects/oh-my-agents/*-codex-*.md",
@@ -32,17 +33,12 @@
     "conductor_state":          "conductor.json",
     "conductor_workspaces":     "~/conductor/workspaces/",
     "worktrees_root":           ".gstack-worktrees/",
-    "gbrain_worktree_current":  "~/.gstack-artifacts-worktree/",
-    "gbrain_worktree_legacy":   "~/.gstack-brain-worktree/",
-    "gbrain_learnings_current": "~/.gstack-artifacts-worktree/learnings-*.jsonl",
-    "gbrain_learnings_legacy":  "~/.gstack-brain-worktree/learnings-*.jsonl",
+    "gbrain_worktree":          "~/.gstack-artifacts-worktree/",
+    "gbrain_learnings":         "~/.gstack-artifacts-worktree/learnings-*.jsonl",
     "gbrain_learnings_fallback":"~/.gstack/projects/oh-my-agents/*-learnings-*.jsonl",
-    "gbrain_timeline_current":  "~/.gstack-artifacts-worktree/timeline-*.jsonl",
-    "gbrain_timeline_legacy":   "~/.gstack-brain-worktree/timeline-*.jsonl",
-    "gbrain_review_current":    "~/.gstack-artifacts-worktree/review-*.jsonl",
-    "gbrain_review_legacy":     "~/.gstack-brain-worktree/review-*.jsonl",
-    "gbrain_profile_current":   "~/.gstack-artifacts-worktree/developer-profile-*.json",
-    "gbrain_profile_legacy":    "~/.gstack-brain-worktree/developer-profile-*.json",
+    "gbrain_timeline":          "~/.gstack-artifacts-worktree/timeline-*.jsonl",
+    "gbrain_review":            "~/.gstack-artifacts-worktree/review-*.jsonl",
+    "gbrain_profile":           "~/.gstack-artifacts-worktree/developer-profile-*.json",
     "gbrain_repo_policy":       "~/.gstack/gbrain-repo-policy.json",
     "gbrain_cli_probe":         "command -v gbrain",
     "gstack_llms_txt":          "<gstack_root>/llms.txt",
@@ -60,20 +56,23 @@
   },
   "composition": {
     "_command_binding_note": "Slash-command names below are gstack's CURRENT surface; gstack ships ~daily and renames commands (e.g. /ux-audit → /design-review at the v1.x line). These are capability bindings, not pins: gstack-sync --contract-check reconciles them against gstack's authoritative llms.txt when present. Treat a missing command as graceful-degrade, never a hard failure.",
+    "intent_to_spec":    "gstack:/spec (v1.47; vague intent → executable spec in 5 phases, codex quality gate. UPSTREAM of harness /spec-to-task — which does spec → layer-aware exec-plan JSON. Clean handoff, not duplication.)",
     "slop_deep_check":   "gstack:/codex",
     "security_audit":    "gstack:/cso",
+    "redaction_engine":  "gstack:shared redaction engine (v1.53; strips secrets/PII LEAVING to public sinks. Complementary to — NOT overlapping — our safety-check/bash-safety-check hooks, which block secrets ENTERING source at edit-time. Two directions, both kept.)",
     "ux_audit":          "gstack:/design-review",
     "dx_audit":          "gstack:/devex-review",
     "cross_model_qa":    "gstack:/codex",
     "isolated_repro":    "gstack:/investigate + /qa (own bug reproduction in isolation; we delegate, never duplicate)",
-    "observation_layer": "gstack:learnings-log + /learn + gbrain search (read-only, dual-value path)",
+    "observation_layer": "gstack:learnings-log + /learn + gbrain search (read-only)",
     "deploy_metrics":    "gstack:/landing-report (read-only)",
     "memory_ingest":     "gstack:bin/gstack-memory-ingest (gstack-internal; we never invoke or write)",
-    "harness_owns":      ["arch-guard", "layer-enforcement", "entropy-sweep", "encode-mistake", "doc-drift", "secrets-hook", "legibility-score", "verify-decision-signal", "review-decision-signal"],
-    "gstack_owns":       ["/office-hours", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/landing-report", "/retro", "/investigate", "/qa", "/codex", "/cso", "/design-review", "/devex-review", "/learn", "/context-save", "/context-restore", "/setup-gbrain", "/sync-gbrain"],
-    "ignored":           ["/gstack-claude", "/scrape", "/skillify", "/pair-agent", "/open-gstack-browser", "/browse", "/setup-deploy"],
+    "harness_owns":      ["arch-guard", "layer-enforcement", "entropy-sweep", "encode-mistake", "doc-drift", "secrets-hook", "legibility-score", "verify-decision-signal", "review-decision-signal", "gate-api(docs/SIGNALS.md)"],
+    "gstack_owns":       ["/office-hours", "/spec", "/autoplan", "/ship", "/land-and-deploy", "/canary", "/landing-report", "/retro", "/investigate", "/qa", "/codex", "/cso", "/design-review", "/devex-review", "/health", "/learn", "/context-save", "/context-restore", "/setup-gbrain", "/sync-gbrain"],
+    "ignored":           ["/claude", "/browse", "/scrape", "/skillify", "/pair-agent", "/connect-chrome", "/setup-deploy", "/make-pdf"],
     "dedup_tags":        ["[HARNESS]", "[STRUCTURAL]", "[CROSS-MODEL]", "[SECURITY]", "[UX]", "[BOTH+]"],
-    "decision_tags":     ["APPROVE", "REQUEST_CHANGES", "NEEDS_HUMAN"]
+    "decision_tags":     ["APPROVE", "REQUEST_CHANGES", "NEEDS_HUMAN"],
+    "needs_human_kinds": ["arch-ambiguity", "judgment-slop", "composition-skipped"]
   },
   "policies": {
     "read_only_bridge": true,
@@ -83,15 +82,16 @@
     "loose_version_match": true,
     "worktree_aware": true,
     "gbrain_read_only": true,
-    "bridge_dual_value": true,
+    "bridge_dual_value": false,
     "no_orchestration": true,
     "human_gated_rule_encoding": true,
     "contract_lightweight_each_status": true,
     "review_contract_quarter": "2026-Q3",
-    "bridge_dual_value": true,
-    "legacy_sunset": "1.27.0.0",
-    "_legacy_sunset_note": "gstack-brain* legacy paths are globbed alongside current gstack-artifacts* paths only until min_supported next rises above the rename floor (v1.27). When min_supported > 1.27, drop every *_legacy bridge — globbing both forever is unbounded entropy, against our own anti-entropy mission.",
+    "legacy_sunset": "FIRED@1.46.0.0",
+    "_legacy_sunset_note": "gstack-brain* legacy paths were DROPPED in v3.6.0 (2026-06-06) once min_supported rose to 1.46 > the v1.27 rename floor — executing the plugin's own rule 16 instead of globbing two paths forever (unbounded entropy, against our own anti-entropy mission). graceful_degradation still protects any genuine pre-v1.27 caller (absence = no-op). A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets on the same rule.",
     "capability_oracle": "<gstack_root>/llms.txt",
-    "principles_anchor": "docs/TEAM-DISCUSSION-2026-05-23.md"
+    "gate_api_doc": "docs/SIGNALS.md",
+    "workflows_policy": "anti-bloat rule 17: workflows <=1, read-only, audit-only, terminal node = a decision signal; never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. NONE shipped as of v3.6.0 (the /harness-audit candidate is gated behind an evidence A/B + a verified agent()->signal write path).",
+    "principles_anchor": "docs/TEAM-DISCUSSION-2026-06-06.md"
   }
 }

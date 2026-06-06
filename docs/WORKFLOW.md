@@ -19,7 +19,8 @@ Claude Code's conversation context and structured artifact handoffs.
 └─────────┘    └──────┘    └──────┘    └────────┘    └─────────┘
 ```
 
-**Orchestrator**: `/lifecycle` guides through phases automatically.
+**Router**: `/lifecycle` detects state and NAMES the next phase + remediation skill
+(reads decision signals; never invokes a delivery skill or advances a phase itself).
 **Integration hub**: `/gstack-sync` manages cross-system artifact bridges.
 
 ## Phase Details
@@ -129,7 +130,7 @@ text for `/ship`, never folded into the decision and never blocking.
 
 ### 6. Review (both systems)
 
-**Recommended**: `/harness-review` — auto-detects gstack and orchestrates both systems in a single pass:
+**Recommended**: `/harness-review` — auto-detects gstack and composes both review systems in a single pass:
 
 | System | Focus | Catches |
 |--------|-------|---------|
@@ -285,7 +286,7 @@ The key loop: **Bug found → root cause → fix → encode → permanent guardr
 /spec-to-task → [develop] → /verify → /harness-review
 ```
 
-### Feature development (minimal with lifecycle orchestrator)
+### Feature development (minimal, guided by the lifecycle router)
 ```
 /lifecycle ideate → /lifecycle plan → /lifecycle decompose → ... → /lifecycle ship
 ```

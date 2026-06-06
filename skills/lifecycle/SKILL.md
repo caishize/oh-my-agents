@@ -1,6 +1,6 @@
 ---
 name: lifecycle
-description: "Full development lifecycle orchestrator — guides through Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Tracks phase transitions, enforces artifact handoffs, names the exact remediation skill on every gate failure, and is worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
+description: "Full development lifecycle ROUTER (not an executor) — detects state, reads decision signals, and NAMES the next phase + exact remediation skill across Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Never invokes delivery skills or advances a phase; worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
 user-invocable: true
 argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux] [--with-codex] [--with-cso]"
 allowed-tools: Read, Glob, Grep, Bash
@@ -27,8 +27,11 @@ IDEATE → PLAN → DECOMPOSE → EXECUTE → VERIFY → REVIEW → SHIP → DEP
 Phase from `$ARGUMENTS`: `ideate`, `plan`, `decompose`, `execute`, `verify`, `review`,
 `ship`, `deploy`, `canary`, `retro`, `improve`, `status`, `next`, `recover`
 
-- `next` — Auto-detect AND EXECUTE the next phase (not just recommend)
-- `next --auto` — Chain phases automatically when gates pass
+- `next` — Detect state, read the latest decision signal, and NAME the next phase + the
+  exact skill to run. **Router only — it does NOT invoke the skill.** Delivery auto-advance
+  is gstack's; multi-agent coordination is native Agent Teams'.
+- `next --auto` — Project the full remaining gated path (read-only); mark a STOP at the
+  first RED / YELLOW / NEEDS_HUMAN gate with the exact remediation skill. Names, never invokes.
 - `recover` — Diagnose and recover from failed mid-lifecycle state
 
 ## Step 0: Detect Environment (worktree-aware)
@@ -60,38 +63,43 @@ worktree only**; never cross-fire into sibling sprints.
 Show progress per phase based on artifact detection (design docs, plans,
 verify results, review logs, ship/deploy/canary reports). Recommend next phase.
 
-### `next` — Auto-execute the next phase
+### `next` — Report the next phase (router only)
 
-Detection logic (in order):
-1. No design doc + gstack → execute `ideate`
-2. No design doc + no gstack → execute `decompose`
-3. Design doc, no plan → execute `decompose` (auto-import design doc)
-4. Plan with incomplete tasks → execute `execute` (show next task)
-5. All tasks done, no verify signal → invoke `verify`
-6. Verify GREEN, no review → invoke `review`
-7. Review SHIP IT + gstack → invoke `ship`
-8. Shipped, no deploy report → invoke `deploy`
-9. Deployed, no canary report (and gstack canary present) → invoke `canary`
-10. Canary GREEN → invoke `retro`
+Detection logic (in order) — output the FIRST match as the recommended next step and STOP.
+This skill NAMES the skill to run; the human, a native Agent Team lead, or gstack runs it:
+1. No design doc + gstack → next: `/office-hours` (ideate)
+2. No design doc + no gstack → next: `/spec-to-task` (decompose)
+3. Design doc, no plan → next: `/spec-to-task` (decompose; auto-imports the design doc)
+4. Plan with incomplete tasks → next: continue execution (show the next task)
+5. All tasks done, no verify signal → next: `/verify`
+6. Verify GREEN, no review → next: `/harness-review`
+7. Review APPROVE + gstack → next: `/ship`
+8. Shipped, no deploy report → next: `/land-and-deploy` (deploy)
+9. Deployed, no canary report (and gstack canary present) → next: `/canary`
+10. Canary GREEN → next: `/retro` + `/harness-dashboard`
 
-With `--auto`: chain phases when gates pass; **stop at any RED/YELLOW gate** and
-print the **exact remediation skill** (see Gate Failure Routing).
+With `--auto`: project the remaining path through the gates (read-only); **stop the
+projection at the first RED/YELLOW/NEEDS_HUMAN gate** and print the **exact remediation
+skill** (see Gate Failure Routing). It never advances delivery itself.
 
-**CRITICAL: `/lifecycle next` EXECUTES the next skill directly, not just prints instructions.**
+**Router invariant: `/lifecycle` NAMES the next skill and reads its decision signal; it
+never invokes a delivery skill, mutates source, or advances a phase. The day it does, that
+logic moves to gstack — anti-bloat rule 5 + the SIGNAL-not-ARTIFACT bright line.**
 
 ### `ideate` — Requires gstack → `/office-hours`
 ### `plan` — Requires gstack → `/autoplan` or individual review passes
 ### `decompose` — Bridge design doc to `/spec-to-task`
 
 Find most recent design doc from `~/.gstack/projects/{SLUG}/`, extract feature
-description, technical decisions, scope. Invoke `/spec-to-task` with context.
+description, technical decisions, scope. Recommend `/spec-to-task` with that context.
 
 ### `execute` — Guide through task execution from active plan
 
-### `verify` — Invoke `/verify --plan {plan-id}`, then read its signal
+### `verify` — Recommend `/verify --plan {plan-id}`, then read its signal
 
-`/verify` owns the decision and writes `.claude/signals/verify-latest.json`. After
-invocation, read the signal and route on `decision` — symmetric to the review gate:
+`/verify` owns the decision and writes `.claude/signals/verify-latest.json` (schema in
+docs/SIGNALS.md). Once `/verify` has run, read the signal and route on `decision` —
+symmetric to the review gate:
 
 - `GREEN` → proceed.
 - `RED` → stop; route per Gate Failure table.
@@ -100,14 +108,15 @@ invocation, read the signal and route on `decision` — symmetric to the review 
 
 ### `review` — Composition-aware; reads decision signal
 
-Always invoke `/harness-review --plan {plan-id}`. Then conditionally:
+Recommend `/harness-review --plan {plan-id}`. Then conditionally:
 - If `UI_TOUCHED > 0` and gstack present and not `--no-ux` → recommend `/design-review` (or invoke if `--ux`); `/devex-review` for DX-heavy changes
 - If `--with-codex` and gstack present → recommend invoking `/codex` for cross-model audit
 - If `--with-cso` and gstack present → recommend invoking `/cso` for deep security
 - Merge findings via `/harness-review`'s dedup tags
 
-After invocation, read `.claude/signals/review-latest.json` and route on the
-**decision tag** — this is the flow-efficiency lever that compresses "未决态":
+After `/harness-review` has run, read `.claude/signals/review-latest.json` and route on
+the **decision tag** (schema in docs/SIGNALS.md) — the flow-efficiency lever that
+compresses "未决态":
 
 ```bash
 SIGNAL=".claude/signals/review-latest.json"
@@ -119,14 +128,18 @@ fi
 echo "review-decision: $DECISION"
 ```
 
-**Routing rules (the agent driving this skill must obey):**
+**Routing rules (the agent reading this router must obey):**
 
-- `APPROVE` → proceed; if `next --auto`, immediately invoke the `ship` phase.
-- `REQUEST_CHANGES` → **stop the auto chain**; surface `.claude/metrics/reviews.jsonl`
-  P0/P1 findings; loop back to `execute` only after the user confirms.
-- `NEEDS_HUMAN` (or signal absent / malformed JSON) → **halt unconditionally**;
-  print the verbose review summary and yield to the user. Do NOT advance
-  regardless of `--auto`. Missing signal is treated identically to `NEEDS_HUMAN`.
+- `APPROVE` → the projected next step is `ship` (gstack `/ship`). Report it; do not invoke it.
+- `REQUEST_CHANGES` → **end the projection**; surface `.claude/metrics/reviews.jsonl`
+  P0/P1 findings; the next step is back to `execute` (after the user confirms).
+- `NEEDS_HUMAN` → branch on `needs_human_kind` (set by `/harness-review`; see docs/SIGNALS.md):
+  - `composition-skipped` → **auto-recoverable**: the next step is to re-run the skipped
+    composition (`/codex` or `/cso`), NOT a human halt. Report it and continue the projection.
+  - `arch-ambiguity` | `judgment-slop` (or `needs_human_kind` absent) → **halt unconditionally**;
+    print the verbose review summary and yield to the user, regardless of `--auto`.
+- signal absent / malformed JSON / unknown `schema_version` → **default-deny**: treat as a
+  hard `NEEDS_HUMAN` halt (per docs/SIGNALS.md). Never advance on a missing/unreadable signal.
 
 ### `ship` — Requires gstack → `/ship` (or guide manual PR)
 
@@ -168,16 +181,19 @@ so the developer (or the next agent invocation) doesn't have to search:
 | deploy | smoke failed | `/canary` (gstack) if available; rollback decision |
 | canary | regression detected | `/investigate` → `/encode-mistake` to prevent recurrence |
 | any (unknown) | confusion signal raised (gstack v0.18+ Confusion Protocol) | log to `.claude/metrics/confusion.jsonl`; surface in next `/harness-dashboard` |
-| review (no decision) | `.claude/signals/review-latest.json` missing or malformed | treat as `NEEDS_HUMAN`; do not silently advance |
-| review (NEEDS_HUMAN) | architectural ambiguity flagged | halt; surface verbose `reviews.jsonl` for user |
+| review (no decision) | signal missing / malformed / unknown `schema_version` | default-deny: hard `NEEDS_HUMAN` halt; never advance (docs/SIGNALS.md) |
+| review (`NEEDS_HUMAN`: `composition-skipped`) | `/codex` or `/cso` was skipped | auto-recoverable: next step is re-run the skipped composition; not a human halt |
+| review (`NEEDS_HUMAN`: `arch-ambiguity` / `judgment-slop`) | architectural ambiguity or judgment-dependent slop | halt; surface verbose `reviews.jsonl` for user |
 
 ## Rules
 
 - Phase ordering is advisory — users can skip, but warn about gaps
 - Artifact handoffs are automatic — design docs flow into spec-to-task; verify writes signal
 - Both plugins optional — adapts to what's installed
-- EXECUTE, don't recommend — invoke skills directly when called via `next`
-- `--auto` chains phases; **stop on first RED/YELLOW** and emit Gate Failure routing line
+- NAME, don't invoke — `next` reports the next skill + reads its signal; it never runs a
+  delivery skill or advances a phase (the one place this plugin used to actually orchestrate)
+- `--auto` projects the remaining gated path (read-only); **stop the projection on the first
+  RED/YELLOW/NEEDS_HUMAN** and emit the Gate Failure routing line
 - `recover` is always safe — diagnoses only, never destructive
 - **Worktree-aware**: never operate across `.gstack-worktrees/` siblings
 - **Composition over duplication**: defer slop-deep / security-deep / UX to gstack skills

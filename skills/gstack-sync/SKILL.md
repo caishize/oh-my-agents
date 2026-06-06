@@ -47,12 +47,10 @@ GSTACK_HOME="$HOME/.gstack"
 PROJ_DIR="$GSTACK_HOME/projects/$SLUG"
 ANALYTICS_DIR="$GSTACK_HOME/analytics"
 
-# GBrain worktree — dual-value (v1.27.0.0 renamed gstack-brain → gstack-artifacts).
-# Probe current first; fall back to legacy. First hit wins; both absent = degrade.
+# GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0 once
+# min_supported rose to 1.46 > the v1.27 rename floor). Absent = graceful degrade.
 GBRAIN_WT=""
-for d in "$HOME/.gstack-artifacts-worktree" "$HOME/.gstack-brain-worktree"; do
-  [ -d "$d" ] && GBRAIN_WT="$d" && break
-done
+[ -d "$HOME/.gstack-artifacts-worktree" ] && GBRAIN_WT="$HOME/.gstack-artifacts-worktree"
 
 # Capability probes (presence > version)
 GBRAIN_CLI=$(command -v gbrain 2>/dev/null || echo "")               # v1.26+ memory ingest CLI
@@ -64,7 +62,6 @@ INGEST_BIN=""
 [ -x "$GSTACK_PATH/bin/gstack-memory-ingest" ] && INGEST_BIN="$GSTACK_PATH/bin/gstack-memory-ingest"  # v1.26+
 ARTIFACTS_REMOTE=""
 [ -f "$HOME/.gstack-artifacts-remote.txt" ] && ARTIFACTS_REMOTE="present"  # v1.27 Path 4 hint
-[ -f "$HOME/.gstack-brain-remote.txt" ] && ARTIFACTS_REMOTE="legacy"
 
 # Core artifacts (legacy, pre-v1)
 CAP_DESIGN=$(ls $PROJ_DIR/*-design-*.md 2>/dev/null | wc -l)
@@ -130,8 +127,8 @@ Output this structure (Markdown):
 - conductor.json: {present}       - .gstack-worktrees/: {N parallel}
 - conductor workspaces (v1.11+): {present|absent}
 
-### GBrain (v1.12+ memory subsystem, read-only; v1.26+ ingest, v1.27+ rename)
-- worktree present       : {none | legacy(brain) | current(artifacts)}
+### GBrain (v1.12+ memory subsystem, read-only; v1.26+ ingest; v1.27 rename — legacy sunset v3.6.0)
+- worktree present       : {none | present (gstack-artifacts)}
 - worktree path          : {resolved $GBRAIN_WT or "—"}
 - learnings entries      : {N from worktree, or fallback projects/*-learnings-*.jsonl}
 - timeline entries       : {N}
@@ -253,8 +250,9 @@ Quarterly governance gate — run before/after each quarter:
 - **Loose version match** — accept `min_supported` and above; warn but don't fail on drift
 - **Worktree-aware** — if `.gstack-worktrees/` present, scope reports to current worktree
 - **No skill duplication** — never invoke gstack commands; only discover their outputs
-- **Bridge dual-value** — every gstack v1.27+ rename probes BOTH legacy (`gstack-brain*`)
-  and current (`gstack-artifacts*`) paths; first hit wins; both absent = graceful degrade
+- **Legacy sunset FIRED (v3.6.0)** — `min_supported` rose to 1.46 > the v1.27 rename floor,
+  so `gstack-brain*` legacy paths are dropped; probe `gstack-artifacts*` only. A FUTURE
+  gstack rename re-introduces dual-value bridges temporarily, then sunsets on the same rule.
 - **Prefer llms.txt over enumeration** (v1.28+) — when present, it is gstack's
   authoritative skill/command index; do not duplicate or stale-cache it locally
 - **No orchestration** — this skill discovers and reports; never executes gstack workflow

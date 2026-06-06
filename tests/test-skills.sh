@@ -149,6 +149,38 @@ if [ -f "$CLAUDE_MD" ]; then
     done
 fi
 
+# --- Gate API contract (docs/SIGNALS.md) ---
+echo ""
+echo "--- Gate API contract ---"
+
+SIGNALS_MD="${SCRIPT_DIR}/../docs/SIGNALS.md"
+assert_true "docs/SIGNALS.md exists" "[ -f '$SIGNALS_MD' ]"
+
+if [ -f "$SIGNALS_MD" ]; then
+    # Enum stability is append-only: every current enum value MUST stay documented.
+    # If someone removes or repurposes one, this fails (the regression guard).
+    assert_contains "SIGNALS: schema_version documented" "$SIGNALS_MD" "schema_version"
+    assert_contains "SIGNALS: verify enum GREEN" "$SIGNALS_MD" "GREEN"
+    assert_contains "SIGNALS: verify enum YELLOW" "$SIGNALS_MD" "YELLOW"
+    assert_contains "SIGNALS: verify enum RED" "$SIGNALS_MD" "RED"
+    assert_contains "SIGNALS: review enum APPROVE" "$SIGNALS_MD" "APPROVE"
+    assert_contains "SIGNALS: review enum REQUEST_CHANGES" "$SIGNALS_MD" "REQUEST_CHANGES"
+    assert_contains "SIGNALS: review enum NEEDS_HUMAN" "$SIGNALS_MD" "NEEDS_HUMAN"
+    assert_contains "SIGNALS: needs_human_kind composition-skipped" "$SIGNALS_MD" "composition-skipped"
+    assert_contains "SIGNALS: needs_human_kind arch-ambiguity" "$SIGNALS_MD" "arch-ambiguity"
+    assert_contains "SIGNALS: needs_human_kind judgment-slop" "$SIGNALS_MD" "judgment-slop"
+    assert_contains "SIGNALS: default-deny rule stated" "$SIGNALS_MD" "[Dd]efault-deny"
+fi
+
+# Producers must carry schema_version and reference the single source of truth.
+VERIFY_MD="${SKILLS_DIR}/verify/SKILL.md"
+REVIEW_MD="${SKILLS_DIR}/harness-review/SKILL.md"
+assert_contains "verify writes schema_version" "$VERIFY_MD" "schema_version"
+assert_contains "verify references SIGNALS.md" "$VERIFY_MD" "SIGNALS.md"
+assert_contains "harness-review writes schema_version" "$REVIEW_MD" "schema_version"
+assert_contains "harness-review references SIGNALS.md" "$REVIEW_MD" "SIGNALS.md"
+assert_contains "harness-review sets needs_human_kind" "$REVIEW_MD" "needs_human_kind"
+
 # =============================================
 # Summary
 # =============================================

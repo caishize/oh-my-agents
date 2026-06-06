@@ -100,11 +100,15 @@ For each task in the plan with status `in_progress` or `done`:
 
 ### Step 3b: Write the Decision Signal + History Log (mandatory)
 
-Verify is a **gate**: downstream consumers (`/lifecycle next`, gstack `/ship`
-pre-flight) must read the outcome without re-deriving it from raw output. After the
-Step 2 checks complete, compute the overall **decision** and write the canonical
-signal. This mirrors `/harness-review`'s `review-latest.json` contract — same
-default-deny discipline, so an automated chain never advances on a missing signal.
+Verify is a **gate**: downstream consumers (`/lifecycle`, gstack `/ship` pre-flight,
+Dynamic Workflow stages, Agent Teams) read the outcome without re-deriving it from raw
+output. After the Step 2 checks complete, compute the overall **decision** and write the
+canonical signal.
+
+> **Contract: [docs/SIGNALS.md](../../docs/SIGNALS.md) is the source of truth** for both
+> signals — `schema_version`, enum stability (append-only), the ≤500-byte cap, the
+> default-deny rule (missing/malformed/unknown-version ⇒ `RED`), and the consumer list.
+> Conform to it; do not restate it.
 
 Decision from the check results:
 
@@ -124,10 +128,12 @@ BRANCH=$(git branch --show-current 2>/dev/null || echo unknown)
 # unquoted heredoc with literal placeholders.
 ```
 
-**Canonical signal** — `.claude/signals/verify-latest.json` (latest only, ≤500 bytes):
+**Canonical signal** — `.claude/signals/verify-latest.json` (latest only, ≤500 bytes;
+full field reference in docs/SIGNALS.md):
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `schema_version` | integer | Contract version — write `1` |
 | `timestamp` | string (ISO-8601 UTC) | When verify concluded |
 | `decision` | enum | `GREEN` \| `YELLOW` \| `RED` |
 | `scope` | string | `all` \| `build` \| `test` \| `lint` \| `arch` |
@@ -222,10 +228,9 @@ requires human confirmation.
 - **Run from project root** — ensure commands run from the directory containing CLAUDE.md
 - **gstack readiness is advisory** — emit review/QA/benchmark status for `/ship` consumption
   but never block verify on gstack data; verify is oh-my-agents' domain
-- **Always write the decision signal** — `.claude/signals/verify-latest.json` with a
-  `decision` enum (`GREEN`/`YELLOW`/`RED`) is mandatory, even on early exit. `/lifecycle`
-  and gstack `/ship` gate on it; a missing/stale signal is treated as "re-run /verify"
-  (the verify-side mirror of harness-review's "missing signal ⇒ NEEDS_HUMAN")
+- **Always write the decision signal** — `.claude/signals/verify-latest.json` (with
+  `schema_version` + `decision`) is mandatory, even on early exit. It is the Gate API per
+  docs/SIGNALS.md; consumers default-deny a missing/stale/unknown-version signal.
 - **Log results for cross-system use** — append each run to `.claude/metrics/verify.jsonl`
   so both `/harness-dashboard` (first-pass-GREEN, verify→review) and recurring-failure
   detection can reference them; the signal is latest-only, the jsonl is history

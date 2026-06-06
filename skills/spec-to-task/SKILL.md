@@ -36,20 +36,24 @@ managed execution plan.
 ### Step 1: Analyze the Specification
 
 1. Read the feature spec, issue URL, or user description from `$ARGUMENTS`
-2. **Check for gstack design docs** — if the spec references a design doc or if
-   `$ARGUMENTS` contains `--from-design`:
+2. **Check for gstack upstream artifacts** — gstack owns intent→spec (`/spec`, v1.47:
+   5-phase, codex quality gate) and design/plan docs (`/office-hours`, `/autoplan`).
+   `/spec-to-task` is the clean DOWNSTREAM that turns a spec into a layer-aware exec-plan
+   JSON. Probe for any of them (glob — gstack reorganizes; absence = graceful degrade):
    ```bash
    SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
    GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
    if [ -d "$GSTACK_PROJECTS" ]; then
-     echo "=== gstack Design Docs ==="
-     ls -lt "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | head -5
-     echo "=== gstack Test Plans ==="
-     ls -lt "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | head -5
+     echo "=== gstack /spec artifacts ===";  ls -lt "$GSTACK_PROJECTS/"*-spec-*.md   2>/dev/null | head -5
+     echo "=== gstack Design Docs ===";       ls -lt "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | head -5
+     echo "=== gstack Test Plans ===";        ls -lt "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | head -5
    fi
    ```
-   If design docs exist, read the most recent one and extract:
-   - Feature description and scope from the design doc
+   > **Path note:** gstack `/spec` may file its output as a GitHub issue rather than a
+   > stable `*-spec-*.md` file — confirm the artifact location against `<gstack_root>/llms.txt`
+   > and the live `~/.gstack/projects/$SLUG/` before relying on the glob; never hard-parse.
+   If any upstream artifact exists, read the most recent and extract:
+   - Feature description and scope (from the spec / design doc)
    - Technical decisions (especially from Eng Review sections)
    - Test requirements (from Test Plan artifacts)
    - Review findings that should become plan constraints
@@ -61,8 +65,11 @@ managed execution plan.
    - Read `docs/CONVENTIONS.md` for patterns to follow
    - Read `.claude/harness.json` for layer directory mappings (if exists)
    - Identify related existing code and patterns
-4. Surface ambiguities and implicit assumptions
-5. Ask clarifying questions if critical info is missing — do not guess
+4. **Ambiguity resolution (only when there is no upstream gstack `/spec`)** — `/spec`'s
+   codex quality gate already blocks ambiguous specs upstream, so when the source IS a
+   gstack `/spec` artifact, trust it and proceed. Otherwise (inline spec, or no gstack),
+   surface ambiguities + implicit assumptions and ask clarifying questions before
+   decomposing — do not guess.
 
 ### Step 2: Check for Existing Plans
 
@@ -310,8 +317,10 @@ When all tasks are done:
   arrays), Observability (logging/metrics tasks), Entropy (structural tests and constraints)
 - **Stale plans get flagged** — plans with no updates in 7+ days are marked `stalled` to
   prevent silent abandonment
-- **gstack design docs are first-class input** — if a design doc exists from `/office-hours`
-  or `/autoplan`, use it as the spec source; extract decisions, scope, and test requirements
-  rather than asking the user to repeat them
+- **gstack upstream artifacts are first-class input** — `/spec-to-task` is the downstream
+  of gstack's intent→spec (`/spec`, v1.47) and design/plan (`/office-hours`, `/autoplan`).
+  If any exists, use it as the spec source and extract decisions, scope, and test
+  requirements rather than asking the user to repeat them. Clean handoff, not duplication:
+  gstack does intent→spec; we do spec→layer-aware exec-plan JSON (verify/harness-review gate on it)
 - **gstack review findings become constraints** — findings from `/plan-eng-review` that
   flag architectural risks should become task constraints in the execution plan

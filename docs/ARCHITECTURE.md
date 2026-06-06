@@ -72,16 +72,23 @@ natively** as **Agent Teams** (a team-lead session coordinating peer sessions vi
 shared task list + mailbox; gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`). gstack
 adds the same kind of parallelism through Conductor workspaces.
 
-oh-my-agents does **not** reimplement this coordination — that is now a platform/gstack
-concern. Instead, oh-my-agents is the **per-role guardrail + evidence layer that a team
-runs *inside***: it constrains the Generator (PreToolUse hooks), supplies the Evaluator
-its decision artifacts (`verify-latest.json`, `review-latest.json` — exactly what a
-team-lead routes on), and persists memory between context resets (TASTE rules, nested
-CLAUDE.md). This is the narrative anchor for *where a concern belongs*.
+As of **May 2026, Claude Code also ships native Dynamic Workflows** — a JS *script* that
+deterministically fans out subagents (the script holds the plan; only `agent()` bodies are
+model-powered). This is a second native coordination form, and it further commoditizes
+generic orchestration: for the *delivery lifecycle* the script belongs to gstack, never us.
+
+oh-my-agents does **not** reimplement coordination — Agent Teams and Dynamic Workflows are
+platform/gstack concerns. Instead, oh-my-agents is the **per-role guardrail + evidence
+layer that a team or workflow runs *inside***: it constrains the Generator (PreToolUse
+hooks), supplies the Evaluator its **versioned decision-signal Gate API**
+([SIGNALS.md](SIGNALS.md) — exactly the machine-readable stage boundary a Dynamic Workflow
+or team-lead gates on), and persists memory between context resets (TASTE rules, nested
+CLAUDE.md). The one sanctioned use of Dynamic Workflows by this plugin is a read-only audit
+that *terminates in a signal* (anti-bloat rule 17); never a delivery script.
 
 | Role | What oh-my-agents contributes | gstack / native counterpart | Handoff artifact |
 |------|-------------------------------|-----------------------------|------------------|
-| **Coordination** | — (deliberately none) | **native Agent Teams**; gstack Conductor | shared task list / mailbox |
+| **Coordination** | — (deliberately none) | **native Agent Teams** (mailbox) + **Dynamic Workflows** (script); gstack Conductor | shared task list / mailbox / script vars |
 | **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` |
 | **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (PreToolUse hooks) | `/guard` (freeze/careful) | hook block + remediation message in agent context |
 | **Evaluator** | `/verify` + `/harness-review` (decision signals) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` |
@@ -131,10 +138,11 @@ skills/                                   # User-invocable slash commands (11 sk
 ├── harness-review/SKILL.md               # Harness-aware code review (auto-detects gstack for dual review)
 ├── harness-dashboard/SKILL.md            # Session metrics and health overview (--query for deep-dive)
 ├── gstack-sync/SKILL.md                  # Detect gstack, configure bridges, sync metrics
-└── lifecycle/SKILL.md                    # Full lifecycle orchestrator
-agents/                                   # Read-only background subagents (2 agents)
-├── session-observer-agent.md             # Session tracking and shift-handoff
-└── doc-gardening-agent.md                # Documentation gardening and repair
+└── lifecycle/SKILL.md                    # Lifecycle router (names next phase; never executes)
+agents/                                   # Read-only background subagent (1 agent)
+└── session-observer-agent.md             # Session tracking and shift-handoff
+                                          # (doc-gardening-agent retired v3.6.0 — covered by
+                                          #  doc-drift-check hook + entropy-sweep)
 hooks/                                    # Event hook scripts (6 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution)
@@ -179,6 +187,8 @@ This plugin leverages specific Claude Code capabilities:
 | `PreToolUse` hooks | arch-check.sh | Block layer violations before Edit/Write |
 | `Stop` hooks | doc-drift-check.sh | Advisory warnings after session ends |
 | `$ARGUMENTS` | All skills | Pass user arguments to skill content |
+| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, gstack `/ship`, Dynamic Workflow stages, Agent Teams |
+| Dynamic Workflows (`.claude/workflows/`) | *gated; none shipped (rule 17)* | Native deterministic fan-out; only ever a read-only audit terminating in a signal |
 
 ## Design Decisions
 
@@ -203,8 +213,11 @@ LLM. Error messages from hooks inject remediation instructions into agent contex
 following OpenAI's pattern of "custom linter error messages that double as
 remediation instructions."
 
-### Progressive disclosure
+### Progressive disclosure (implementation practice, not a differentiator)
 
-CLAUDE.md is the table of contents (~100 lines); docs/ contains the full details.
+CLAUDE.md is the table of contents (~60 lines); docs/ contains the full details.
 OpenAI found that one massive instruction file failed — context is scarce and crowds
-out actual task details.
+out actual task details. **Note:** gstack v1.46–1.56 converged onto on-demand content
+loading (25–49% token cut), so progressive disclosure is now table stakes both platforms
+ship — we keep the practice but no longer claim it as a moat. The moat is the repo-local
+edit-time mechanical enforcement (hooks/arch-guard/TASTE) + the versioned signal Gate API.

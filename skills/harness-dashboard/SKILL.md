@@ -51,11 +51,9 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
    GSTACK_ANALYTICS="$HOME/.gstack/analytics"
 
-   # GBrain worktree — dual-value (v1.27.0.0 renamed gstack-brain → gstack-artifacts)
+   # GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0)
    GBRAIN_WT=""
-   for d in "$HOME/.gstack-artifacts-worktree" "$HOME/.gstack-brain-worktree"; do
-     [ -d "$d" ] && GBRAIN_WT="$d" && break
-   done
+   [ -d "$HOME/.gstack-artifacts-worktree" ] && GBRAIN_WT="$HOME/.gstack-artifacts-worktree"
 
    # Core usage
    [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ] && \
