@@ -14,8 +14,9 @@ allowed-tools: Read, Glob, Grep, Bash
 > and route on their gates; we never re-implement a phase. If any logic here starts to
 > *plan* or *deploy* on its own, it must be deleted or moved to the relevant gstack skill.
 
-Guides through the complete lifecycle, ensuring artifact handoffs and naming the
-**exact remediation skill** when a gate fails — so AI-driven flow doesn't stall.
+Routes through the complete lifecycle: reads decision signals, reports the next phase, and
+names the **exact remediation skill** when a gate fails — so AI-driven flow doesn't stall. It
+never invokes a delivery skill or advances a phase itself.
 
 ```
 IDEATE → PLAN → DECOMPOSE → EXECUTE → VERIFY → REVIEW → SHIP → DEPLOY → CANARY → RETRO → IMPROVE
@@ -121,10 +122,12 @@ compresses "未决态":
 
 ```bash
 SIGNAL=".claude/signals/review-latest.json"
+# Default-deny: validate schema_version too, not just decision (docs/SIGNALS.md). An
+# unrecognized version is treated as a hard halt, exactly like a missing/malformed signal.
+KNOWN_SCHEMA=1
+DECISION="NEEDS_HUMAN"   # default-deny: missing / malformed / unknown-version (Anti-Bloat rule 13)
 if [ -f "$SIGNAL" ]; then
-  DECISION=$(python3 -c 'import json;print(json.load(open(".claude/signals/review-latest.json"))["decision"])' 2>/dev/null)
-else
-  DECISION="NEEDS_HUMAN"   # Missing signal = treat as needs human (per Anti-Bloat v3 rule 13)
+  DECISION=$(python3 -c "import json,sys; s=json.load(open('$SIGNAL')); sys.exit(1) if s.get('schema_version')!=$KNOWN_SCHEMA else print(s['decision'])" 2>/dev/null) || DECISION="NEEDS_HUMAN"
 fi
 echo "review-decision: $DECISION"
 ```

@@ -254,7 +254,9 @@ defers cross-cutting concerns that gstack already owns.
 | Velocity retro | gstack /retro | — |
 | Governance retro | oh-my-agents /harness-dashboard | DORA proxy + dual-review rate |
 
-## Anti-Bloat Constraints (hard rules — v3 after 2026-05-08 review)
+## Anti-Bloat Constraints
+
+*Hard rules (current through v3.7.0). Stable anchor — linked from CLAUDE.md.*
 
 1. **No new skills** for integration purposes; modify existing skills only.
 2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers immediate trim

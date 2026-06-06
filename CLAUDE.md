@@ -62,5 +62,5 @@ Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCH
    (accountable invoker persists it — never a relay write). Bright line: artifact ends in a
    **SIGNAL** (ours) or a **DEPLOYED ARTIFACT** (gstack's). Shipped: `.claude/workflows/harness-audit.js`.
 
-Full constraints + rationale: [docs/INTEGRATION.md#anti-bloat-constraints](docs/INTEGRATION.md).
+Full constraints + rationale: [Anti-Bloat Constraints](docs/INTEGRATION.md#anti-bloat-constraints).
 Latest decision record: [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md).
