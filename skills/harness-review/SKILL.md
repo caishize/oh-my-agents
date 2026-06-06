@@ -199,26 +199,38 @@ gstack report paths via `gstack_reports: [...]` field in the JSONL entry.
 
 ### Review 8: Decision Signal (mandatory; flow-efficiency lever)
 
-Every `/harness-review` invocation MUST end with exactly one decision label and
-write `.claude/signals/review-latest.json` so `/lifecycle next` can advance without
-human polling. Without a decision signal, lifecycle treats the review as `NEEDS_HUMAN`
-and halts.
+Every `/harness-review` invocation MUST end with exactly one decision and write
+`.claude/signals/review-latest.json` so consumers advance without human polling.
+
+> **Contract: [docs/SIGNALS.md](../../docs/SIGNALS.md) is the source of truth** —
+> `schema_version`, the `needs_human_kind` sub-enum, enum stability (append-only), the
+> ≤500-byte cap, default-deny, and the consumer list (gstack `/ship`, `/lifecycle`,
+> Dynamic Workflow stages, Agent Teams). Conform; do not restate.
 
 **Decision tags (pick one):**
 
 | Tag | Meaning | Lifecycle effect |
 |-----|---------|------------------|
-| `APPROVE` | No P0 issues; P1/P2 may exist but are non-blocking. Safe to ship. | `next` proceeds to ship |
-| `REQUEST_CHANGES` | At least one P0, OR multiple cross-validated `[BOTH+]` findings. | `next` returns to execute |
-| `NEEDS_HUMAN` | Architectural ambiguity, judgment-dependent slop, or composition skipped (`--no-gstack`). | `next` halts; user decides |
+| `APPROVE` | No P0 issues; P1/P2 may exist but are non-blocking. Safe to ship. | next step: ship |
+| `REQUEST_CHANGES` | At least one P0, OR multiple cross-validated `[BOTH+]` findings. | next step: back to execute |
+| `NEEDS_HUMAN` | Set `needs_human_kind` (below). | halts UNLESS recoverable |
 
-**Signal file schema** — write `.claude/signals/review-latest.json` at end of skill,
-even on early exit. Keep it ≤500 bytes (decision artifact, not report):
+**`needs_human_kind` (mandatory when `decision=NEEDS_HUMAN`; set it HERE, never inferred downstream):**
+
+| Value | When | Effect |
+|-------|------|--------|
+| `composition-skipped` | `/codex` or `/cso` was skipped (e.g. `--no-gstack`) | auto-recoverable — `/lifecycle` re-runs the skipped composition instead of halting |
+| `arch-ambiguity` | architectural call needs a human | hard halt |
+| `judgment-slop` | judgment-dependent slop / taste call | hard halt |
+
+**Signal file schema** — write at end of skill, even on early exit (full reference in docs/SIGNALS.md):
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `schema_version` | integer | Contract version — write `1` |
 | `timestamp` | string (ISO-8601 UTC) | When the review concluded |
 | `decision` | enum | `APPROVE` \| `REQUEST_CHANGES` \| `NEEDS_HUMAN` |
+| `needs_human_kind` | enum \| null | `composition-skipped` \| `arch-ambiguity` \| `judgment-slop` (only when NEEDS_HUMAN) |
 | `merge_recommendation` | enum | `TRIVIAL` \| `STANDARD` \| `COMPLEX` |
 | `p0_count` / `p1_count` / `p2_count` | integer | Issue counts by severity |
 | `tags_present` | string[] | Subset of `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]` |
@@ -312,8 +324,9 @@ stdout drives the human or next agent turn.
 - Tag every finding: `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]`
 - Log results for both `/harness-dashboard` and gstack's `/ship` consumption
 - Reference gstack report paths in JSONL — never copy contents
-- **Always emit a decision tag** (`APPROVE` / `REQUEST_CHANGES` / `NEEDS_HUMAN`) and
-  write `.claude/signals/review-latest.json`; absence is treated as `NEEDS_HUMAN` by `/lifecycle`
+- **Always emit the decision signal** — `.claude/signals/review-latest.json` with
+  `schema_version`, `decision`, and (when `NEEDS_HUMAN`) `needs_human_kind`. It is the Gate
+  API per docs/SIGNALS.md; consumers default-deny a missing/unknown-version signal
 - **Success silence, failure verbosity** (Osmani 2026): on `APPROVE`, the verbose
   per-pillar checklist may collapse to one line each; on `REQUEST_CHANGES` or
   `NEEDS_HUMAN`, keep full verbosity to drive the next turn

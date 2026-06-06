@@ -60,8 +60,8 @@ candidate TASTE rule. gstack writes *observations* (what happened), this skill w
 
 1. **`gbrain` CLI present** (v1.26+) → `gbrain search --type <type> --since 30d --limit <n>`
    gives federated, queryable results across machines.
-2. **GBrain worktree present** → `tail` the matching JSONL. Probe `~/.gstack-artifacts-worktree/`
-   first (v1.27+ rename), fall back to `~/.gstack-brain-worktree/` (legacy v1.17–v1.26).
+2. **GBrain worktree present** → `tail` the matching JSONL at `~/.gstack-artifacts-worktree/`
+   (current path only; legacy `gstack-brain*` dropped in the v3.6.0 sunset).
 3. **Per-project log fallback** → `~/.gstack/projects/$SLUG/*-learnings-*.jsonl`.
 4. **None** → print "no gbrain source available; skip" and exit 0 (graceful).
 
@@ -75,11 +75,9 @@ TYPE="${TYPE:-learning}"       # learning | eureka | retro | all (set by parsing
 LIMIT="${LIMIT:-5}"
 PROJ_DIR="$HOME/.gstack/projects/$SLUG"
 
-# Dual-value worktree (v1.27 renamed brain → artifacts). First hit wins.
+# GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0).
 GBRAIN_WT=""
-for d in "$HOME/.gstack-artifacts-worktree" "$HOME/.gstack-brain-worktree"; do
-  [ -d "$d" ] && GBRAIN_WT="$d" && break
-done
+[ -d "$HOME/.gstack-artifacts-worktree" ] && GBRAIN_WT="$HOME/.gstack-artifacts-worktree"
 
 # Prefer CLI when present (v1.26+).
 if command -v gbrain >/dev/null 2>&1; then

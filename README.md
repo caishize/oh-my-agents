@@ -1,22 +1,22 @@
-# oh-my-agents `v3.5.0`
+# oh-my-agents `v3.6.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
 work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) v1.28+ for full-lifecycle coverage
-(slop-deep, security-deep, and UX audits delegated to gstack; GBrain memory ingest
-+ `/landing-report` consumed as read-only sensors; architecture, entropy, legibility,
-and **review decision signaling** owned by oh-my-agents).
+[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.56 current) for
+full-lifecycle coverage (slop-deep, security-deep, and UX audits delegated to gstack;
+GBrain memory ingest + `/landing-report` consumed as read-only sensors; architecture,
+entropy, legibility, and the **decision-signal Gate API** owned by oh-my-agents).
 
-**Differentiation anchor**: with Anthropic Managed Agents and OpenAI Agents SDK
-commoditizing generic harness runtimes, this plugin doubles down on what is
-*irreplaceable* — repo-local mechanical constraints (hooks + arch-guard + TASTE
-rules) and the two-layer model (gstack writes observations → we encode mechanical
-enforcement). We **never** orchestrate workflows; gstack does that. `/lifecycle`
-is a router, not an executor.
+**Differentiation anchor**: with Managed Agents, the OpenAI Agents SDK, native **Agent
+Teams**, and native **Dynamic Workflows** all commoditizing generic orchestration, this
+plugin doubles down on what is *irreplaceable* — repo-local mechanical constraints (hooks
++ arch-guard + TASTE rules) and a **versioned decision-signal Gate API**
+([docs/SIGNALS.md](docs/SIGNALS.md)) that every executor gates on. We **never** orchestrate
+delivery; gstack does that. `/lifecycle` NAMES the next skill, never invokes it. (Progressive
+disclosure is an implementation practice gstack now ships too — kept, but not the moat.)
 
-> **11 skills · 2 agents · 6 hooks** — optimized for minimal context window footprint
-> via progressive disclosure.
+> **11 skills · 1 agent · 6 hooks** — minimal context-window footprint; a Gate API, not an orchestrator.
 
 ## The Four Pillars
 
@@ -59,16 +59,18 @@ git clone https://github.com/caishize/oh-my-agents.git ~/.claude/skills/oh-my-ag
 | `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex` (cross-model), `/cso` (security), `/design-review` — dedup + severity escalation |
 | `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + `--query` for deep-dive analysis |
 | `/gstack-sync` | Integration | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
-| `/lifecycle` | Integration | Full lifecycle orchestrator with canary phase, worktree awareness, Gate Failure Routing |
+| `/lifecycle` | Integration | Lifecycle **router** — detects state, reads decision signals, NAMES the next phase + remediation skill (never invokes); worktree-aware |
 
 ## Agents
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
 | `session-observer-agent` | Haiku | Session tracking and shift-handoff summaries |
-| `doc-gardening-agent` | Haiku | Documentation gardening and drift repair |
 
-Both agents are read-only (no Write/Edit) and use agent memory for cross-session learning.
+Read-only (no Write/Edit), uses agent memory for cross-session learning. (The former
+`doc-gardening-agent` was retired in v3.6.0 — doc drift is covered by the `doc-drift-check`
+hook at edit-time plus `/entropy-sweep` Sweeps 2/4/5/7 on-demand; the continuous background
+agent was a redundant third layer.)
 
 ## Hooks
 
@@ -124,23 +126,25 @@ oh-my-agents and gstack are complementary:
 - **gstack** accelerates delivery: ideation → planning → review → shipping → deployment → monitoring
 - **oh-my-agents** enforces quality: architecture → entropy → observability → documentation
 
-Key handoffs (composition-based, read-only, glob-based, **dual-value where applicable**):
-- Design docs from `/office-hours` → `/spec-to-task` (auto-imported)
-- **`/verify` decision signal (v3.5+)** (`.claude/signals/verify-latest.json`) with
-  `GREEN | YELLOW | RED` → `/ship` pre-flight and `/lifecycle next`; a missing/stale
-  signal means "re-run /verify" (mirrors the review-gate default-deny).
-- **`/harness-review` decision signal (v3.4+)** → `.claude/signals/review-latest.json`
-  with `APPROVE | REQUEST_CHANGES | NEEDS_HUMAN` → `/lifecycle next` auto-advances
-  or halts. Compresses "未决态" — the AI-automation flow no longer waits for the
-  user to read findings and decide.
+Key handoffs (composition-based, read-only, glob-based; **single-path since the v3.6.0
+legacy sunset** — dual-value only transiently across a future rename):
+- Design docs from `/office-hours` and specs from `/spec` (v1.47) → `/spec-to-task` (auto-imported)
+- **Decision-signal Gate API (v3.6, versioned)** — full contract in
+  [docs/SIGNALS.md](docs/SIGNALS.md). Both signals carry `schema_version`; consumers
+  default-deny anything missing/malformed/unknown-version. Consumed by `/lifecycle`,
+  gstack `/ship` pre-flight, **Dynamic Workflow stages**, and **Agent Teams**.
+- **`/verify`** → `.claude/signals/verify-latest.json` with `GREEN | YELLOW | RED`.
+- **`/harness-review`** → `.claude/signals/review-latest.json` with `APPROVE |
+  REQUEST_CHANGES | NEEDS_HUMAN`. `NEEDS_HUMAN` now carries `needs_human_kind`
+  (`composition-skipped` auto-recovers; `arch-ambiguity` / `judgment-slop` halt) — compresses
+  "未决态" so the flow no longer waits on a human for a recoverable skip.
 - `/harness-review` composes gstack's `/codex` (cross-model slop), `/cso` (security),
   `/design-review` (UI) — tags `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
 - `/investigate` (gstack) → `/encode-mistake` (oh-my-agents) closes the feedback loop permanently
-- **GBrain memory (v1.9+, dual-value path post-v1.27)** → `/encode-mistake --from-gbrain
-  [learning|eureka|retro|all]` — uses `gbrain` CLI when present (v1.26+), falls back
-  through `~/.gstack-artifacts-worktree/` (v1.27+) → `~/.gstack-brain-worktree/`
-  (legacy) → per-project log. Always **human-gated** (ETH Zurich 2026: auto-generated
-  rules hurt agent performance).
+- **GBrain memory** → `/encode-mistake --from-gbrain [learning|eureka|retro|all]` — uses
+  `gbrain` CLI when present (v1.26+), falls back to `~/.gstack-artifacts-worktree/` (v1.27+)
+  → per-project log (legacy `gstack-brain*` path dropped in the v3.6.0 sunset). Always
+  **human-gated** (ETH Zurich 2026: auto-generated rules hurt agent performance).
 - **`/landing-report` (gstack v1.11+) → `/harness-dashboard`** — DORA proxy upgrades to
   `[grounded]` when real ship/canary data is present
 - `/lifecycle` is a **router** with Gate Failure Routing — names the exact remediation
@@ -160,12 +164,15 @@ composition rationale),
 (v1.28-era dual-value bridges + decision signal + differentiation anchor), and
 [docs/TEAM-DISCUSSION-2026-05-23.md](docs/TEAM-DISCUSSION-2026-05-23.md)
 (verify-signal contract fix + native Agent Teams + llms.txt capability oracle +
-OpenAI-component mapping).
+OpenAI-component mapping), and
+[docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md)
+(gstack v1.56 reground + native Dynamic Workflows stance + signals → versioned
+**Gate API** [docs/SIGNALS.md](docs/SIGNALS.md) + legacy sunset + doc-gardening retirement).
 
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.5.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.6.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md
@@ -175,7 +182,7 @@ skills/                            # 11 user-invocable slash commands
 │   ├── SKILL.md
 │   └── DEEP-DIVE.md              # Query format reference
 ├── <other-skills>/SKILL.md        # One dir per skill
-agents/                            # 2 read-only background agents
+agents/                            # 1 read-only background agent (session-observer)
 hooks/                             # 6 event-driven shell scripts
 ├── hooks.json                     # Hook event bindings
 ├── lib/common.sh                  # Shared utilities

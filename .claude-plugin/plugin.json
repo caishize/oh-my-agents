@@ -1,7 +1,7 @@
 {
   "name": "oh-my-agents",
-  "version": "3.5.0",
-  "description": "Lean harness-engineering plugin for Claude Code: four pillars (architecture, documentation, observability, entropy) enforced as repo-local mechanical constraints. Composes with gstack for delivery workflow — never orchestrates. Emits verify/review decision signals so AI-driven flow advances without human round-trips. 11 skills, 2 agents, 6 hooks.",
+  "version": "3.6.0",
+  "description": "Lean harness-engineering plugin for Claude Code: four pillars (architecture, documentation, observability, entropy) enforced as repo-local mechanical constraints. Composes with gstack (v1.46+) for delivery — never orchestrates. Emits versioned verify/review decision signals (a Gate API per docs/SIGNALS.md) so Dynamic Workflows, Agent Teams, and gstack /ship advance without human round-trips. 11 skills, 1 agent, 6 hooks.",
   "author": {
     "name": "caishize",
     "url": "https://github.com/caishize"
@@ -25,9 +25,10 @@
     "worktree-aware",
     "dora-metrics",
     "layer-enforcement",
-    "progressive-disclosure",
     "decision-signal",
-    "dual-value-bridge",
+    "gate-api",
+    "dynamic-workflows",
+    "agent-teams",
     "no-orchestration"
   ],
   "skills": "./skills/"

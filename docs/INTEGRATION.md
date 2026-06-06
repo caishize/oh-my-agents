@@ -9,15 +9,18 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths (v1.28+ baseline)
+## Complementary Strengths (v1.46+ floor, v1.56 current)
 
 > **Anchor docs**:
 > [TEAM-DISCUSSION-2026-04.md](TEAM-DISCUSSION-2026-04.md) (composition v1),
 > [TEAM-DISCUSSION-2026-04-30.md](TEAM-DISCUSSION-2026-04-30.md) (v1.21 alignment),
-> [TEAM-DISCUSSION-2026-05-08.md](TEAM-DISCUSSION-2026-05-08.md) (**v1.28 + dual-value
-> paths + decision-signal flow + differentiation anchor**).
+> [TEAM-DISCUSSION-2026-05-08.md](TEAM-DISCUSSION-2026-05-08.md) (v1.28 + dual-value
+> paths + decision-signal flow), [TEAM-DISCUSSION-2026-05-23.md](TEAM-DISCUSSION-2026-05-23.md)
+> (verify-signal contract + native Agent Teams + llms.txt oracle), and
+> **[TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md) (gstack v1.56 reground +
+> native Dynamic Workflows + signals → versioned Gate API + legacy sunset)**.
 > Quarterly contract review is supplemented by **lightweight drift check on every
-> `/gstack-sync --status`** — gstack shipped 7 versions in 8 days through Q2 2026.
+> `/gstack-sync --status`** — gstack ships ~daily (v1.28 → v1.56 across 2026-Q2).
 
 ## Differentiation Anchor (where oh-my-agents is irreplaceable)
 
@@ -52,7 +55,7 @@ oh-my-agents must explicitly anchor its differentiation. **Locked decisions:**
 | Multi-session | conductor.json + .gstack-worktrees/ | **worktree-aware** verify/hooks | No cross-fire across sibling sprints |
 | Confusion (v0.18) | Confusion Protocol | session-metrics + /harness-dashboard | Signals → .claude/metrics/confusion.jsonl |
 | **Observation layer (v1.9+, ingest v1.26+)** | GBrain memory (`learnings`, `eureka`, `retro`, `timeline` via `gbrain put`) | `/encode-mistake --from-gbrain [type]` | Observations → TASTE rules (enforcement); two layers, single direction; human-gated |
-| **Cross-machine memory (v1.17+, renamed v1.27)** | `~/.gstack-artifacts-worktree/` (current) **OR** `~/.gstack-brain-worktree/` (legacy) | `/gstack-sync` + `/harness-dashboard` (read-only, dual-value glob) | Agent learning persists across machines; survives gstack rename |
+| **Cross-machine memory (v1.17+, renamed v1.27)** | `~/.gstack-artifacts-worktree/` (current path only; legacy `gstack-brain*` sunset v3.6.0) | `/gstack-sync` + `/harness-dashboard` (read-only) | Agent learning persists across machines |
 | **Deploy metrics (v1.11+)** | `/landing-report` | `/harness-dashboard` DORA proxy → grounded | deployment_frequency, lead_time, change_failure_rate sourced from real ships |
 | **Workspace-aware ship (v1.11+)** | `bin/gstack-next-version` + version-gate.yml | `/verify` (no-op; gstack handles parallel-PR safety) | We do not compete with version allocation |
 | **Conductor workspaces (v1.11+)** | `~/conductor/workspaces/` | hooks + verify (presence detection only) | Coexists with `.gstack-worktrees/`; both honored |
@@ -128,11 +131,11 @@ See `.claude/integration.json` for the canonical list.
 | Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | /harness-dashboard (legibility input) |
 | gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | /harness-dashboard |
 | gstack analytics | Eureka moments | `~/.gstack/analytics/eureka.jsonl` | /harness-dashboard |
-| **GBrain (v1.12+, renamed v1.27)** | Federation worktree | `~/.gstack-artifacts-worktree/` (current) **OR** `~/.gstack-brain-worktree/` (legacy) | /gstack-sync, /harness-dashboard (dual-value glob) |
-| **GBrain (v1.9+, dual)** | Learnings log | `${GBRAIN_WT}/learnings-*.jsonl` (current or legacy) **OR** fallback `~/.gstack/projects/$SLUG/*-learnings-*.jsonl` | **/encode-mistake `--from-gbrain learning`** |
-| **GBrain (v1.9+, dual)** | Timeline log | `${GBRAIN_WT}/timeline-*.jsonl` | /harness-dashboard |
-| **GBrain (v1.9+, dual)** | Review log | `${GBRAIN_WT}/review-*.jsonl` | /harness-dashboard |
-| **GBrain (v1.9+, dual)** | Developer profile | `${GBRAIN_WT}/developer-profile-*.json` | /harness-dashboard |
+| **GBrain (v1.12+, renamed v1.27)** | Federation worktree | `~/.gstack-artifacts-worktree/` (current path only; legacy `gstack-brain*` sunset v3.6.0) | /gstack-sync, /harness-dashboard |
+| **GBrain (v1.9+)** | Learnings log | `${GBRAIN_WT}/learnings-*.jsonl` **OR** fallback `~/.gstack/projects/$SLUG/*-learnings-*.jsonl` | **/encode-mistake `--from-gbrain learning`** |
+| **GBrain (v1.9+)** | Timeline log | `${GBRAIN_WT}/timeline-*.jsonl` | /harness-dashboard |
+| **GBrain (v1.9+)** | Review log | `${GBRAIN_WT}/review-*.jsonl` | /harness-dashboard |
+| **GBrain (v1.9+)** | Developer profile | `${GBRAIN_WT}/developer-profile-*.json` | /harness-dashboard |
 | **GBrain (v1.12+)** | Repo policy | `~/.gstack/gbrain-repo-policy.json` | /gstack-sync |
 | **gbrain CLI (v1.26+)** | Memory federation queries | `command -v gbrain` | /encode-mistake (`gbrain search --type {learning|eureka|retro}`) |
 | **llms.txt index (v1.28+)** | Authoritative skill/command index | `<gstack_root>/llms.txt` | /gstack-sync (skill discovery; replaces hand-rolled enumeration) |
@@ -259,8 +262,8 @@ defers cross-cutting concerns that gstack already owns.
 3. **Glob over exact path** for every gstack bridge; gstack reorganizes frequently
    (~daily releases; 7 versions in 8 days during 2026-Q2).
 4. **Loose version match**: probe artifact presence, not version strings.
-5. **Read-only bridge**: never write to `~/.gstack/`, `~/.gstack-brain-worktree/`,
-   or `~/.gstack-artifacts-worktree/` (post-v1.27 rename).
+5. **Read-only bridge**: never write to `~/.gstack/` or `~/.gstack-artifacts-worktree/`
+   (post-v1.27 rename; legacy `gstack-brain*` path sunset v3.6.0).
 6. **Lightweight drift check on every `/gstack-sync --status`**; deep contract
    review still quarterly (`--contract-check`).
 7. **`min_supported` tracks gstack's major capability milestones**, not minor
@@ -280,9 +283,10 @@ defers cross-cutting concerns that gstack already owns.
    Passing checks collapse to one line; failures stay verbose.
 10. Every integration rule must answer: *"Will this still hold after gstack's next release?"*
     If no — replace with capability detection.
-11. **Bridge dual-value (NEW v3)**: every gstack v1.27+ rename is probed at BOTH
-    legacy (`gstack-brain*`) and current (`gstack-artifacts*`) paths; first hit wins;
-    both absent ⇒ graceful degrade; consumers never assume a single path.
+11. **Bridge dual-value is TRANSIENT, not permanent**: a gstack rename is probed at both
+    the legacy and current paths *only until* `min_supported` clears the rename floor, then
+    the legacy path is dropped (see rule 16). Both absent ⇒ graceful degrade. As of v3.6.0
+    the `gstack-brain*` → `gstack-artifacts*` dual-value has sunset; single-path probes only.
 12. **`min_supported` follows core-capability milestones (NEW v3)** — bumped at major
     surfaces (Memory Ingest v1 = v1.26), not at minor releases.
 13. **No orchestration (NEW v3)** — `/lifecycle` is router + reporter, never executor.
@@ -296,10 +300,36 @@ defers cross-cutting concerns that gstack already owns.
     `/gstack-sync --contract-check` reconciles them against `llms.txt` when present.
     Hand-rolled command lists are the drift source (this is how `/ux-audit` and `/health`
     went stale) — prefer the oracle, and degrade gracefully when it is absent.
-16. **Sunset legacy dual-value paths on schedule (NEW v3.5)** — globbing both
-    `gstack-brain*` (legacy) and `gstack-artifacts*` (current) forever is unbounded
-    entropy, against our own anti-entropy mission. `integration.json.policies.legacy_sunset`
-    pins the floor (v1.27); when `min_supported` rises above it, drop every `*_legacy` bridge.
+16. **Sunset legacy dual-value paths on schedule (v3.5; FIRED v3.6.0)** — globbing both
+    `gstack-brain*` (legacy) and `gstack-artifacts*` (current) forever is unbounded entropy,
+    against our own anti-entropy mission. In v3.6.0 `min_supported` rose to **1.46** (well
+    above the v1.27 rename floor), so every `*_legacy` bridge was DROPPED and `*_current`
+    keys renamed to plain names. `legacy_sunset` now reads `FIRED@1.46.0.0`. A future rename
+    re-introduces dual-value transiently, then sunsets on this same rule.
+
+17. **Workflows ≤ 1, read-only, audit-only (NEW v3.6, native Dynamic Workflows)** — native
+    Dynamic Workflows REINFORCE "never orchestrate" for the *delivery lifecycle* (a JS
+    lifecycle script is now even more commoditized) and open exactly ONE narrow exception:
+    oh-my-agents MAY ship **at most one** saved `.claude/workflows/*.js` that fans out its
+    OWN read-only audit skills (entropy-sweep / harness-review / legibility) at repo scale
+    and **terminates in a decision signal**. It may NEVER advance a delivery phase, mutate
+    source, commit, open a PR, or call a gstack lifecycle skill (`/ship`, `/land-and-deploy`,
+    `/canary`).
+    - **Bright-line test (council canon):** does the artifact end in a **SIGNAL** or a
+      **DEPLOYED ARTIFACT**? Signal = ours, allowed. Artifact = gstack's, forbidden.
+    - **Distribution vs capability:** a saved workflow is a *distribution* primitive, not a
+      *capability* primitive — it does not breach the ZERO-new-skills cap, but it is counted
+      here so the discipline cannot leak into an ungoverned directory.
+    - **Structural read-only, not textual:** because a workflow's IO happens inside
+      model-turn `agent()` calls, a grep self-test cannot prove read-only-ness — `agent()`
+      calls may pass ONLY the four read-only audit skills' toolsets (Read/Glob/Grep/Bash-read),
+      never an open-ended prompt that could request a Write/commit/PR.
+    - **Status:** NONE shipped as of v3.6.0. The `/harness-audit` candidate is gated behind a
+      verified `agent()`→`.claude/signals/` write path (Dynamic Workflow scripts cannot do
+      FS/shell; only agents do IO) and a measured A/B showing adversarial fan-out beats
+      sequential `/entropy-sweep` + `/harness-review` runs. When shipped it emits
+      `review-latest.json` (reusing the existing enum), not a new artifact.
+    - **Corollary:** `/lifecycle` is NEVER reimplemented as a workflow.
 
 ## Foundational Principles
 
