@@ -1,4 +1,4 @@
-# oh-my-agents `v3.7.0`
+# oh-my-agents `v3.7.1`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
@@ -180,7 +180,7 @@ OpenAI-component mapping), and
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.7.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.7.1)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md
