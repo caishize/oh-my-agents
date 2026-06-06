@@ -35,6 +35,11 @@ So they are promoted to a versioned **Gate API** consumed by:
    verbose report lives in the matching `.claude/metrics/*.jsonl` history log.
 5. **Atomic-ish write.** Write the signal even on early exit. Producers compute fields
    with `python3`/`jq`/`printf` (correct escaping) — never an unquoted heredoc.
+6. **Accountable-writer.** A signal must be written by the entity that *derived* the verdict
+   (the `/verify` / `/harness-review` run, or a human). A relay agent handed a decision it did
+   not itself compute must NOT write it — the safety classifier correctly treats that as a
+   fabricated result (proven by the 2026-06-07 `/harness-audit` spike). Hence a Dynamic
+   Workflow *returns* a signal-shaped object; the accountable invoker persists it here.
 
 ## `verify-latest.json` — produced by `/verify`
 

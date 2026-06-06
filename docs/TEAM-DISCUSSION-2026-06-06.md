@@ -182,3 +182,41 @@ one genuinely new capability (read-only adversarial audit-at-scale terminating i
 **no executable surface this round** — it's gated behind evidence. The durable position (repo-local
 mechanical enforcement + a versioned cross-tool Gate API) is **strengthened, not expanded**. The
 plugin now practices the anti-entropy mission it preaches.
+
+---
+
+## Addendum — `/harness-audit` spike results (2026-06-07, → shipped in v3.7.0)
+
+Decision #10 gated the `/harness-audit` file behind two unmet conditions. A spike (run as a
+Dynamic Workflow, 26 agents, dogfooding this repo) cleared them, so the workflow shipped in
+**v3.7.0** (`.claude/workflows/harness-audit.js`).
+
+**Gate B — A/B (fan-out vs sequential): PASSED, decisively.** Same repo, two methods:
+- Sequential single pass: **5** findings. Read-only fan-out (5 Explore dimensions): **18** raw
+  → **15** confirmed after adversarial verification (**3** refuted, ~17% false-positive rate
+  the verify stage caught). **Overlap between the two methods: ZERO** — they surface different
+  finding classes (sequential = I/O/tool-capability; fan-out = architectural coupling /
+  duplication / contract gaps). Fully additive; ~3× recall. Verdict: **fan-out for
+  governance/release audits; single-pass `/harness-review` for PR/hotfix.**
+
+**Gate A — signal write path: ANSWERED, and it reshaped the design.** The naive terminal
+"relay agent writes `review-latest.json`" was **correctly BLOCKED by the safety classifier**:
+the emitter had not itself derived the verdict (it was handed the numbers), so writing an
+`APPROVE` signal read as a fabricated audit result. This is the **accountable-writer
+principle** (now SIGNALS.md rule 6 + rule 17): a Dynamic Workflow **RETURNS** a signal-shaped
+object; the accountable invoker (`/harness-review` or a human) persists it. The shipped
+workflow does exactly this — no relay write.
+
+**Structural read-only — validated.** Audit/verify agents use `agentType:'Explore'`, which
+*cannot* Write/Edit. This is the real mechanism rule 17 demanded (stronger than a grep self-test).
+
+**Dogfood bonus.** The spike found real issues, fixed in v3.7.0: `/lifecycle` verify-gate now
+default-denies unknown `schema_version` + has a "verify (no decision)" Gate-Failure row;
+`harness.json` documents its intentional threshold divergence from the template. It also
+produced a **false confirm** — "`/health` no longer exists" (it does, per gstack `llms.txt`);
+both the audit and verify agents skipped the oracle. Lesson reaffirmed: **human judgment is the
+final gate; adversarial verification reduces but does not eliminate false positives.**
+
+Deferred (pre-existing, noted not fixed): slop-checklist DRY across `/harness-review` ↔
+`/entropy-sweep`, their scope-overlap docs, and `/harness-review` provider-bypass graceful
+degradation when `providers_path` is null.

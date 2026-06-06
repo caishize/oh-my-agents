@@ -188,7 +188,7 @@ This plugin leverages specific Claude Code capabilities:
 | `Stop` hooks | doc-drift-check.sh | Advisory warnings after session ends |
 | `$ARGUMENTS` | All skills | Pass user arguments to skill content |
 | Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, gstack `/ship`, Dynamic Workflow stages, Agent Teams |
-| Dynamic Workflows (`.claude/workflows/`) | *gated; none shipped (rule 17)* | Native deterministic fan-out; only ever a read-only audit terminating in a signal |
+| Dynamic Workflows (`.claude/workflows/`) | `harness-audit.js` (1 shipped; rule 17) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it) |
 
 ## Design Decisions
 

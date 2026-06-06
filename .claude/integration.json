@@ -2,7 +2,7 @@
   "version": "1.5",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.6.0",
+    "version": "3.7.0",
     "root": "."
   },
   "gstack": {
@@ -91,7 +91,7 @@
     "_legacy_sunset_note": "gstack-brain* legacy paths were DROPPED in v3.6.0 (2026-06-06) once min_supported rose to 1.46 > the v1.27 rename floor — executing the plugin's own rule 16 instead of globbing two paths forever (unbounded entropy, against our own anti-entropy mission). graceful_degradation still protects any genuine pre-v1.27 caller (absence = no-op). A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets on the same rule.",
     "capability_oracle": "<gstack_root>/llms.txt",
     "gate_api_doc": "docs/SIGNALS.md",
-    "workflows_policy": "anti-bloat rule 17: workflows <=1, read-only, audit-only, terminal node = a decision signal; never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. NONE shipped as of v3.6.0 (the /harness-audit candidate is gated behind an evidence A/B + a verified agent()->signal write path).",
+    "workflows_policy": "anti-bloat rule 17: workflows <=1, read-only (Explore agents), audit-only, RETURNS a decision signal (accountable invoker persists it — never a relay write); never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. ONE shipped (v3.7.0): .claude/workflows/harness-audit.js — A/B spike cleared the evidence gate (3x recall vs sequential, zero overlap; ~17% false positives filtered by adversarial verify).",
     "principles_anchor": "docs/TEAM-DISCUSSION-2026-06-06.md"
   }
 }
