@@ -202,6 +202,16 @@ Concrete per-layer constraint cheatsheet:
 
 New sessions read the JSON to understand prior work state — this is "shift handoff".
 
+**Typed handoff for native orchestration (optional `planner_metadata`)** — the exec-plan
+IS the Planner artifact in Anthropic's Planner→Generator→Evaluator topology. When a native
+Agent Team or Dynamic Workflow will execute the plan, populate `planner_metadata` (schema in
+`templates/execution-plan.json`): `parallelizable_groups` (task-id sets with no `depends_on`
+between them — one `agent()`/peer per group), `context_budget` (per-task token hint +
+`reset_between_tasks` for context resets over compaction), and `recovery_edges` (which earlier
+task to retry on a later failure — the Evaluator→Generator loop). Per task, prefer
+`context_files` (read-for-context, distinct from `files` to modify) and `failing_tests`
+(the test-first gate). All advisory — executors adapt, oh-my-agents never orchestrates.
+
 ### Step 6: Generate Human-Readable Markdown Summary
 
 Create a companion markdown file at `docs/exec-plans/active/{plan-id}.md` alongside

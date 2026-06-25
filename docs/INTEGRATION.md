@@ -9,7 +9,7 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths (v1.46+ floor, v1.56 current)
+## Complementary Strengths (v1.46+ floor, v1.58.4.0 current)
 
 > **Anchor docs**:
 > [TEAM-DISCUSSION-2026-04.md](TEAM-DISCUSSION-2026-04.md) (composition v1),
@@ -20,7 +20,8 @@ metric namespaces.
 > **[TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md) (gstack v1.56 reground +
 > native Dynamic Workflows + signals → versioned Gate API + legacy sunset)**.
 > Quarterly contract review is supplemented by **lightweight drift check on every
-> `/gstack-sync --status`** — gstack ships ~daily (v1.28 → v1.56 across 2026-Q2).
+> `/gstack-sync --status`** — gstack ships ~daily (v1.28 → v1.58.4.0 across 2026-Q2;
+> v1.57.5+ added an event-sourced decision/verdict layer we now reconcile read-only).
 
 ## Differentiation Anchor (where oh-my-agents is irreplaceable)
 
@@ -256,7 +257,7 @@ defers cross-cutting concerns that gstack already owns.
 
 ## Anti-Bloat Constraints
 
-*Hard rules (current through v3.7.1). Stable anchor — linked from CLAUDE.md.*
+*Hard rules (current through v3.8.0). Stable anchor — linked from CLAUDE.md.*
 
 1. **No new skills** for integration purposes; modify existing skills only.
 2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers immediate trim

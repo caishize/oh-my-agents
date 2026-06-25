@@ -16,7 +16,10 @@ Parse `$ARGUMENTS` for:
 - `--days N` — Time range in days (default: 7)
 - `--plan {plan-id}` — Show detailed view of a specific execution plan
 - `--json` — Output raw JSON instead of formatted text
-- `--query {type}` — Deep-dive query: `layer-balance`, `violations`, `trends`, `export`
+- `--query {type}` — Deep-dive query: `layer-balance`, `violations`, `trends`, `velocity`, `export`
+  - `velocity` — cross-session DORA lens from `.claude/metrics/verify.jsonl` + `reviews.jsonl`:
+    first-pass-GREEN rate per plan, verify→review p50, and a recurring-failure heatmap
+    (test/error patterns that failed across 2+ sessions) to target `/encode-mistake`.
 
 If `--query` is provided, skip the overview dashboard and run the deep-dive query instead.
 For deep-dive queries, compute detailed analysis with charts, trends, and recommendations.
@@ -153,6 +156,10 @@ Generate the top 3 actionable recommendations based on the data:
 - If gstack installed but no dual reviews -> recommend `/harness-review` for next PR
 - If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
 - If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
+- If a TASTE-NNN rule (docs/LINTING.md) has matched 0 violations in 30+ days of session
+  metrics -> note it as an **evidence-gated sunset candidate** (human-reviewed, never auto-removed)
+- If first-pass-GREEN rate is declining while a TASTE rule keeps matching -> the rule works;
+  if the same violation recurs *despite* a rule, the enforcement is weak -> recommend `/arch-guard`
 - If unencoded GBrain learnings > 5 -> recommend `/encode-mistake --from-gbrain learning`
 - If gbrain CLI present and no eureka encoded yet -> note `/encode-mistake --from-gbrain eureka` is also available
 - If gstack version < integration.json min_supported -> recommend `/gstack-sync --contract-check`

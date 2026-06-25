@@ -63,6 +63,20 @@ Continuous detection and repair of codebase degradation.
 
 Implemented by: `/entropy-sweep`, `/harness-review`, `doc-drift-check.sh`, `/encode-mistake`
 
+## Three review/audit moments
+
+Canonical — same slop taxonomy, different trigger. The slop check appears in three skills
+by design, not duplication. They share ONE definition
+([docs/LINTING.md](LINTING.md#slop-taxonomy-canonical)); pick by the moment:
+
+| Moment | Skill | Cost / shape | When |
+|--------|-------|--------------|------|
+| **per-PR / pre-ship** | `/harness-review` | single-pass, low context | every change before ship |
+| **weekly GC** | `/entropy-sweep` | repo-wide scan | scheduled maintenance |
+| **release / governance** | `/harness-audit` (workflow) | fanned-out Explore + adversarial verify (3× recall, ~3× cost) | release gates, quarterly |
+
+`/harness-review` and `/entropy-sweep` reference this table rather than restating it.
+
 ## Mapping to the Planner / Generator / Evaluator topology
 
 The multi-agent harness pattern (InfoQ, 2026-04) decomposes long-running coding work
@@ -90,8 +104,8 @@ that *terminates in a signal* (anti-bloat rule 17); never a delivery script.
 |------|-------------------------------|-----------------------------|------------------|
 | **Coordination** | — (deliberately none) | **native Agent Teams** (mailbox) + **Dynamic Workflows** (script); gstack Conductor | shared task list / mailbox / script vars |
 | **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` |
-| **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (PreToolUse hooks) | `/guard` (freeze/careful) | hook block + remediation message in agent context |
-| **Evaluator** | `/verify` + `/harness-review` (decision signals) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` |
+| **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (block); `plan-validation-check` (feedforward GUIDE) — PreToolUse hooks | `/guard` (freeze/careful) | hook block + remediation message in agent context |
+| **Evaluator** | `/verify` + `/harness-review` (decision signals; `/harness-review` reads & reconciles gstack's v1.57.5+ verdict layer read-only) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` (+ `gstack_context`) |
 | **Memory between resets** | nested CLAUDE.md, `docs/LINTING.md` (TASTE rules) | GBrain (`learnings-log`, `timeline-log`, `eureka`) | one-direction bridge: observation → enforcement |
 | **Loop closure** | `/encode-mistake --from-gbrain` (human-gated) | `/investigate`, `/retro` | TASTE-NNN rule with `taste_id` ↔ learning-id back-reference |
 
@@ -143,11 +157,12 @@ agents/                                   # Read-only background subagent (1 age
 └── session-observer-agent.md             # Session tracking and shift-handoff
                                           # (doc-gardening-agent retired v3.6.0 — covered by
                                           #  doc-drift-check hook + entropy-sweep)
-hooks/                                    # Event hook scripts (6 hooks + shared lib)
+hooks/                                    # Event hook scripts (7 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution)
 ├── arch-check.sh                         # PreToolUse (Edit|Write): layer boundary check
 ├── safety-check.sh                       # PreToolUse (Edit|Write): hardcoded secrets detection
+├── plan-validation-check.sh             # PreToolUse (Edit|Write): exec-plan handoff GUIDE (advisory)
 ├── bash-safety-check.sh                  # PreToolUse (Bash): credential leak detection
 ├── self-verify-check.sh                  # PostToolUse (Edit|Write): syntax/type self-verification
 ├── session-metrics.sh                    # PostToolUse (Edit|Write|Bash): JSONL activity logging
@@ -217,7 +232,8 @@ remediation instructions."
 
 CLAUDE.md is the table of contents (~60 lines); docs/ contains the full details.
 OpenAI found that one massive instruction file failed — context is scarce and crowds
-out actual task details. **Note:** gstack v1.46–1.56 converged onto on-demand content
-loading (25–49% token cut), so progressive disclosure is now table stakes both platforms
-ship — we keep the practice but no longer claim it as a moat. The moat is the repo-local
-edit-time mechanical enforcement (hooks/arch-guard/TASTE) + the versioned signal Gate API.
+out actual task details. **Note:** gstack v1.46–1.58 converged onto on-demand content
+loading (25–49% token cut; "carved skills" = skeleton + on-demand `sections/`), so
+progressive disclosure is now table stakes both platforms ship — we keep the practice but
+no longer claim it as a moat. The moat is the repo-local edit-time mechanical enforcement
+(hooks/arch-guard/TASTE) + the versioned signal Gate API.

@@ -149,8 +149,11 @@ full field reference in docs/SIGNALS.md):
 verify→review time) read — both already assume this writer exists.
 
 **gstack readiness (advisory, only if gstack present)**: surface prior-review and QA
-presence in the report *text* for `/ship` context, but never block on it and never
-fold it into the decision signal — verify owns the decision; gstack data is context.
+presence — and, if gstack v1.57.5+ ships a decision layer, whether
+`~/.gstack/projects/<slug>/decisions.active.json` has unresolved decisions — in the report
+*text* for `/ship` context. Read-only. Never block on it and never fold it into the
+decision signal: verify owns the build/test/lint/arch decision; the review-domain
+reconciliation of gstack's verdict belongs to `/harness-review` (docs/SIGNALS.md).
 
 ### Step 4: Report Results
 

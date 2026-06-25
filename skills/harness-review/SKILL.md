@@ -25,12 +25,11 @@ Two guiding philosophies:
 > and merge process."** This is the initial agent pass — providing high-signal,
 > actionable feedback for the human engineer's final decision.
 
-**Scope vs related skills** — the slop taxonomy in Review 1 is **shared by design** with
-`/entropy-sweep` Sweep 1 (same definition, different trigger), not accidental duplication.
-Pick the one that matches the moment: `/harness-review` = **per-PR / pre-ship** (the review
-gate that writes `review-latest.json`); `/entropy-sweep` = **weekly / scheduled** GC scan;
-`/harness-audit` = **fanned-out at repo scale** for release/governance audits. Run one per
-context — don't stack all three on the same diff.
+**Scope vs related skills** — the slop check is shared by design with `/entropy-sweep`
+(weekly GC) and `/harness-audit` (release governance): same taxonomy, different trigger.
+`/harness-review` is the **per-PR / pre-ship** gate that writes `review-latest.json`.
+Canonical moments table: [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#three-reviewaudit-moments).
+Run one per context — don't stack all three on the same diff.
 
 ## Task
 
@@ -39,32 +38,15 @@ Review the current changes (staged/unstaged diff, or PR via $ARGUMENTS).
 ### Review 1: Say No to Slop
 
 The most important check. Agent-generated code often produces "slop" — technically
-correct but harmful to codebase quality:
+correct but harmful to codebase quality. Classify findings against the **canonical slop
+taxonomy** in [docs/LINTING.md](../../docs/LINTING.md#slop-taxonomy-canonical) — duplicate
+logic · pattern inconsistency · copy-paste artifacts · over-engineering · inconsistent
+naming · security slop · missing taste. It is the same definition `/entropy-sweep` Sweep 1
+and `/harness-audit` use, so a given finding earns the same severity in every pass.
 
-**Duplicate logic** (highest signal):
-- Same function implemented in 2+ places (especially helpers, utils)
-- Real example: duplicate concurrency helpers where only one had OpenTelemetry
-
-**Pattern inconsistency:**
-- 5 files use async/await, 3 use callbacks for the same thing
-- Mixed logging: some `logger.info()`, some `console.log()`
-- Different error handling approaches in the same layer
-
-**Copy-paste artifacts:**
-- Generic comments ("This function does X") that add no value
-- Variable names from a template that don't match the context
-- Leftover TODOs from scaffolding
-
-**Over-engineering:**
-- Abstract factory for a single implementation
-- Generic type parameters used in only one place
-- Configuration for behavior that never varies
-
-**Missing taste** — would a senior engineer accept this in a manual PR?
-
-For each slop finding, note the **agent replication risk**: bad patterns in the codebase
-multiply via every future agent-generated PR. Example: "Three retry implementations
-exist — an agent encountering this codebase will create a 4th."
+For each slop finding, note the **agent replication risk** (defined there): bad patterns
+multiply via every future agent-generated PR. "Three retry implementations exist — an
+agent encountering this codebase will create a 4th."
 
 ### Review 2: Risk & Safety (P0)
 
@@ -197,6 +179,23 @@ Cross-validated findings (flagged by ≥2 systems) escalate one severity level
 and get tag `[BOTH+]`. **Never re-run a check that gstack just ran** — defer to
 gstack's output and reference its report path.
 
+**gstack decision-layer read (v1.57.5+, READ-ONLY)** — if present, capture gstack's own
+verdict so Review 8 can reconcile (full rule in docs/SIGNALS.md). Read-only glob; absent ⇒ skip.
+
+```bash
+SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo unknown)
+GD="$HOME/.gstack/projects/$SLUG"
+GSTACK_REVIEW_STATUS=$(ls -t "$GD"/*-reviews.jsonl 2>/dev/null | head -1 | xargs -I{} tail -1 {} 2>/dev/null \
+  | python3 -c "import sys,json; print(json.loads(sys.stdin.read() or '{}').get('status',''))" 2>/dev/null || echo "")
+GSTACK_UNRESOLVED=$(python3 -c "import json; print(len(json.load(open('$GD/decisions.active.json')).get('unresolved',[])))" 2>/dev/null || echo "")
+echo "gstack-verdict: status=${GSTACK_REVIEW_STATUS:-none} unresolved=${GSTACK_UNRESOLVED:-na}"
+```
+
+If a value is found, set `gstack_context` (Review 8) to e.g.
+`{"present":true,"review_status":"issues_found","decisions_unresolved":2,"source":"gstack-review-log"}`
+and surface gstack's verdict next to ours in the report. **Advisory only** — it never
+mechanically rewrites our decision; it can only trigger the divergence halt in Review 8.
+
 **If gstack is not installed**: apply this lightweight structural checklist as fallback:
 - Security: SQL injection, XSS, command injection, hardcoded secrets
 - Data integrity: race conditions, missing transactions, unvalidated input
@@ -244,8 +243,16 @@ Every `/harness-review` invocation MUST end with exactly one decision and write
 | `p0_count` / `p1_count` / `p2_count` | integer | Issue counts by severity |
 | `tags_present` | string[] | Subset of `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]` |
 | `gstack_composed` | boolean | True if any gstack skill was composed |
+| `gstack_context` | object \| null | gstack v1.57.5+ verdict from Review 7, read-only (`null` if absent) |
 | `plan_id` | string \| null | Active exec-plan id, if any |
 | `reason` | string (≤120 chars) | One-line rationale for the decision |
+
+**gstack verdict reconciliation (when `gstack_context.present`)** — the decision stays
+derived from OUR four pillars; gstack's verdict is advisory (full rule: docs/SIGNALS.md):
+- **Agree** (both block, or both allow) ⇒ emit our `decision` unchanged.
+- **Diverge** (we'd `APPROVE` but gstack `review_status=issues_found`, or vice-versa) ⇒
+  emit `decision=NEEDS_HUMAN`, `needs_human_kind=judgment-slop`, name it in `reason`.
+- Never aggregate, never rewrite our decision mechanically, never write gstack paths.
 
 ```bash
 mkdir -p .claude/signals

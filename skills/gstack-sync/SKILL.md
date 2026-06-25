@@ -61,7 +61,20 @@ done                                                                  # v1.28+
 INGEST_BIN=""
 [ -x "$GSTACK_PATH/bin/gstack-memory-ingest" ] && INGEST_BIN="$GSTACK_PATH/bin/gstack-memory-ingest"  # v1.26+
 ARTIFACTS_REMOTE=""
-[ -f "$HOME/.gstack-artifacts-remote.txt" ] && ARTIFACTS_REMOTE="present"  # v1.27 Path 4 hint
+[ -f "$HOME/.gstack-artifacts-remote.txt" ] && ARTIFACTS_REMOTE="present"  # sync/distribution remote
+# brain-remote is a DISTINCT remote from artifacts-remote (NOT a rename) — gbrain memory lives here.
+# Never infer "gbrain absent" from artifacts-only; gbrain presence = CLI/doctor OR worktree OR this file.
+BRAIN_REMOTE=""
+[ -f "$HOME/.gstack-brain-remote.txt" ] && BRAIN_REMOTE="present"
+GBRAIN_DOCTOR=$( { command -v gbrain >/dev/null 2>&1 && gbrain doctor >/dev/null 2>&1; } && echo "ok" || echo "")  # v1.26+ MCP/health
+
+# gstack decision/verdict layer (v1.57.5+): event-sourced decisions + active snapshot + review verdict.
+# Read-only — feeds /harness-review reconciliation (docs/SIGNALS.md), never written here.
+DECISIONS_LOG=$([ -f "$PROJ_DIR/decisions.jsonl" ] && echo 1 || echo 0)              # v1.57.5+
+DECISIONS_ACTIVE=$([ -f "$PROJ_DIR/decisions.active.json" ] && echo 1 || echo 0)     # v1.57.5+
+REVIEW_VERDICT=$(ls -t $PROJ_DIR/*-reviews.jsonl 2>/dev/null | head -1 | xargs -I{} tail -1 {} 2>/dev/null \
+  | python3 -c "import sys,json; print(json.loads(sys.stdin.read() or '{}').get('status',''))" 2>/dev/null || echo "")  # gstack-review-log
+HEALTH_HISTORY=$([ -f "$PROJ_DIR/health-history.jsonl" ] && echo 1 || echo 0)        # v1.x /health
 
 # Core artifacts (legacy, pre-v1)
 CAP_DESIGN=$(ls $PROJ_DIR/*-design-*.md 2>/dev/null | wc -l)
@@ -138,7 +151,16 @@ Output this structure (Markdown):
 - gbrain CLI             : {path | "not on PATH"}        (v1.26+ memory ingest)
 - memory-ingest binary   : {path | "absent"}             (v1.26+)
 - llms.txt index         : {path | "absent"}             (v1.28+; preferred for skill discovery)
-- remote artifacts hint  : {none | legacy file | current file}  (v1.27 Path 4)
+- artifacts remote       : {present|absent}              (sync/distribution remote)
+- brain remote           : {present|absent}              (DISTINCT remote — gbrain memory; not a rename)
+- gbrain doctor          : {ok | "n/a"}                  (v1.26+ MCP/health probe)
+
+### Decision/verdict layer (gstack v1.57.5+, read-only — feeds /harness-review reconciliation)
+- decisions.jsonl        : {present|absent}              (event-sourced decision memory)
+- decisions.active.json  : {present|absent}              ({N} unresolved if present)
+- review verdict         : {clean | issues_found | "—"}  (gstack-review-log status)
+- health-history.jsonl   : {present|absent}
+- reconciliation         : {our review-latest.json + gstack verdict → agree=pass / diverge=NEEDS_HUMAN:judgment-slop}
 
 ### Composition (who-owns-what)
 - Slop deep-check         → gstack /codex                       (presence: {yes/no})
@@ -250,8 +272,12 @@ Quarterly governance gate — run before/after each quarter:
 - **Loose version match** — accept `min_supported` and above; warn but don't fail on drift
 - **Worktree-aware** — if `.gstack-worktrees/` present, scope reports to current worktree
 - **No skill duplication** — never invoke gstack commands; only discover their outputs
-- **Legacy sunset FIRED (v3.6.0)** — `min_supported` rose to 1.46 > the v1.27 rename floor,
-  so `gstack-brain*` legacy paths are dropped; probe `gstack-artifacts*` only. A FUTURE
+- **Legacy sunset FIRED (v3.6.0)** — the v1.27 *worktree* rename (`gstack-brain-worktree`
+  → `gstack-artifacts-worktree`) is past the floor, so the legacy worktree path is dropped;
+  probe `~/.gstack-artifacts-worktree` only. **Caveat (v3.8):** this sunset is about the
+  WORKTREE rename — it does NOT mean "gbrain is gone". `~/.gstack-brain-remote.txt` is a
+  DISTINCT remote from `~/.gstack-artifacts-remote.txt` (gbrain memory vs sync), so gbrain
+  presence = CLI/`gbrain doctor` OR worktree OR brain-remote — never artifacts-only. A FUTURE
   gstack rename re-introduces dual-value bridges temporarily, then sunsets on the same rule.
 - **Prefer llms.txt over enumeration** (v1.28+) — when present, it is gstack's
   authoritative skill/command index; do not duplicate or stale-cache it locally
