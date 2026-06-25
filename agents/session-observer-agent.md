@@ -66,7 +66,17 @@ From the session metrics, extract:
 - Doc drift warnings
 - Hook failures or skips
 
-### 5. Open Questions and Blockers
+### 5. Decision Signals & Gate State
+
+So the next session inherits the *verdict*, not just raw metrics, read the latest Gate API
+signals (read-only):
+- `.claude/signals/verify-latest.json` — last `decision` (GREEN/YELLOW/RED) + `first_pass`
+- `.claude/signals/review-latest.json` — last `decision`, `needs_human_kind`, and (v3.8+)
+  `gstack_context`: **flag any gstack↔harness divergence** (`NEEDS_HUMAN:judgment-slop`) the
+  next session must reconcile before shipping
+- `.claude/signals/lifecycle-next.json` (if present) — the projected next phase/skill
+
+### 6. Open Questions and Blockers
 
 Look for signals of unresolved issues:
 - TODOs added in this session (new `// TODO` or `// FIXME` in modified files)
@@ -102,6 +112,11 @@ previous session summary — do not append indefinitely.
 - arch-check: 1 violation (resolved) — service imported from ui layer
 - safety-check: 0 blocks
 - doc-drift: 1 warning — CLAUDE.md test command outdated
+
+### Gate State (carry the verdict across the reset)
+- verify: GREEN (first_pass) | review: APPROVE
+- gstack reconciliation: aligned (or: DIVERGED — gstack issues_found vs harness APPROVE → judgment-slop, needs human)
+- next (lifecycle-next.json): /harness-review --plan plan-auth-refactor
 
 ### For Next Session
 - [ ] Integration tests for auth service still pending

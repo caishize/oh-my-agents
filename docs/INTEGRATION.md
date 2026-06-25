@@ -257,7 +257,7 @@ defers cross-cutting concerns that gstack already owns.
 
 ## Anti-Bloat Constraints
 
-*Hard rules (current through v3.8.0). Stable anchor — linked from CLAUDE.md.*
+*Hard rules (current through v3.8.1). Stable anchor — linked from CLAUDE.md.*
 
 1. **No new skills** for integration purposes; modify existing skills only.
 2. **SKILL.md ≤ 400 lines** per skill; over-budget triggers immediate trim

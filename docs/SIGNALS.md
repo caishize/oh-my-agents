@@ -120,6 +120,30 @@ arbiter** without violating the SIGNAL-not-ARTIFACT bright line:
 `gstack_context` is an **optional** field ⇒ `schema_version` stays `1` (consumers that
 don't read it are unaffected; the versioning policy below covers this).
 
+## Related: `lifecycle-next.json` — advisory routing metadata (NOT a gate)
+
+`/lifecycle next --emit-next` (or `--auto`) may write `.claude/signals/lifecycle-next.json`:
+the next phase + skill + `config_hints` (args/prerequisites/gates) so a Dynamic Workflow or
+Agent Team can auto-load the next step without re-parsing prose. It is **not** one of the two
+decision signals above and the contract rules do NOT apply the same way:
+
+- It carries `advisory: true`. Emitting it is **naming, not invoking** — `/lifecycle` never
+  runs the named skill (anti-bloat rule 5).
+- **Absence is NOT default-deny** — it is a convenience cache; a consumer that doesn't find it
+  simply runs `/lifecycle next` itself. Never block on its absence.
+- It never gates `/ship`; the two decision signals (`verify-latest`, `review-latest`) remain
+  the only gates. `lifecycle-next.json` only *points at* which gate to read next.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema_version` | integer | `1` |
+| `timestamp` | string (ISO-8601 UTC) | When the route was projected |
+| `phase` / `skill` | string | Next phase and the exact skill to run |
+| `reason` | string | Why this is next (e.g. `verify GREEN, no review yet`) |
+| `config_hints` | object | `{ args[], prerequisites[], gates[] }` for the consumer to self-serve |
+| `abort_on` | string[] | Decisions at which the consumer should stop (e.g. `RED`, `NEEDS_HUMAN`) |
+| `advisory` | boolean | Always `true` — a hint, never a command |
+
 ## Versioning policy
 
 - Adding an optional field ⇒ same `schema_version` (consumers ignore unknown fields).

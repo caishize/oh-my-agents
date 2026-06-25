@@ -2,7 +2,7 @@
 name: lifecycle
 description: "Full development lifecycle ROUTER (not an executor) — detects state, reads decision signals, and NAMES the next phase + exact remediation skill across Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Never invokes delivery skills or advances a phase; worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
 user-invocable: true
-argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux] [--with-codex] [--with-cso]"
+argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--emit-next] [--ux] [--with-codex] [--with-cso]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -86,6 +86,30 @@ skill** (see Gate Failure Routing). It never advances delivery itself.
 **Router invariant: `/lifecycle` NAMES the next skill and reads its decision signal; it
 never invokes a delivery skill, mutates source, or advances a phase. The day it does, that
 logic moves to gstack — anti-bloat rule 5 + the SIGNAL-not-ARTIFACT bright line.**
+
+#### Structured next-step output (`--emit-next` / `--auto`, advisory)
+
+With `--emit-next` (implied by `--auto`), also write the route just computed to
+`.claude/signals/lifecycle-next.json` so a native **Dynamic Workflow / Agent Team** can
+auto-load the next skill's args without re-parsing prose. This is **routing METADATA, not a
+gate and not a command** — emitting it is still "naming", not invoking. Consumers CHOOSE to
+act on it; `/lifecycle` never runs the named skill. (Schema note in docs/SIGNALS.md — it is
+explicitly NOT one of the two default-deny decision signals.)
+
+```bash
+mkdir -p .claude/signals
+# PHASE, SKILL, REASON, ARGS[], PREREQS[], GATES[], ABORT_ON[] come from the detection above.
+# Build JSON with python3/jq/printf (correct escaping). advisory:true is mandatory.
+# e.g. {"schema_version":1,"timestamp":"…","phase":"review","skill":"/harness-review",
+#       "reason":"verify GREEN, no review yet",
+#       "config_hints":{"args":["--plan","plan-…"],
+#         "prerequisites":[".claude/signals/verify-latest.json"],
+#         "gates":["verify-latest decision=GREEN"]},
+#       "abort_on":["RED","YELLOW","NEEDS_HUMAN"],"advisory":true}
+```
+
+Absent file ⇒ no projection cached; a consumer falls back to running `/lifecycle next` itself.
+Never default-deny on it — it is a convenience, not a gate.
 
 ### `ideate` — Requires gstack → `/office-hours`
 ### `plan` — Requires gstack → `/autoplan` or individual review passes
@@ -208,3 +232,6 @@ so the developer (or the next agent invocation) doesn't have to search:
   *implementing* a phase (e.g. drafting a CHANGELOG), that logic belongs in gstack
 - **Review decision signal is mandatory**: `next` will not auto-advance past `review`
   without `.claude/signals/review-latest.json`; missing signal ⇒ `NEEDS_HUMAN`
+- **`lifecycle-next.json` is advisory metadata, NOT a gate** — `--emit-next`/`--auto` may
+  write it for workflow convenience (`advisory:true`); emitting it is still NAMING. Consumers
+  choose to act; `/lifecycle` never invokes the named skill. Never default-deny on its absence.

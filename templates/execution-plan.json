@@ -64,6 +64,16 @@
             "enum": ["types", "config", "repo", "service", "runtime", "ui", "docs", "test"],
             "description": "Architectural layer this task targets"
           },
+          "phase": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Dependency phase (1=types/config … 6=cross-cutting). Tasks in the same phase with no inter-dependency are parallelizable; see planner_metadata.parallelizable_groups."
+          },
+          "constraints": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "What the agent must NOT do for this task (just as important as requirements) — e.g. 'no imports from service/'."
+          },
           "files": {
             "type": "array",
             "items": { "type": "string" },
