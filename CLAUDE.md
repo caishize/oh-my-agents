@@ -1,6 +1,6 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.8.0** — Mechanical quality constraints + entropy management for AI-driven dev.
+**v3.8.1** — Mechanical quality constraints + entropy management for AI-driven dev.
 **Composition-based** integration with [gstack](https://github.com/garrytan/gstack.git)
 (v1.46+ floor, v1.58.4.0 current); we own *architecture / entropy / observability* and **never
 orchestrate delivery**. Coordination ceded to native **Agent Teams** + **Dynamic Workflows**;
@@ -63,4 +63,4 @@ Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCH
    **SIGNAL** (ours) or a **DEPLOYED ARTIFACT** (gstack's). Shipped: `.claude/workflows/harness-audit.js`.
 
 Full constraints + rationale: [Anti-Bloat Constraints](docs/INTEGRATION.md#anti-bloat-constraints).
-Latest decision record: [docs/TEAM-DISCUSSION-2026-06-25.md](docs/TEAM-DISCUSSION-2026-06-25.md) (v3.8.0 harness-fusion).
+Latest decision record: [docs/TEAM-DISCUSSION-2026-06-25.md](docs/TEAM-DISCUSSION-2026-06-25.md) (v3.8 harness-fusion).

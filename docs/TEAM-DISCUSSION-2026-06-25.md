@@ -79,8 +79,21 @@ New orchestration/Agent-Teams skills (rule 5) · auto-generated TASTE rules (ETH
 entropy-sweep/harness-review/harness-audit (same definition, different trigger) · a unified
 **aggregate** verdict (bright-line break) · new Bash CLI-API helper files (document the schema).
 
-## Open (deferred — human call)
+## Open questions — RESOLVED in v3.8.1
 
-1. Retire `session-observer-agent`? Audit downstream consumers first; not done this round.
-2. Emit a structured `lifecycle-next.json`? Useful for workflow auto-loading but adds a
-   signal artifact — deferred pending demand (must never imply auto-invocation).
+1. **Retire `session-observer-agent`? → NO, keep + enhance.** Audit (2026-06-25) found its
+   output goes to *agent memory* and no skill/hook/workflow machine-parses it — but that is
+   precisely the point: it is the automatic **"memory between context resets"** role from the
+   Anthropic three-agent pattern (mapped in ARCHITECTURE.md), which an *on-demand*
+   `/harness-dashboard --query` does NOT replace. The council's "redundant" claim conflated
+   the two. Kept, and **enhanced** to carry Gate State across the reset (last verify/review
+   decision + gstack-reconciliation divergence + `lifecycle-next.json` projection).
+2. **Emit `lifecycle-next.json`? → YES, advisory only.** `/lifecycle next --emit-next`/`--auto`
+   writes routing METADATA (`advisory:true`) so a Dynamic Workflow / Agent Team auto-loads the
+   next skill's args — directly serving the council's "automation between stages" goal. It is
+   NOT a gate (absence ≠ default-deny) and NEVER implies auto-invocation (rule 5 intact).
+   Documented in SIGNALS.md as explicitly distinct from the two decision signals.
+
+Also completed in v3.8.1: reconciled the pre-existing `spec-to-task` ↔
+`templates/execution-plan.json` field drift (added `phase`/`constraints` to the schema;
+aligned task fields to `context_files`/`failing_tests`/string-`acceptance`).

@@ -173,14 +173,16 @@ Required top-level fields:
 - `tasks[]` — see below
 - `metrics` — `{ tasks_total, tasks_done, tasks_blocked }`
 
-Each task object:
+Each task object (full schema is `templates/execution-plan.json` — conform to it):
 ```
-{ id, title, layer, phase, status, files[], depends_on[], acceptance[], constraints[], context[] }
+{ id, title, layer, phase, status, files[], depends_on[], acceptance, context_files[], failing_tests[], constraints[], notes }
 ```
-- `status` transitions: `pending` → `in_progress` → `done` (or `blocked`)
-- `acceptance[]` — explicit pass criteria (test names, lint clean, etc.)
+- `status` transitions: `pending` → `in-progress` → `done` (or `blocked` / `skipped`)
+- `acceptance` — explicit pass criterion (verification command or test-name summary)
+- `failing_tests[]` — tests that must FAIL first (test-first gate; the Evaluator's acceptance)
+- `context_files[]` — files the agent must READ first, no tacit knowledge (distinct from `files`, which it creates/modifies)
 - `constraints[]` — things the agent must NOT do (just as important as requirements)
-- `context[]` — files the agent must read first (no tacit knowledge)
+- `phase` — dependency phase; tasks in the same phase with no `depends_on` between them are parallelizable (see `planner_metadata.parallelizable_groups`)
 
 Layer order (also defines `phase` numbering):
 ```
