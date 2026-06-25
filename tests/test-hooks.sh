@@ -369,6 +369,57 @@ run_test "doc-drift: handles non-existent project dir gracefully" \
     0
 
 # =============================================
+# plan-validation-check.sh tests (feedforward GUIDE — always exits 0)
+# =============================================
+
+echo ""
+echo "--- plan-validation-check.sh ---"
+
+run_test "plan-validation: silent + exit 0 on non-plan file" \
+    "plan-validation-check.sh" \
+    '{"tool_name":"Write","tool_input":{"file_path":"src/foo.ts","content":"const x=1"}}' \
+    0
+
+run_test "plan-validation: exit 0 on well-specified in_progress task" \
+    "plan-validation-check.sh" \
+    '{"tool_name":"Write","tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in_progress\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
+    0
+
+run_test "plan-validation: exit 0 (never blocks) on under-specified task" \
+    "plan-validation-check.sh" \
+    '{"tool_name":"Write","tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in_progress\"}]}"}}' \
+    0
+
+run_test "plan-validation: exit 0 on invalid/mid-edit JSON" \
+    "plan-validation-check.sh" \
+    '{"tool_name":"Edit","tool_input":{"file_path":"docs/exec-plans/active/p.json","new_string":"{not valid json"}}' \
+    0
+
+# Custom assertion: advisory message MUST appear for an under-specified in_progress task,
+# and MUST NOT appear for a well-specified one (run_test only checks stderr on exit 2).
+assert_advisory() {
+    local name="$1" input="$2" should_warn="$3"
+    TOTAL=$((TOTAL + 1))
+    local out
+    out=$(printf '%s' "$input" | bash "$HOOKS_DIR/plan-validation-check.sh" 2>&1 >/dev/null || true)
+    local has_warn="no"
+    echo "$out" | grep -q "Plan handoff checklist" && has_warn="yes"
+    if [ "$has_warn" = "$should_warn" ]; then
+        PASS=$((PASS + 1)); echo "PASS: $name"
+    else
+        FAIL=$((FAIL + 1)); echo "FAIL: $name (expected warn=$should_warn, got $has_warn)"
+    fi
+}
+
+assert_advisory "plan-validation: warns on missing handoff fields" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in_progress\"}]}"}}' \
+    "yes"
+
+assert_advisory "plan-validation: stays silent when fields present" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"done\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
+    "no"
+
+# =============================================
 # Summary
 # =============================================
 

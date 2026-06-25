@@ -81,6 +81,7 @@ const DIMENSIONS = [
   { key: 'docs',     prompt: 'Pillar: Documentation. Stale counts (skills/agents/hooks), dead file references, version-string mismatches, broken relative links, commands that no longer exist.' },
   { key: 'observ',   prompt: 'Pillar: Observability. Missing/ambiguous decision signals, metrics gaps, nested CLAUDE.md drift, unactionable error messages.' },
   { key: 'contract', prompt: 'Cross-cutting: CONTRACTS. integration.json bridges vs the skills that probe them; any skill globbing a removed legacy path; docs/SIGNALS.md schema vs what verify/harness-review actually emit; default-deny completeness in /lifecycle.' },
+  { key: 'reconcile', prompt: 'Cross-cutting: GSTACK-VERDICT RECONCILIATION (v3.8). VALIDATE only — never perform it. Does skills/harness-review/SKILL.md actually READ gstack v1.57.5+ (decisions.active.json / gstack-review-log) and reflect it in review-latest.json `gstack_context`? Is the divergence rule (NEEDS_HUMAN:judgment-slop on opposite verdicts) consistent between skills/harness-review/SKILL.md and docs/SIGNALS.md? P0-flag any code that AGGREGATES gstack into our decision or WRITES a gstack path (SIGNAL-not-ARTIFACT bright-line break).' },
 ];
 
 // ---------------------------------------------------------------------------

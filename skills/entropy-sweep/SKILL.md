@@ -23,11 +23,11 @@ The sweep is organized around the **four pillars**:
 3. **Observability & Legibility** — nested CLAUDE.md health, logging gaps
 4. **Entropy Management** — execution plan health, missing enforcement, slop
 
-**Scope vs related skills** — Sweep 1's slop detection is **shared by design** with
-`/harness-review` Review 1 (same taxonomy, different trigger), not accidental duplication.
-`/entropy-sweep` = the **weekly / scheduled** GC scan; `/harness-review` = the same slop check
-**per-PR / pre-ship** (the review gate); `/harness-audit` = **fanned-out at repo scale** for
-release/governance audits. Pick the one matching your moment.
+**Scope vs related skills** — Sweep 1's slop detection is shared by design with
+`/harness-review` (per-PR gate) and `/harness-audit` (release governance): same taxonomy,
+different trigger. `/entropy-sweep` is the **weekly / scheduled** GC scan. Canonical
+moments table: [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#three-reviewaudit-moments).
+Pick the one matching your moment.
 
 ## What Is Entropy?
 
@@ -49,7 +49,9 @@ Perform a comprehensive entropy sweep. Use $ARGUMENTS to scope (default: full).
 **Pillar: Entropy Management**
 
 The #1 rule: **maintain strict review standards. Lowering the bar creates
-compounding technical debt.** Scan for:
+compounding technical debt.** Classify against the **canonical slop taxonomy**
+([docs/LINTING.md](../../docs/LINTING.md#slop-taxonomy-canonical)) — the same definition
+`/harness-review` Review 1 and `/harness-audit` use. Scan for:
 
 1. **Duplicate helpers** — Same logic implemented in multiple places
    (Real example: duplicate concurrency helpers where only one had OTel)

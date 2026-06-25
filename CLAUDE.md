@@ -1,8 +1,8 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.7.1** — Mechanical quality constraints + entropy management for AI-driven dev.
+**v3.8.0** — Mechanical quality constraints + entropy management for AI-driven dev.
 **Composition-based** integration with [gstack](https://github.com/garrytan/gstack.git)
-(v1.46+ floor, v1.56 current); we own *architecture / entropy / observability* and **never
+(v1.46+ floor, v1.58.4.0 current); we own *architecture / entropy / observability* and **never
 orchestrate delivery**. Coordination ceded to native **Agent Teams** + **Dynamic Workflows**;
 our durable anchor is the read-only audit + the versioned decision-signal **Gate API**
 ([docs/SIGNALS.md](docs/SIGNALS.md)) every executor gates on.
@@ -20,9 +20,9 @@ our durable anchor is the read-only audit + the versioned decision-signal **Gate
 11 user-invocable skills (full details in [docs/WORKFLOW.md](docs/WORKFLOW.md)):
 `harness-init`, `legibility-score`, `spec-to-task`, `verify`, `encode-mistake`,
 `arch-guard`, `entropy-sweep`, `harness-review`, `harness-dashboard`, `gstack-sync`,
-`lifecycle`. 1 read-only background agent in `agents/` (`session-observer`). 6 enforcement
-hooks (`arch-check`, `safety-check`, `bash-safety-check`, `self-verify-check`,
-`session-metrics`, `doc-drift-check`).
+`lifecycle`. 1 read-only background agent in `agents/` (`session-observer`). 7 enforcement
+hooks (`arch-check`, `safety-check`, `plan-validation-check`, `bash-safety-check`,
+`self-verify-check`, `session-metrics`, `doc-drift-check`).
 
 ## Workflow (TL;DR)
 
@@ -36,18 +36,18 @@ Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md).
 Bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md).
 Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## gstack integration — what's wired (v1.46+ floor, v1.56 current)
+## gstack integration — what's wired (v1.46+ floor, v1.58.4.0 current)
 
-- **Legacy sunset FIRED (v3.6.0)**: `min_supported` rose to 1.46 > the v1.27 rename floor,
-  so `gstack-brain*` legacy paths are dropped; we probe `gstack-artifacts*` only.
+- **Legacy sunset (v3.6.0)**: the v1.27 *worktree* rename is past floor → probe
+  `gstack-artifacts-worktree`. gbrain memory still detected via CLI/`gbrain doctor`/brain-remote
+  (a remote DISTINCT from artifacts — never infer "gbrain gone" from artifacts-only).
 - **`/spec` (gstack v1.47) → `/spec-to-task`**: clean intent→spec→layer-aware-plan handoff.
-- **`/encode-mistake --from-gbrain {learning|eureka|retro|all}`** — observation →
-  TASTE rule, always human-gated.
-- **Decision-signal Gate API** ([docs/SIGNALS.md](docs/SIGNALS.md)): `/verify` +
-  `/harness-review` write versioned signals → `/lifecycle` projects next phase (or halts
-  on `NEEDS_HUMAN`, auto-recovers `composition-skipped`); gstack `/ship` gates on them too.
-- **Sensors**: `/landing-report` → grounded DORA proxy in `/harness-dashboard`; Confusion
-  Protocol → `.claude/metrics/confusion.jsonl` (legibility input).
+- **`/encode-mistake --from-gbrain {learning|eureka|retro|all}`** — observation → TASTE rule, human-gated.
+- **Decision-signal Gate API** ([docs/SIGNALS.md](docs/SIGNALS.md)): `/verify` + `/harness-review`
+  write versioned signals → `/lifecycle` routes (auto-recovers `composition-skipped`); gstack `/ship`
+  gates too. `/harness-review` **reconciles** gstack's v1.57.5+ verdict layer read-only —
+  agree→pass, diverge→`NEEDS_HUMAN:judgment-slop`; never aggregates, never writes gstack.
+- **Sensors**: `/landing-report` → DORA proxy in `/harness-dashboard`; Confusion Protocol → legibility.
 - **Worktree-aware** — `.gstack-worktrees/` + `~/conductor/workspaces/` honored; never cross-fire.
 
 ## Anti-bloat (hard rules)
@@ -63,4 +63,4 @@ Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCH
    **SIGNAL** (ours) or a **DEPLOYED ARTIFACT** (gstack's). Shipped: `.claude/workflows/harness-audit.js`.
 
 Full constraints + rationale: [Anti-Bloat Constraints](docs/INTEGRATION.md#anti-bloat-constraints).
-Latest decision record: [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md).
+Latest decision record: [docs/TEAM-DISCUSSION-2026-06-25.md](docs/TEAM-DISCUSSION-2026-06-25.md) (v3.8.0 harness-fusion).

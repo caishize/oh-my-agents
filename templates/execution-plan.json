@@ -78,10 +78,50 @@
             "type": "string",
             "description": "Acceptance criteria or verification command"
           },
+          "context_files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Files the Generator should READ for context before implementing (distinct from `files`, which it creates/modifies). Lets a context-reset Generator self-brief without re-deriving the plan."
+          },
+          "failing_tests": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Tests that must FAIL before this task starts (test-first). Names the Evaluator's acceptance gate explicitly per the Planner/Generator/Evaluator topology."
+          },
           "notes": {
             "type": "string",
             "description": "Implementation notes or context for the agent"
           }
+        }
+      }
+    },
+    "planner_metadata": {
+      "type": "object",
+      "description": "Optional typed hints for native Agent Teams / Dynamic Workflows executing this plan as the Planner→Generator handoff (Anthropic 3-agent topology). All advisory — executors adapt, never obey blindly.",
+      "properties": {
+        "parallelizable_groups": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string" } },
+          "description": "Groups of task ids with no inter-dependency that MAY run in parallel (e.g. one agent() per task). Derived from `depends_on`; advisory."
+        },
+        "context_budget": {
+          "type": "object",
+          "description": "Context-allocation hints so a Generator session sizes its work before a context reset.",
+          "properties": {
+            "per_task_tokens_hint": { "type": "integer" },
+            "reset_between_tasks": { "type": "boolean" }
+          }
+        },
+        "recovery_edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "on_fail": { "type": "string", "description": "task id that, on failure, triggers re-running an earlier task" },
+              "retry": { "type": "string", "description": "task id to re-run / re-plan" }
+            }
+          },
+          "description": "Which earlier task to retry when a later task fails — supports the GAN-style Evaluator→Generator loop without losing Planner intent."
         }
       }
     },

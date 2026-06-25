@@ -1,11 +1,12 @@
-# oh-my-agents `v3.7.1`
+# oh-my-agents `v3.8.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
 work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.56 current) for
+[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.58.4.0 current) for
 full-lifecycle coverage (slop-deep, security-deep, and UX audits delegated to gstack;
-GBrain memory ingest + `/landing-report` consumed as read-only sensors; architecture,
+GBrain memory ingest + `/landing-report` consumed as read-only sensors; gstack's own
+v1.57.5+ verdict layer **reconciled** read-only by `/harness-review`; architecture,
 entropy, legibility, and the **decision-signal Gate API** owned by oh-my-agents).
 
 **Differentiation anchor**: with Managed Agents, the OpenAI Agents SDK, native **Agent
@@ -16,7 +17,7 @@ plugin doubles down on what is *irreplaceable* — repo-local mechanical constra
 delivery; gstack does that. `/lifecycle` NAMES the next skill, never invokes it. (Progressive
 disclosure is an implementation practice gstack now ships too — kept, but not the moat.)
 
-> **11 skills · 1 agent · 6 hooks · 1 audit workflow** — minimal context-window footprint; a Gate API, not an orchestrator.
+> **11 skills · 1 agent · 7 hooks · 1 audit workflow** — minimal context-window footprint; a Gate API, not an orchestrator.
 
 ## The Four Pillars
 
@@ -175,12 +176,15 @@ composition rationale),
 OpenAI-component mapping), and
 [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md)
 (gstack v1.56 reground + native Dynamic Workflows stance + signals → versioned
-**Gate API** [docs/SIGNALS.md](docs/SIGNALS.md) + legacy sunset + doc-gardening retirement).
+**Gate API** [docs/SIGNALS.md](docs/SIGNALS.md) + legacy sunset + doc-gardening retirement),
+and [docs/TEAM-DISCUSSION-2026-06-25.md](docs/TEAM-DISCUSSION-2026-06-25.md)
+(v3.8.0 harness-fusion: gstack v1.58.4.0 verdict-layer reconciliation + planner_metadata +
+plan-validation GUIDE hook + slop-taxonomy consolidation).
 
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.7.1)
+.claude-plugin/plugin.json         # Plugin manifest (v3.8.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md
