@@ -242,6 +242,19 @@ signal even though it doesn't affect the numeric score.
 
 ## Output
 
+### Metric write (mandatory final step — accountable-writer, /verify pattern)
+
+The scorer that derived the score writes it (read-only stays true for all project code
+and gstack paths; own-namespace metrics are the accountable-writer exception `/verify`
+established). Write `.claude/metrics/legibility-latest.json` (≤500 bytes: total score,
+per-pillar subtotals, timestamp, commit) AND append the same record as one line to
+`.claude/metrics/legibility.jsonl` (trend history — `/harness-dashboard` reads both):
+
+```bash
+mkdir -p .claude/metrics
+python3 -c "import json,subprocess,datetime; s={'score':TOTAL,'pillars':{'arch':A,'docs':D,'observ':O},'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}; open('.claude/metrics/legibility-latest.json','w').write(json.dumps(s)); open('.claude/metrics/legibility.jsonl','a').write(json.dumps(s)+'\n')"
+```
+
 Present the score card, then list the **top 3 improvements** ranked by impact.
 For each improvement, provide specific, actionable steps.
 

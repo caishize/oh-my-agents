@@ -35,6 +35,18 @@ Run one per context — don't stack all three on the same diff.
 
 Review the current changes (staged/unstaged diff, or PR via $ARGUMENTS).
 
+### Blind evaluation protocol (Anthropic evaluator-blindness pattern; MANDATORY)
+
+Findings and the Decision derive ONLY from: the artifact (diff + files on disk), the
+plan's acceptance criteria, the fixed rubric (docs/LINTING.md slop taxonomy), the decision
+signals, and gstack's read-only artifacts — **NEVER** the generating session's transcript,
+scratch notes, or self-assessment. Where feasible, run behavior (tests, the plan's
+`acceptance` commands) rather than trusting narration. If this review runs in the SAME
+session that generated the change, STATE SO in the output and delegate the judging step to
+a fresh-context read-only subagent (inline Task with `disallowedTools: Write, Edit` — a
+native primitive, no new agent file). `/harness-audit` already complies by construction
+(fresh fan-out Explore agents).
+
 ### Review 1: Say No to Slop
 
 The most important check. Agent-generated code often produces "slop" — technically
@@ -156,13 +168,17 @@ Does this change strengthen or weaken the harness?
 Unless `--no-gstack` is passed, probe gstack and compose its complementary reviews:
 
 ```bash
-GSTACK_PATH=""
-for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
-  [ -d "$p" ] && GSTACK_PATH="$p" && break
-done
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
 echo "GSTACK: ${GSTACK_PATH:-not_found}"
 UI_TOUCHED=$(git diff --name-only 2>/dev/null | grep -Eic '\.(tsx|jsx|vue|svelte|css|html)$' || true)
 ```
+
+**Codex-default recalibration (v1.61+, probe-gated)**: gstack v1.61 reportedly made
+cross-model review default-on (`codex_reviews`) — a changelog-summarized, UNVERIFIED
+claim. Probe locally: installed `VERSION >= 1.61.0.0` AND (a `codex_reviews` config
+switch OR observed `*-codex-*.md` artifacts). ONLY when the probe confirms, treat a
+skipped codex composition as the flagged anomaly (`composition-skipped`); otherwise keep
+the current opt-in framing.
 
 **Composition matrix (do not duplicate gstack's work):**
 
@@ -183,12 +199,26 @@ gstack's output and reference its report path.
 verdict so Review 8 can reconcile (full rule in docs/SIGNALS.md). Read-only glob; absent ⇒ skip.
 
 ```bash
-SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo unknown)
-GD="$HOME/.gstack/projects/$SLUG"
-GSTACK_REVIEW_STATUS=$(ls -t "$GD"/*-reviews.jsonl 2>/dev/null | head -1 | xargs -I{} tail -1 {} 2>/dev/null \
-  | python3 -c "import sys,json; print(json.loads(sys.stdin.read() or '{}').get('status',''))" 2>/dev/null || echo "")
-GSTACK_UNRESOLVED=$(python3 -c "import json; print(len(json.load(open('$GD/decisions.active.json')).get('unresolved',[])))" 2>/dev/null || echo "")
-echo "gstack-verdict: status=${GSTACK_REVIEW_STATUS:-none} unresolved=${GSTACK_UNRESOLVED:-na}"
+GD="$GSTACK_PROJECTS"   # from gstack_detect above
+# Review verdict: accept BOTH the tail-1 JSONL `.status` form AND gstack's prose
+# verdict-line form; a parse failure reports LOUD ('verdict-unparsed'), never silent.
+LAST_REVIEW=$(ls -t "$GD"/*-reviews.jsonl 2>/dev/null | head -1 | xargs -I{} tail -1 {} 2>/dev/null || echo "")
+GSTACK_REVIEW_STATUS=$(printf '%s' "$LAST_REVIEW" | python3 -c "
+import sys, json, re
+raw = sys.stdin.read().strip()
+if not raw: print(''); raise SystemExit
+try:
+    print(json.loads(raw).get('status', 'verdict-unparsed'))
+except Exception:
+    m = re.search(r'\b(clean|issues_found)\b', raw)   # prose verdict-line form
+    print(m.group(1) if m else 'verdict-unparsed')
+" 2>/dev/null || echo "verdict-unparsed")
+# Unresolved decisions: decisions.active.json is dual-read (upstream absence UNVERIFIED).
+# When absent/unreadable, the degrade is LOUD — never a silent 'na', and NEVER an
+# event-replay computation from decisions.jsonl (schema unconfirmed; shadow-logic ban).
+GSTACK_UNRESOLVED=$(python3 -c "import json; print(len(json.load(open('$GD/decisions.active.json')).get('unresolved',[])))" 2>/dev/null \
+  || echo "unresolved-count-unavailable (decisions.active.json absent; decisions.jsonl schema unconfirmed)")
+echo "gstack-verdict: status=${GSTACK_REVIEW_STATUS:-none} unresolved=${GSTACK_UNRESOLVED}"
 ```
 
 If a value is found, set `gstack_context` (Review 8) to e.g.
@@ -231,21 +261,11 @@ Every `/harness-review` invocation MUST end with exactly one decision and write
 | `arch-ambiguity` | architectural call needs a human | hard halt |
 | `judgment-slop` | judgment-dependent slop / taste call | hard halt |
 
-**Signal file schema** — write at end of skill, even on early exit (full reference in docs/SIGNALS.md):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `schema_version` | integer | Contract version — write `1` |
-| `timestamp` | string (ISO-8601 UTC) | When the review concluded |
-| `decision` | enum | `APPROVE` \| `REQUEST_CHANGES` \| `NEEDS_HUMAN` |
-| `needs_human_kind` | enum \| null | `composition-skipped` \| `arch-ambiguity` \| `judgment-slop` (only when NEEDS_HUMAN) |
-| `merge_recommendation` | enum | `TRIVIAL` \| `STANDARD` \| `COMPLEX` |
-| `p0_count` / `p1_count` / `p2_count` | integer | Issue counts by severity |
-| `tags_present` | string[] | Subset of `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]` |
-| `gstack_composed` | boolean | True if any gstack skill was composed |
-| `gstack_context` | object \| null | gstack v1.57.5+ verdict from Review 7, read-only (`null` if absent) |
-| `plan_id` | string \| null | Active exec-plan id, if any |
-| `reason` | string (≤120 chars) | One-line rationale for the decision |
+**Signal file** — write at end of skill, even on early exit. The full schema lives in
+**docs/SIGNALS.md — do not restate it**. Review-specific notes: `needs_human_kind` is set
+HERE, never inferred downstream; `gstack_context` comes from Review 7 (read-only, `null`
+when absent); `commit` = `git rev-parse HEAD` at derivation time (freshness predicate);
+`tags_present` is the subset of composition tags actually used this run.
 
 **gstack verdict reconciliation (when `gstack_context.present`)** — the decision stays
 derived from OUR four pillars; gstack's verdict is advisory (full rule: docs/SIGNALS.md):
@@ -256,8 +276,9 @@ derived from OUR four pillars; gstack's verdict is advisory (full rule: docs/SIG
 
 ```bash
 mkdir -p .claude/signals
-# Compute fields above, then write JSON. Use python3 / jq / printf to ensure valid
-# escaping; do NOT use unquoted heredocs with literal placeholders.
+COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
+# Compute fields above, then write JSON (include "commit": "$COMMIT"). Use python3 / jq /
+# printf to ensure valid escaping; do NOT use unquoted heredocs with literal placeholders.
 ```
 
 The verbose markdown report stays in `reviews.jsonl` and the agent's stdout. Per
@@ -271,8 +292,6 @@ stdout drives the human or next agent turn.
 ## Harness Review
 
 ### Decision: [APPROVE | REQUEST_CHANGES | NEEDS_HUMAN]    ← also written to .claude/signals/review-latest.json
-
-### Verdict (legacy): [APPROVE / SLOP — REQUEST CHANGES / SAFETY — REQUEST CHANGES / REQUEST CHANGES / DISCUSS]
 
 ### Merge Recommendation: [TRIVIAL / STANDARD / COMPLEX]
 

@@ -12,10 +12,14 @@ stages, run each stage as its own workflow." That makes a **machine-readable sta
 boundary** mandatory infrastructure, and these signals are already exactly that shape.
 So they are promoted to a versioned **Gate API** consumed by:
 
-- **gstack `/ship`** pre-flight (reads `verify-latest.json` before allowing a ship)
+- **the pre-`/ship` convention** — the accountable human checks both signals before
+  invoking gstack `/ship` (see "Pre-ship check" below; whether gstack itself reads them
+  is `VERIFIED | ASSERTED` per the contract-check probe — never assumed)
 - **`/lifecycle`** (routes / projects the next phase on the decision)
 - **Dynamic Workflow** stages (a stage ends by writing a signal; the next stage gates on it)
 - **native Agent Teams** (the team-lead reads the signal as the Evaluator verdict)
+- **the Stop-time gate-state nudge** (`doc-drift-check.sh` — names the next gate skill
+  off a FRESH signal only)
 
 > **The bright line (council canon, 2026-06-06):** a stage's terminal artifact is a
 > **SIGNAL** (ours) or a **DEPLOYED ARTIFACT** (gstack's). We own signals; we never
@@ -40,6 +44,34 @@ So they are promoted to a versioned **Gate API** consumed by:
    not itself compute must NOT write it — the safety classifier correctly treats that as a
    fabricated result (proven by the 2026-06-07 `/harness-audit` spike). Hence a Dynamic
    Workflow *returns* a signal-shaped object; the accountable invoker persists it here.
+   Corollary, stated once: a skill or workflow that dies before its write leaves NO signal
+   ⇒ default-deny (contract rule above) ⇒ any automated chain halts safely. Mid-run death never needs
+   special handling downstream.
+
+### Freshness predicate (v3.9.0)
+
+Both signals carry an optional `commit` field: the `git rev-parse HEAD` sha at the moment
+the verdict was derived. The predicate:
+
+- Any **AUTOMATED** consumer (hook, workflow stage, Agent Team lead, `/lifecycle` routing)
+  MUST treat a signal whose `commit` differs from the current `HEAD` (or whose `branch`
+  differs from the current branch) as **default-deny** — route as if the signal were
+  absent, and name the mismatch.
+- A **HUMAN** consumer sees a WARN and decides; humans may knowingly act on a stale signal.
+- A signal without `commit` (pre-v3.9.0 producer) is treated by automated consumers as
+  stale-unknown: WARN + re-run recommendation, never silent advance.
+
+This is what makes push-style stage nudges (plan-complete → `/verify`; Stop-time
+gate-state → `/harness-review` / gstack `/ship`) safe: a nudge is only ever emitted off a
+FRESH signal.
+
+### No-averaging fence (deliberate; do not "improve")
+
+`/verify`'s any-`FAIL` ⇒ `RED` mapping and the acceptance-cap rule (any done task whose
+`acceptance` command fails or cannot be confirmed caps the decision at `YELLOW`) are
+**hard per-criterion thresholds — fail-any, no averaging** (Anthropic harness-design
+rubric pattern: failing ANY criterion fails the sprint). Never replace either with a
+weighted or averaged score.
 
 ## `verify-latest.json` — produced by `/verify`
 
@@ -55,10 +87,14 @@ Path: `.claude/signals/verify-latest.json` · History: `.claude/metrics/verify.j
 | `first_pass` | boolean | GREEN on the first verify for this plan/branch |
 | `plan_id` | string \| null | Active exec-plan id, if `--plan` given |
 | `branch` | string | Current git branch |
+| `commit` | string (optional) | `git rev-parse HEAD` at derivation time (freshness predicate) |
 | `reason` | string (≤120 chars) | One-line rationale, e.g. `3 tests failed` |
 
 Decision mapping: every in-scope check `PASS` (WARN allowed) ⇒ `GREEN`; no `FAIL` but a
-`WARN` ⇒ `YELLOW`; any `FAIL` ⇒ `RED`.
+`WARN` ⇒ `YELLOW`; any `FAIL` ⇒ `RED`. Additionally (sprint-contract rule, v3.9.0): any
+`done` task whose `acceptance` command fails or cannot be confirmed caps the decision at
+`YELLOW` with reason `acceptance unconfirmed: <task-id>` — so `YELLOW` can mean
+**contract-unmet**, not just lint warnings (fail-any; see the no-averaging fence).
 
 ## `review-latest.json` — produced by `/harness-review`
 
@@ -74,6 +110,7 @@ Path: `.claude/signals/review-latest.json` · History: `.claude/metrics/reviews.
 | `p0_count` / `p1_count` / `p2_count` | integer | Issue counts by severity |
 | `tags_present` | string[] | Subset of `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]` |
 | `gstack_composed` | boolean | True if any gstack skill was composed |
+| `commit` | string (optional) | `git rev-parse HEAD` at derivation time (freshness predicate) |
 | `gstack_context` | object \| null | gstack v1.57.5+ verdict, read read-only for reconciliation (below). `null`/absent when the gstack decision layer is not present |
 | `plan_id` | string \| null | Active exec-plan id, if any |
 | `reason` | string (≤120 chars) | One-line rationale |
@@ -120,29 +157,52 @@ arbiter** without violating the SIGNAL-not-ARTIFACT bright line:
 `gstack_context` is an **optional** field ⇒ `schema_version` stays `1` (consumers that
 don't read it are unaffected; the versioning policy below covers this).
 
-## Related: `lifecycle-next.json` — advisory routing metadata (NOT a gate)
+## Related: the `NEXT:` tail line — router OUTPUT, not a signal
 
-`/lifecycle next --emit-next` (or `--auto`) may write `.claude/signals/lifecycle-next.json`:
-the next phase + skill + `config_hints` (args/prerequisites/gates) so a Dynamic Workflow or
-Agent Team can auto-load the next step without re-parsing prose. It is **not** one of the two
-decision signals above and the contract rules do NOT apply the same way:
+`/lifecycle next` (and `--auto`) always ends its output with one machine-parseable line —
+`NEXT: {"phase":…,"skill":…,"args":[…],"gates":[…],"advisory":true}` — parsed by whoever
+invoked the router (the shape Dynamic Workflows' structured-output capture consumes).
+It is invocation OUTPUT with zero persistence, not one of the two decision signals; it
+never gates anything, and emitting it is naming, never invoking (rule no-orchestration).
+Its predecessor — the cached `.claude/signals/lifecycle-next.json` file (`--emit-next`) —
+was retired in v3.9.0 after a full cycle with zero consumers: native executors read
+invocation output, not files that can be read stale.
 
-- It carries `advisory: true`. Emitting it is **naming, not invoking** — `/lifecycle` never
-  runs the named skill (anti-bloat rule 5).
-- **Absence is NOT default-deny** — it is a convenience cache; a consumer that doesn't find it
-  simply runs `/lifecycle next` itself. Never block on its absence.
-- It never gates `/ship`; the two decision signals (`verify-latest`, `review-latest`) remain
-  the only gates. `lifecycle-next.json` only *points at* which gate to read next.
+## Pre-ship check — our-side convention (not a verified gstack contract)
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `schema_version` | integer | `1` |
-| `timestamp` | string (ISO-8601 UTC) | When the route was projected |
-| `phase` / `skill` | string | Next phase and the exact skill to run |
-| `reason` | string | Why this is next (e.g. `verify GREEN, no review yet`) |
-| `config_hints` | object | `{ args[], prerequisites[], gates[] }` for the consumer to self-serve |
-| `abort_on` | string[] | Decisions at which the consumer should stop (e.g. `RED`, `NEEDS_HUMAN`) |
-| `advisory` | boolean | Always `true` — a hint, never a command |
+No evidence confirms gstack `/ship` reads these signals (see INTEGRATION.md — the
+contract-check probe reports `VERIFIED | ASSERTED`). The gate is therefore OUR side's
+convention: the accountable human (or their project harness config) runs this before
+invoking `/ship`:
+
+```bash
+jq -e --arg head "$(git rev-parse HEAD)" \
+  'select(.decision=="GREEN" and (.commit // $head)==$head)' .claude/signals/verify-latest.json >/dev/null \
+&& jq -e --arg head "$(git rev-parse HEAD)" \
+  'select(.decision=="APPROVE" and (.commit // $head)==$head)' .claude/signals/review-latest.json >/dev/null \
+&& echo "SHIP GATE: pass" || echo "SHIP GATE: blocked (stale/missing/blocking signal)"
+```
+
+## Persisting a `/harness-audit` result — the ONLY sanctioned recipe
+
+The workflow RETURNS a `review-latest.json`-shaped object (accountable-writer, contract rule above);
+no relay agent may write it. The accountable invoking human reviews the returned object,
+then persists it with ONE command that stamps `timestamp` + `commit` (without the commit
+stamp the persisted signal is stale-by-definition under the freshness predicate) and tags
+provenance:
+
+```bash
+python3 -c '
+import json, subprocess, sys, datetime
+sig = json.load(open(sys.argv[1]))          # the returned object, saved to a file
+sig.pop("_persistence", None)
+sig["timestamp"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+sig["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+sig["reason"] = ("source:harness-audit " + sig.get("reason", ""))[:120]
+open(".claude/signals/review-latest.json", "w").write(json.dumps(sig))
+open(".claude/metrics/reviews.jsonl", "a").write(json.dumps(sig) + "\n")
+' /path/to/returned-signal.json
+```
 
 ## Versioning policy
 

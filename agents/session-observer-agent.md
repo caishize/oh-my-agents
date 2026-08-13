@@ -74,7 +74,8 @@ signals (read-only):
 - `.claude/signals/review-latest.json` — last `decision`, `needs_human_kind`, and (v3.8+)
   `gstack_context`: **flag any gstack↔harness divergence** (`NEEDS_HUMAN:judgment-slop`) the
   next session must reconcile before shipping
-- `.claude/signals/lifecycle-next.json` (if present) — the projected next phase/skill
+- Note signal freshness: if a signal's `commit` differs from current `HEAD`, record it as
+  STALE (the next session must re-run the producer, not trust the verdict)
 
 ### 6. Open Questions and Blockers
 
@@ -114,9 +115,8 @@ previous session summary — do not append indefinitely.
 - doc-drift: 1 warning — CLAUDE.md test command outdated
 
 ### Gate State (carry the verdict across the reset)
-- verify: GREEN (first_pass) | review: APPROVE
+- verify: GREEN (first_pass, fresh) | review: APPROVE (fresh)
 - gstack reconciliation: aligned (or: DIVERGED — gstack issues_found vs harness APPROVE → judgment-slop, needs human)
-- next (lifecycle-next.json): /harness-review --plan plan-auth-refactor
 
 ### For Next Session
 - [ ] Integration tests for auth service still pending
@@ -150,6 +150,13 @@ Signals of drift:
 
 When drift is detected, flag it in the "For Next Session" section. Do not judge
 whether drift is good or bad — just make it visible so the next session can decide.
+
+## Consume-or-cut (BINDING, set by the 2026-08-13 council)
+
+By the 2026-Q4 council this agent must have acquired **≥1 mechanical trigger and ≥1
+machine reader of its memory**, or it is retired — no third grace period. (Its
+context-reset rationale is weakening: Anthropic deleted their own context-reset machinery
+when the platform obsoleted it.)
 
 ## Rules
 

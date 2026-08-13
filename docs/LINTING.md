@@ -17,6 +17,12 @@ Custom lint rules and their rationale. Fill in when running `/encode-mistake --p
 3. Add an entry to this table with a TASTE-NNN ID
 4. Include test coverage (both positive and negative cases)
 
+**Provenance**: `.claude/metrics/investigations.jsonl` is the encode PROVENANCE LEDGER —
+every TASTE rule is traceable to the failure that motivated it (Osmani ratchet). It is
+written only by `/encode-mistake`; candidate discovery lives in `/lifecycle improve`
+(gbrain learnings + gstack decisions.jsonl, read-only globs). This Rule Index is the
+honest "TASTE rules encoded" count `/harness-dashboard` reports.
+
 ## Rule Template
 
 ```markdown

@@ -1,18 +1,18 @@
 {
-  "version": "1.5",
+  "version": "1.6",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.8.1",
+    "version": "3.9.0",
     "root": "."
   },
   "gstack": {
     "detected": true,
     "path": "/root/.claude/skills/gstack",
-    "version": "1.58.4.0",
+    "version": "1.62.0.0",
     "version_match": "loose",
     "min_supported": "1.46.0.0",
-    "last_verified": "2026-06-25",
-    "milestone_pin": "eval-first floor + on-demand content loading (v1.46), /spec intent→spec 5-phase (v1.47), shared redaction engine (v1.53), event-sourced DECISION/VERDICT layer (v1.57.5 decisions.jsonl + decisions.active.json; v1.57.7 mandatory unresolved-decisions verdict line that blocks the approval gate; gstack-review-log machine verdict). Memory Ingest (v1.26) and gstack-brain→gstack-artifacts rename (v1.27) are now BELOW the floor — legacy gstack-brain* dual-value bridges sunset in v3.6.0. NOTE: gstack ships NO .claude-plugin/plugin.json — detect by skill dirs, never a manifest."
+    "last_verified": "2026-08-13",
+    "milestone_pin": "eval-first floor + on-demand content loading (v1.46), /spec intent→spec 5-phase (v1.47), shared redaction engine (v1.53), carved skills skeleton+sections/ (v1.56/1.57), event-sourced DECISION/VERDICT layer (v1.57.5 decisions.jsonl + decisions.active.json; v1.57.7 mandatory unresolved-decisions verdict line that blocks the approval gate; gstack-review-log machine verdict), gen-skill-docs writes into project .claude/gstack-rendered/ (v1.57.9 — gstack-owned enclave in OUR namespace), codex_reviews default-on (v1.61 — changelog-summarized, gate recalibration on local probe), host-anchored plan signals (v1.62 — UNVERIFIED watch item). Memory Ingest (v1.26) and gstack-brain→gstack-artifacts rename (v1.27) are BELOW the floor — legacy gstack-brain* dual-value bridges sunset in v3.6.0. NOTE: gstack ships NO .claude-plugin/plugin.json — detect by skill dirs, never a manifest. GitHub Releases page is EMPTY — drift channel is raw VERSION/CHANGELOG fetch only."
   },
   "project": {
     "slug": "oh-my-agents"
@@ -43,7 +43,9 @@
     "gbrain_repo_policy":       "~/.gstack/gbrain-repo-policy.json",
     "gbrain_cli_probe":         "command -v gbrain",
     "gbrain_mcp_probe":         "gbrain doctor",
-    "gstack_llms_txt":          "<gstack_root>/llms.txt",
+    "gstack_llms_txt":          "<gstack_root>/**/llms.txt",
+    "gstack_rendered_enclave":  ".claude/gstack-rendered/",
+    "_enclave_note": "gstack v1.57.9 gen-skill-docs writes rendered skill docs into the project's .claude/gstack-rendered/ — a gstack-OWNED enclave inside our namespace. We never write/flag it: gitignored (harness-init), excluded from entropy-sweep scans and doc-drift-check.",
     "gstack_memory_ingest_bin": "<gstack_root>/bin/gstack-memory-ingest",
     "gstack_artifacts_remote":  "~/.gstack-artifacts-remote.txt",
     "gstack_brain_remote":      "~/.gstack-brain-remote.txt",
@@ -56,9 +58,12 @@
     "verify_signal":            ".claude/signals/verify-latest.json",
     "review_metrics":           ".claude/metrics/reviews.jsonl",
     "review_signal":            ".claude/signals/review-latest.json",
-    "lifecycle_next_signal":    ".claude/signals/lifecycle-next.json",
+    "legibility_metrics":       ".claude/metrics/legibility.jsonl",
+    "legibility_latest":        ".claude/metrics/legibility-latest.json",
+    "entropy_metrics":          ".claude/metrics/entropy.jsonl",
+    "entropy_latest":           ".claude/metrics/entropy-latest.json",
     "session_metrics":          ".claude/metrics/session-*.jsonl",
-    "confusion_metrics":        ".claude/metrics/confusion.jsonl",
+    "confusion_metrics":        ".claude/metrics/confusion.jsonl [RESERVED/INACTIVE — no producer observed; upstream Confusion Protocol status probed at contract check; hard-delete at next quarterly check if probe confirms sunset]",
     "gstack_skill_usage":       "~/.gstack/analytics/skill-usage.jsonl",
     "gstack_eureka":            "~/.gstack/analytics/eureka.jsonl"
   },
@@ -99,10 +104,11 @@
     "contract_lightweight_each_status": true,
     "review_contract_quarter": "2026-Q3",
     "legacy_sunset": "FIRED@1.46.0.0",
-    "_legacy_sunset_note": "gstack-brain* legacy paths were DROPPED in v3.6.0 (2026-06-06) once min_supported rose to 1.46 > the v1.27 rename floor — executing the plugin's own rule 16 instead of globbing two paths forever (unbounded entropy, against our own anti-entropy mission). graceful_degradation still protects any genuine pre-v1.27 caller (absence = no-op). A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets on the same rule.",
-    "capability_oracle": "<gstack_root>/llms.txt",
+    "_legacy_sunset_note": "gstack-brain* legacy paths were DROPPED in v3.6.0 (2026-06-06) once min_supported rose to 1.46 > the v1.27 rename floor — executing the plugin's own rule legacy-sunset instead of globbing two paths forever (unbounded entropy, against our own anti-entropy mission). graceful_degradation still protects any genuine pre-v1.27 caller (absence = no-op). A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets on the same rule.",
+    "capability_oracle": ["<gstack_path>/VERSION (local file, first)", "<gstack_root>/**/llms.txt (glob — carved/rendered layouts)", "generated skill index (local)", "raw-fetch VERSION+CHANGELOG from GitHub (network, LAST — quarterly check must not acquire a hard network dependency; Releases page is empty, VERSION/CHANGELOG is the only drift channel)"],
+    "ship_gate_status": "ASSERTED — our-side convention (docs/SIGNALS.md pre-ship check); no evidence gstack reads our signals. gstack-sync --contract-check probes and reports VERIFIED | ASSERTED; a grep miss is never 'gstack ignores signals'.",
     "gate_api_doc": "docs/SIGNALS.md",
-    "workflows_policy": "anti-bloat rule 17: workflows <=1, read-only (Explore agents), audit-only, RETURNS a decision signal (accountable invoker persists it — never a relay write); never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. ONE shipped (v3.7.0): .claude/workflows/harness-audit.js — A/B spike cleared the evidence gate (3x recall vs sequential, zero overlap; ~17% false positives filtered by adversarial verify).",
+    "workflows_policy": "anti-bloat rule single-workflow: workflows <=1, read-only (Explore agents), audit-only, RETURNS a decision signal (accountable invoker persists it — never a relay write); never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. ONE shipped (v3.7.0): .claude/workflows/harness-audit.js — A/B spike cleared the evidence gate (3x recall vs sequential, zero overlap; ~17% false positives filtered by adversarial verify).",
     "principles_anchor": "docs/TEAM-DISCUSSION-2026-06-06.md"
   }
 }

@@ -1,9 +1,9 @@
-# oh-my-agents `v3.8.1`
+# oh-my-agents `v3.9.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
 work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.58.4.0 current) for
+[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.62.0.0 current) for
 full-lifecycle coverage (slop-deep, security-deep, and UX audits delegated to gstack;
 GBrain memory ingest + `/landing-report` consumed as read-only sensors; gstack's own
 v1.57.5+ verdict layer **reconciled** read-only by `/harness-review`; architecture,
@@ -75,14 +75,12 @@ agent was a redundant third layer.)
 
 ## Hooks
 
-| Hook | Event | Behavior |
-|------|-------|----------|
-| `arch-check.sh` | PreToolUse (Edit/Write) | Blocks layer violations, Providers bypass |
-| `safety-check.sh` | PreToolUse (Edit/Write) | Blocks hardcoded secrets and risk patterns |
-| `bash-safety-check.sh` | PreToolUse (Bash) | Blocks credential leaks in bash commands |
-| `self-verify-check.sh` | PostToolUse (Edit/Write) | Warns on type/syntax errors after edit |
-| `session-metrics.sh` | PostToolUse (Edit/Write/Bash) | Records tool usage and hook performance |
-| `doc-drift-check.sh` | Stop | Warns about documentation drift |
+**Canonical list: [`hooks/hooks.json`](hooks/hooks.json)** (7 hooks). One line each:
+`arch-check` (blocks layer violations) · `safety-check` (blocks secrets) ·
+`plan-validation-check` (exec-plan GUIDE + plan-completion nudge) · `bash-safety-check`
+(blocks credential leaks) · `self-verify-check` (post-edit syntax warn; deprecation
+candidate vs native diagnostics) · `session-metrics` (JSONL activity log) ·
+`doc-drift-check` (Stop-time doc drift + gate-state nudge).
 
 ## Dynamic Workflows
 
@@ -90,7 +88,7 @@ agent was a redundant third layer.)
 |----------|---------|
 | `/harness-audit` | Read-only four-pillar **governance audit** — fan-out `Explore` agents (cannot write) + adversarial verification; **returns** a `review-latest.json`-shaped decision (the accountable invoker persists it — never a relay write). Use for release/quarterly audits (the A/B spike found 3× the recall of a single pass, zero overlap); use `/harness-review` for PR validation. Requires native Dynamic Workflows (Claude Code v2.1.154+); degrades to `/harness-review` when absent. |
 
-Governed by anti-bloat **rule 17** (≤1 workflow, read-only, audit-only, returns — never writes — the signal; SIGNAL-not-ARTIFACT bright line). See [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md) (§ spike addendum) for the evidence.
+Governed by anti-bloat rule **`single-workflow`** (≤1 workflow, read-only, audit-only, returns — never writes — the signal; SIGNAL-not-ARTIFACT bright line). See [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md) (§ spike addendum) for the evidence.
 
 ## Workflow
 
@@ -138,10 +136,13 @@ oh-my-agents and gstack are complementary:
 Key handoffs (composition-based, read-only, glob-based; **single-path since the v3.6.0
 legacy sunset** — dual-value only transiently across a future rename):
 - Design docs from `/office-hours` and specs from `/spec` (v1.47) → `/spec-to-task` (auto-imported)
-- **Decision-signal Gate API (v3.6, versioned)** — full contract in
-  [docs/SIGNALS.md](docs/SIGNALS.md). Both signals carry `schema_version`; consumers
-  default-deny anything missing/malformed/unknown-version. Consumed by `/lifecycle`,
-  gstack `/ship` pre-flight, **Dynamic Workflow stages**, and **Agent Teams**.
+- **Decision-signal Gate API (v3.6, versioned; v3.9 commit-freshness)** — full contract
+  in [docs/SIGNALS.md](docs/SIGNALS.md). Both signals carry `schema_version` (+ optional
+  `commit`); consumers default-deny anything missing/malformed/unknown-version/stale.
+  Consumed by `/lifecycle`, **Dynamic Workflow stages**, and **Agent Teams**. The
+  pre-`/ship` gate is an **our-side convention** (docs/SIGNALS.md pre-ship check) —
+  `gstack-sync --contract-check` probes it and reports `VERIFIED | ASSERTED`; no
+  evidence yet confirms gstack reads our signals.
 - **`/verify`** → `.claude/signals/verify-latest.json` with `GREEN | YELLOW | RED`.
 - **`/harness-review`** → `.claude/signals/review-latest.json` with `APPROVE |
   REQUEST_CHANGES | NEEDS_HUMAN`. `NEEDS_HUMAN` now carries `needs_human_kind`
@@ -159,10 +160,12 @@ legacy sunset** — dual-value only transiently across a future rename):
 - `/lifecycle` is a **router** with Gate Failure Routing — names the exact remediation
   skill on every failed gate; never re-implements a phase
 - Worktree-aware: honors both `.gstack-worktrees/` and `~/conductor/workspaces/` (v1.11+)
-- Confusion Protocol (gstack v0.18+) signals → `.claude/metrics/confusion.jsonl`
 - Lightweight contract drift check on every `/gstack-sync --status` (gstack shipped
   7 versions in 8 days during 2026-Q2; drift is the norm)
-- **`llms.txt` index (gstack v1.28+)** → preferred over hand-rolled skill enumeration
+- **Capability oracle (ordered succession, v3.9)** — local `VERSION` file → `llms.txt`
+  glob → skill index → raw CHANGELOG fetch (network last); never hand-rolled enumeration
+- `.claude/gstack-rendered/` is a **gstack-owned enclave** (v1.57.9+) — gitignored,
+  excluded from entropy scans, never flagged
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for full bridge manifest;
 [docs/TEAM-DISCUSSION-2026-04.md](docs/TEAM-DISCUSSION-2026-04.md) (original
@@ -178,13 +181,16 @@ OpenAI-component mapping), and
 (gstack v1.56 reground + native Dynamic Workflows stance + signals → versioned
 **Gate API** [docs/SIGNALS.md](docs/SIGNALS.md) + legacy sunset + doc-gardening retirement),
 and [docs/TEAM-DISCUSSION-2026-06-25.md](docs/TEAM-DISCUSSION-2026-06-25.md)
-(v3.8.0 harness-fusion: gstack v1.58.4.0 verdict-layer reconciliation + planner_metadata +
-plan-validation GUIDE hook + slop-taxonomy consolidation).
+(v3.8.0 harness-fusion: gstack v1.58.4.0 verdict-layer reconciliation + typed Planner
+handoff + plan-validation GUIDE hook + slop-taxonomy consolidation), and
+[docs/TEAM-DISCUSSION-2026-08-13.md](docs/TEAM-DISCUSSION-2026-08-13.md)
+(v3.9.0 harness-fusion v2: push nudges + commit-freshness Gate API + honest ship gate +
+dead-sensor cull + gstack v1.62 resync + evaluator blindness + sprint-contract verify).
 
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.8.1)
+.claude-plugin/plugin.json         # Plugin manifest (v3.9.0)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md
@@ -195,10 +201,10 @@ skills/                            # 11 user-invocable slash commands
 │   └── DEEP-DIVE.md              # Query format reference
 ├── <other-skills>/SKILL.md        # One dir per skill
 agents/                            # 1 read-only background agent (session-observer)
-hooks/                             # 6 event-driven shell scripts
+hooks/                             # 7 event-driven shell scripts (canonical: hooks.json)
 ├── hooks.json                     # Hook event bindings
-├── lib/common.sh                  # Shared utilities
-.claude/workflows/harness-audit.js # 1 Dynamic Workflow (rule 17: read-only governance audit)
+├── lib/common.sh                  # Shared utilities (incl. gstack_detect())
+.claude/workflows/harness-audit.js # 1 Dynamic Workflow (rule `single-workflow`: read-only governance audit)
 docs/                              # Progressive disclosure references
 templates/                         # Config templates
 tests/                             # Plugin self-tests

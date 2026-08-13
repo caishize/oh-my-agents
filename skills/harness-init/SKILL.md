@@ -34,7 +34,9 @@ Scan the repository:
 4. Entry points — do `build`, `test`, `lint`, `run`, `check` commands exist and work?
 5. gstack detection:
    ```bash
-   [ -d "$HOME/.claude/skills/gstack" ] || [ -d ".claude/skills/gstack" ] && echo "GSTACK: yes" || echo "GSTACK: no"
+   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect && echo "GSTACK: yes" || echo "GSTACK: no"
+   # If yes: ensure .gitignore covers .claude/gstack-rendered/ (gstack-owned enclave,
+   # v1.57.9+ gen-skill-docs writes rendered docs there — never track or flag it)
    ```
 
 Produce a brief assessment before proceeding.

@@ -5,6 +5,11 @@
 # Implements OpenAI's self-verification middleware pattern:
 #   "Agents must confirm their own changes work before requesting review."
 #
+# DEPRECATION CANDIDATE vs native post-edit diagnostics — evidence collected passively
+# (each warning also appends a structured event to the session metrics stream below);
+# decision at the 2026-Q4 council. If native LSP-backed coverage is confirmed, v4.0
+# deletes this hook (script + hooks.json entry + doc rows) as that release's offset budget.
+#
 # Input: JSON on stdin from Claude Code (PostToolUse)
 # Output: Warning on stdout (advisory only, never blocks)
 # Always exits 0 — violations are surfaced as warnings, not blocks.
@@ -118,6 +123,18 @@ if [ -n "$WARNINGS" ]; then
     echo "======================="
     echo -e "$WARNINGS"
     echo "Fix before proceeding. Persistent errors? -> /encode-mistake"
+
+    # Passive overlap measurement (v3.9.0): append one structured event to the existing
+    # session metrics stream so the Q4 council can diff these warnings against what
+    # native post-edit diagnostics surfaced in the same sessions. No new file, no flag.
+    METRICS_DIR="${PROJECT_DIR}/.claude/metrics"
+    if [ -d "$METRICS_DIR" ] || mkdir -p "$METRICS_DIR" 2>/dev/null; then
+        ISSUE_CLASS=$(printf '%s' "$WARNINGS" | head -1 | tr -d '"\\' | cut -c1-80)
+        printf '{"ts":"%s","hook":"self-verify-check","file":"%s","issue_class":"%s"}\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
+            "$(printf '%s' "$FILE_PATH" | tr -d '"\\')" \
+            "$ISSUE_CLASS" >> "$METRICS_DIR/session-$(date -u +%Y-%m-%d 2>/dev/null || echo unknown).jsonl" 2>/dev/null || true
+    fi
 fi
 
 exit 0

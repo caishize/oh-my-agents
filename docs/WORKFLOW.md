@@ -78,7 +78,7 @@ Key features:
 - Failing tests designed first (RED -> GREEN -> IMPROVE)
 - Each task has explicit `context` (files to read) and `constraints` (what NOT to do)
 - Plan lifecycle: active -> completing -> completed (or stalled / abandoned)
-- JSON plan includes `gstack_design_doc` and `gstack_test_plan` source references
+- JSON plan includes a `gstack_design_doc` source reference (read-only pointer)
 
 Resume across sessions: `/spec-to-task --continue <plan-id>`
 
@@ -88,12 +88,10 @@ Resume across sessions: `/spec-to-task --continue <plan-id>`
 
 Implement tasks from the execution plan. During development:
 
-**oh-my-agents hooks (automatic)**:
-- `arch-check.sh` **blocks** layer violations on every Edit/Write
-- `safety-check.sh` **blocks** hardcoded secrets
-- `bash-safety-check.sh` **blocks** credential leaks in bash
-- `session-metrics.sh` **records** tool usage to `.claude/metrics/`
-- `self-verify-check.sh` **warns** on type/syntax errors after edit
+**oh-my-agents hooks (automatic; canonical list: `hooks/hooks.json`, 7 hooks)**:
+blocking (`arch-check`, `safety-check`, `bash-safety-check`) · advisory
+(`plan-validation-check` GUIDE + completion nudge, `self-verify-check`,
+`doc-drift-check` + gate-state nudge) · recording (`session-metrics`)
 
 **gstack hooks (if guard mode active)**:
 - `check-freeze.sh` **blocks** edits outside freeze boundary
@@ -115,7 +113,7 @@ Runs in order: **lint -> build -> test -> arch guard**
 
 **Decision signal (the gate)**: `/verify` writes `.claude/signals/verify-latest.json`
 with a `decision` enum (`GREEN` / `YELLOW` / `RED`) — the canonical artifact `/lifecycle`
-and gstack's `/ship` pre-flight read. A missing/stale signal means "re-run `/verify`"
+routes on and the pre-ship convention checks (SIGNALS.md). A missing/stale signal means "re-run `/verify`"
 (mirrors the review gate's default-deny). It also appends each run to
 `.claude/metrics/verify.jsonl` (history for recurring-failure detection + dashboard velocity).
 
@@ -152,49 +150,29 @@ Without gstack, `/harness-review` runs the four-pillar harness review only.
 
 **Command**: `/ship`
 **Input**: Feature branch with all reviews passed
-**Output**: Version bump, CHANGELOG entry, PR created
+**Output**: Version bump, CHANGELOG entry, PR created (gstack's own behavior — see its docs)
 
-**oh-my-agents integration**: The `/ship` pre-flight now can access:
-- Verify results from `.claude/metrics/verify.jsonl`
-- Unified review findings from `.claude/metrics/reviews.jsonl`
-- Architecture compliance status from harness hooks
+**Ship gate — our-side CONVENTION (not a verified gstack contract)**: before invoking
+`/ship`, the human (or their project harness config) runs the pre-ship check from
+[docs/SIGNALS.md](SIGNALS.md#pre-ship-check--our-side-convention-not-a-verified-gstack-contract):
+`verify-latest.json` GREEN + `review-latest.json` APPROVE + both `commit` == HEAD.
+`gstack-sync --contract-check` probes whether gstack itself references our signals and
+reports `VERIFIED | ASSERTED` — do not assume it does.
 
-Key steps (automated):
-1. Merge base branch
-2. Run full test suite
-3. Pre-landing review (inlined) — reads harness review data if available
-4. Version bump (auto for PATCH/MICRO, asks for MINOR/MAJOR)
-5. CHANGELOG generation
-6. Bisectable commits
-7. Push + PR creation
-8. Auto-invokes `/document-release`
-
-**Next**: `/land-and-deploy` or `/document-release` (auto) + `/retro`
+**Next**: `/land-and-deploy` or `/retro`
 
 ### 8. Deploy (gstack)
 
 **Command**: `/land-and-deploy`
-**Input**: PR number + production URL
-**Output**: Deploy report with timing, CI status, canary health
-
-Pre-merge readiness gate includes:
-- Review staleness check
-- Test results (including harness verify data)
-- PR body accuracy
-- Document-release check
-
-Post-deploy verification adapts by diff scope (docs-only → skip, config → smoke, backend+ → full canary).
+**Output**: Deploy report (`.gstack/deploy-reports/`) — consumed read-only by
+`/harness-dashboard` (DORA proxy). gstack owns the gate details; see its docs.
 
 **Next**: `/canary` (for extended monitoring) or `/retro`
 
 ### 9. Document (gstack)
 
-**Command**: `/document-release` (auto-invoked by `/ship`)
-**Input**: Diff between base branch and HEAD
-**Output**: Updated README, ARCHITECTURE, CLAUDE.md, CHANGELOG, TODOS
-
-Auto-fixes factual corrections (paths, counts, tables). Asks before narrative changes.
-Cross-doc consistency pass ensures README ↔ CLAUDE.md ↔ ARCHITECTURE stay aligned.
+**Command**: `/document-release` — gstack-owned doc sync; our `doc-drift-check` hook is
+the edit-time complement.
 
 ### 10. Retro (both systems)
 
@@ -232,39 +210,8 @@ The key loop: **Bug found → root cause → fix → encode → permanent guardr
 
 ## Artifact Flow Map
 
-```
-/office-hours ──→ design doc (~/. gstack/projects/$SLUG/)
-       │                    │
-       ↓                    ↓ (auto-discovered)
-/autoplan ──→ consensus tables + test plan
-       │                    │
-       ↓                    ↓ (consumed)
-/spec-to-task ──→ exec plan (docs/exec-plans/active/)
-       │                    │
-       ↓                    ↓ (guides tasks)
-[develop] + hooks ──→ session metrics (.claude/metrics/)
-       │                    │
-       ↓                    ↓ (verified)
-/verify ──→ verify report + gstack readiness signal
-       │                    │
-       ↓                    ↓ (reviewed)
-/harness-review ──→ dual findings (reviews.jsonl + gstack review log)
-       │                    │
-       ↓                    ↓ (shipped)
-/ship ──→ VERSION + CHANGELOG + PR
-       │                    │
-       ↓                    ↓ (deployed)
-/land-and-deploy ──→ deploy report
-       │                    │
-       ↓                    ↓ (monitored)
-/canary ──→ health report
-       │
-       ↓ (retrospected)
-/retro + /harness-dashboard ──→ unified metrics
-       │
-       ↓ (improved)
-/encode-mistake + /entropy-sweep ──→ permanent guardrails
-```
+Canonical copy: [INTEGRATION.md § Artifact Flow](INTEGRATION.md#artifact-flow) — one
+diagram, not two.
 
 ## Quick Reference
 

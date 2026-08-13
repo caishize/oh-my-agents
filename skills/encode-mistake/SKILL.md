@@ -290,11 +290,13 @@ Future agents will see:
 - **Never weaken existing checks** to reduce noise — fix false positive detection, not threshold
 - **Error messages must answer WHAT, WHERE, HOW, REF** — all four, always
 - **One mistake = one TASTE rule** — don't bundle unrelated fixes into one encoding
-- **Log investigations** — when used with `/investigate`, write structured results to
+- **`investigations.jsonl` is the ENCODE PROVENANCE LEDGER** (Osmani ratchet) — when
+  used with `/investigate`, write structured results to
   `.claude/metrics/investigations.jsonl` with fields: `id`, `timestamp`, `error`,
-  `root_cause`, `files_involved`, `suggested_rule`, `encoded` (true/false). This enables
-  the investigate-to-encode artifact handoff and dashboard tracking of encode rates.
-- **Auto-scan on improve** — `/lifecycle improve` should scan `investigations.jsonl` for
-  entries where `encoded` is false and suggest encoding each one
+  `root_cause`, `files_involved`, `suggested_rule`, `encoded` (true/false). It makes
+  every TASTE rule traceable to the failure that motivated it. It is NOT a candidate
+  queue: `/lifecycle improve` sources candidates from gstack's durable observation
+  artifacts (gbrain learnings, decisions.jsonl) — scanning this ledger for candidates
+  was circular (only this skill writes it).
 - **Proactive mode is equally valid** — encoding expert taste before failures occur is
   more efficient than waiting for mistakes; use `--proactive` for preemptive encoding
