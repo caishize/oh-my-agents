@@ -181,9 +181,9 @@ assert_contains "harness-review writes schema_version" "$REVIEW_MD" "schema_vers
 assert_contains "harness-review references SIGNALS.md" "$REVIEW_MD" "SIGNALS.md"
 assert_contains "harness-review sets needs_human_kind" "$REVIEW_MD" "needs_human_kind"
 
-# --- Dynamic Workflows (anti-bloat rule 17) ---
+# --- Dynamic Workflows (anti-bloat rule single-workflow) ---
 echo ""
-echo "--- Workflows (rule 17) ---"
+echo "--- Workflows (rule single-workflow) ---"
 
 WF_DIR="${SCRIPT_DIR}/../.claude/workflows"
 WF_COUNT=$(ls "$WF_DIR"/*.js 2>/dev/null | wc -l | tr -d ' ')
@@ -209,6 +209,39 @@ if [ -f "$AUDIT_WF" ]; then
     done
     # Accountable-writer: the workflow RETURNS a signal rather than relay-writing it.
     assert_contains "rule17: harness-audit returns a signal" "$AUDIT_WF" "return \{"
+fi
+
+# --- v3.9.0: shared gstack_detect() usable from skill context (item: dedupe) ---
+echo ""
+echo "--- hooks/lib/common.sh gstack_detect() ---"
+
+COMMON_SH="${SCRIPT_DIR}/../hooks/lib/common.sh"
+TOTAL=$((TOTAL + 1))
+if OUT=$(bash -c "set -u; source '$COMMON_SH'; gstack_detect || true; echo \"SLUG=\$SLUG GSTACK=\${GSTACK_PATH:-none} PROJ=\${GSTACK_PROJECTS:-none}\"" 2>&1); then
+    if echo "$OUT" | grep -q "SLUG="; then
+        PASS=$((PASS + 1)); echo "PASS: gstack_detect() sources and sets SLUG/GSTACK_PATH/GSTACK_PROJECTS ($OUT)"
+    else
+        FAIL=$((FAIL + 1)); echo "FAIL: gstack_detect() ran but vars missing: $OUT"
+    fi
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: gstack_detect() errored: $OUT"
+fi
+
+# CLAUDE_PLUGIN_ROOT unset must not break the documented two-line snippet pattern
+TOTAL=$((TOTAL + 1))
+if bash -c "set -u; unset CLAUDE_PLUGIN_ROOT 2>/dev/null; source '$COMMON_SH'; gstack_detect || true" >/dev/null 2>&1; then
+    PASS=$((PASS + 1)); echo "PASS: gstack_detect() safe with CLAUDE_PLUGIN_ROOT unset"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: gstack_detect() breaks with CLAUDE_PLUGIN_ROOT unset"
+fi
+
+# Exactly ONE detection implementation: no skill may keep its own gstack dir-probe loop
+TOTAL=$((TOTAL + 1))
+STRAY=$(grep -rln 'for p in .*skills/gstack' "${SCRIPT_DIR}/../skills" 2>/dev/null || true)
+if [ -z "$STRAY" ]; then
+    PASS=$((PASS + 1)); echo "PASS: no stray gstack detection loops in skills/"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: stray gstack detection in: $STRAY"
 fi
 
 # =============================================

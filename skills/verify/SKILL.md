@@ -1,6 +1,6 @@
 ---
 name: verify
-description: "Post-execution verification — runs build, test, lint, and architecture checks, then writes a GREEN/YELLOW/RED decision signal (.claude/signals/verify-latest.json) that /lifecycle and gstack /ship gate on. Implements the Verify phase of Research→Plan→Execute→Verify. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
+description: "Post-execution verification — runs build, test, lint, and architecture checks, then writes a GREEN/YELLOW/RED decision signal (.claude/signals/verify-latest.json) that /lifecycle routes on and the pre-ship convention checks. Implements the Verify phase of Research→Plan→Execute→Verify. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
 user-invocable: true
 argument-hint: "[scope: all|build|test|lint|arch] [--plan <plan-id>]"
 allowed-tools: Read, Glob, Grep, Bash
@@ -35,7 +35,9 @@ Read `.claude/harness.json` for:
 - `layer_dirs` — directory-to-layer mappings
 
 If `--plan <plan-id>` is given, read `docs/exec-plans/active/<plan-id>.json` to
-load the task acceptance criteria for verification mapping.
+load the task acceptance criteria for verification mapping. If `--plan` is OMITTED,
+auto-detect: glob `docs/exec-plans/active/*.json` — exactly ONE match ⇒ use it as the
+plan; zero or >1 matches ⇒ skip plan mapping with a one-line note (graceful).
 
 ### Step 2: Run Checks
 
@@ -91,18 +93,22 @@ If no test file exists, perform a direct scan of recently modified files:
 - File size: check against `file_size_limit` from harness.json (default 300 lines)
 - Layer violations: check imports against layer model from harness.json
 
-### Step 3: Map to Plan Acceptance Criteria (if --plan provided)
+### Step 3: Enforce Plan Acceptance Criteria (sprint contract — GATING, not reporting)
 
 For each task in the plan with status `in_progress` or `done`:
-- Read the task's `acceptance` array
-- Map each criterion to the check results (passed/failed)
-- Report: which criteria are confirmed met, which are unconfirmed or failing
+- Read the task's `acceptance` (a runnable command or named test — the plan schema
+  forbids prose)
+- RUN it (or map it to a check result already produced in Step 2)
+- **Gate rule (fail-any, no averaging — see the fence in docs/SIGNALS.md):** any `done`
+  task whose acceptance criterion fails, or cannot be confirmed by running it, **caps the
+  decision at `YELLOW`** with reason `acceptance unconfirmed: <task-id>`. RED conditions
+  are unchanged; a cap never upgrades a RED.
 
 ### Step 3b: Write the Decision Signal + History Log (mandatory)
 
-Verify is a **gate**: downstream consumers (`/lifecycle`, gstack `/ship` pre-flight,
-Dynamic Workflow stages, Agent Teams) read the outcome without re-deriving it from raw
-output. After the Step 2 checks complete, compute the overall **decision** and write the
+Verify is a **gate**: downstream consumers (`/lifecycle`, the pre-`/ship` convention
+check, Dynamic Workflow stages, Agent Teams) read the outcome without re-deriving it
+from raw output. After the Step 2 checks complete, compute the overall **decision** and write the
 canonical signal.
 
 > **Contract: [docs/SIGNALS.md](../../docs/SIGNALS.md) is the source of truth** for both
@@ -112,36 +118,29 @@ canonical signal.
 
 Decision from the check results:
 
-- **GREEN** — every in-scope check PASS (WARN allowed)
-- **YELLOW** — no FAIL, but at least one WARN
+- **GREEN** — every in-scope check PASS (WARN allowed) AND no acceptance cap (Step 3)
+- **YELLOW** — no FAIL, but at least one WARN — or a `done` task's acceptance is
+  unconfirmed (contract-unmet cap; fail-any, no averaging)
 - **RED** — any in-scope check FAILED
 
 ```bash
 mkdir -p .claude/signals .claude/metrics
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
 BRANCH=$(git branch --show-current 2>/dev/null || echo unknown)
+COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
 # Compute DECISION (GREEN|YELLOW|RED), per-check LINT/BUILD/TEST/ARCH (PASS|FAIL|WARN|SKIP),
-# PLAN_ID (from --plan or null), and REASON (≤120 chars) from Step 2 results.
+# PLAN_ID (from --plan or auto-detected, else null), and REASON (≤120 chars).
 # first_pass = true when no prior RED exists for this plan/branch in verify.jsonl
 # during the current plan cycle (grep verify.jsonl before writing).
 # Build the JSON with python3 / jq / printf for correct escaping — never an
-# unquoted heredoc with literal placeholders.
+# unquoted heredoc with literal placeholders. Include "commit": "$COMMIT".
 ```
 
-**Canonical signal** — `.claude/signals/verify-latest.json` (latest only, ≤500 bytes;
-full field reference in docs/SIGNALS.md):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `schema_version` | integer | Contract version — write `1` |
-| `timestamp` | string (ISO-8601 UTC) | When verify concluded |
-| `decision` | enum | `GREEN` \| `YELLOW` \| `RED` |
-| `scope` | string | `all` \| `build` \| `test` \| `lint` \| `arch` |
-| `lint` / `build` / `test` / `arch` | enum | `PASS` \| `FAIL` \| `WARN` \| `SKIP` |
-| `first_pass` | boolean | GREEN on the first verify for this plan/branch |
-| `plan_id` | string \| null | Active exec-plan id, if `--plan` given |
-| `branch` | string | Current git branch |
-| `reason` | string (≤120 chars) | One-line rationale, e.g. `3 tests failed` |
+**Canonical signal** — `.claude/signals/verify-latest.json` (latest only, ≤500 bytes).
+The full schema lives in **docs/SIGNALS.md — do not restate it**. Verify-specific notes:
+`scope` mirrors `$ARGUMENTS`; `first_pass` is computed from `verify.jsonl` history;
+`commit` = HEAD at derivation time (freshness predicate); `reason` names the first
+blocking item (e.g. `3 tests failed`, `acceptance unconfirmed: task-3`).
 
 **History log** — append the same record (plus failing-test names) as one line to
 `.claude/metrics/verify.jsonl`. This is the history that recurring-failure detection
@@ -232,8 +231,10 @@ requires human confirmation.
 - **gstack readiness is advisory** — emit review/QA/benchmark status for `/ship` consumption
   but never block verify on gstack data; verify is oh-my-agents' domain
 - **Always write the decision signal** — `.claude/signals/verify-latest.json` (with
-  `schema_version` + `decision`) is mandatory, even on early exit. It is the Gate API per
-  docs/SIGNALS.md; consumers default-deny a missing/stale/unknown-version signal.
+  `schema_version` + `decision` + `commit`) is mandatory, even on early exit. It is the
+  Gate API per docs/SIGNALS.md; consumers default-deny a missing/stale/unknown-version
+  signal. The ship gate is an OUR-SIDE convention (docs/SIGNALS.md pre-ship check) — no
+  doc may claim gstack reads this signal as verified fact.
 - **Log results for cross-system use** — append each run to `.claude/metrics/verify.jsonl`
   so both `/harness-dashboard` (first-pass-GREEN, verify→review) and recurring-failure
   detection can reference them; the signal is latest-only, the jsonl is history

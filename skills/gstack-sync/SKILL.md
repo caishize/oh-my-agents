@@ -22,13 +22,9 @@ gstack version drift is expected (daily releases) — match versions loosely, de
 ### Step 0: Detect gstack (loose match)
 
 ```bash
-GSTACK_PATH=""
-for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
-  [ -d "$p" ] && GSTACK_PATH="$p" && break
-done
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
 [ -z "$GSTACK_PATH" ] && echo "NOT_FOUND" && exit 0
 GSTACK_VERSION=$(cat "$GSTACK_PATH/VERSION" 2>/dev/null || echo "unknown")
-SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
 GSTACK_MAJOR_MINOR=$(echo "$GSTACK_VERSION" | cut -d. -f1-2)
 echo "GSTACK_PATH: $GSTACK_PATH"
 echo "GSTACK_VERSION: $GSTACK_VERSION (major.minor: $GSTACK_MAJOR_MINOR)"
@@ -54,10 +50,9 @@ GBRAIN_WT=""
 
 # Capability probes (presence > version)
 GBRAIN_CLI=$(command -v gbrain 2>/dev/null || echo "")               # v1.26+ memory ingest CLI
-LLMS_TXT=""
-for f in "$GSTACK_PATH/llms.txt" "$HOME/.claude/skills/gstack/llms.txt"; do
-  [ -f "$f" ] && LLMS_TXT="$f" && break
-done                                                                  # v1.28+
+# llms.txt: GLOB, not exact paths — carved skills (v1.56+ skeleton+sections/) and rendered
+# layouts move it around. Also check the project-local gstack-rendered enclave.
+LLMS_TXT=$(find "$GSTACK_PATH" .claude/gstack-rendered -name 'llms.txt' 2>/dev/null | head -1)  # v1.28+
 INGEST_BIN=""
 [ -x "$GSTACK_PATH/bin/gstack-memory-ingest" ] && INGEST_BIN="$GSTACK_PATH/bin/gstack-memory-ingest"  # v1.26+
 ARTIFACTS_REMOTE=""
@@ -177,8 +172,12 @@ Output this structure (Markdown):
 - gstack skill usage : top 5 from skill-usage.jsonl
 - harness hooks fired: top 5 from session-*.jsonl
 - violations blocked : count
-- confusion signals  : count from confusion.jsonl
 - learnings unencoded: count of learnings entries with no matching TASTE-NNN
+
+### Ship gate (our-side convention — honest labeling)
+- gate_status: {VERIFIED | ASSERTED}   ← from the --contract-check probe; ASSERTED means
+  our-side convention (docs/SIGNALS.md pre-ship check), unconfirmed by gstack — a probe
+  miss is NEVER reported as "gstack ignores signals"
 
 ### Integration contract
 - Read-only bridge          : enforced (incl. GBrain — never write)
@@ -196,7 +195,8 @@ Output this structure (Markdown):
 1. Ensure `.claude/integration.json` exists (already shipped at v1.1+); if older, migrate.
 2. Update CLAUDE.md workflow section if it lacks current gstack lifecycle commands.
 3. Add to `.gitignore` if missing: `.gstack/`, `.gstack-worktrees/`, `conductor.json`,
-   `.claude/signals/`, `.claude/metrics/`.
+   `.claude/signals/`, `.claude/metrics/`, `.claude/gstack-rendered/` (gstack-owned
+   enclave, v1.57.9+ — gstack writes rendered docs there; we never track or flag it).
 4. Create `.claude/signals/` directory for verify + review decision signals
    (`verify-latest.json`, `review-latest.json`).
 5. Print summary; do not modify gstack files.
@@ -231,9 +231,8 @@ Generate `.claude/metrics/integrated-report.json`. Reference originals, do not c
   "combined": {
     "lifecycle_phase_coverage": {"ideate": N, "plan": N, ..., "improve": N},
     "dual_review_rate": 0.0,
-    "investigate_to_encode_rate": 0.0,
-    "ship_to_verify_signal_rate": 0.0,
-    "confusion_signals_7d": N
+    "taste_rules_encoded": "N (from docs/LINTING.md registry) + unencoded gbrain candidates",
+    "ship_to_verify_signal_rate": 0.0
   },
   "dora_proxy": {
     "deployment_frequency_per_week": 0.0,
@@ -252,15 +251,31 @@ Quarterly governance gate — run before/after each quarter:
 
 1. List integration contract assumptions (from this file + integration.json).
 2. For each, probe whether gstack still satisfies it (artifact presence, path stability).
-3. **Reconcile command bindings against the capability oracle.** When `$LLMS_TXT` is
-   present, it is gstack's authoritative skill/command index — diff every slash-command
-   string in `integration.json.composition` (`gstack_owns`, `*_audit`, `slop_deep_check`,
-   …) against it. Any binding whose command no longer appears in `llms.txt` is **drift**
-   (this is exactly how `/ux-audit` and `/health` went stale). Hand-maintained command
-   lists are the drift source; `llms.txt` is the truth.
-4. Surface drift: command bindings missing from `llms.txt`, paths moved, artifact format
+3. **Reconcile command bindings against the capability oracle — ORDERED succession**
+   (`integration.json policies.capability_oracle`): (a) local `$GSTACK_PATH/VERSION`
+   file first; (b) `llms.txt` via glob (carved/rendered layouts); (c) generated skill
+   index; (d) raw-fetch VERSION+CHANGELOG from GitHub — network LAST, the quarterly
+   check must never acquire a hard network dependency (gstack's Releases page is empty;
+   VERSION/CHANGELOG raw-fetch is the only drift channel). When an oracle is present,
+   diff every slash-command string in `integration.json.composition` against it. Any
+   binding whose command no longer appears is **drift** (this is exactly how `/ux-audit`
+   and `/health` went stale). Hand-maintained command lists are the drift source.
+4. Surface drift: command bindings missing from the oracle, paths moved, artifact format
    changed, gstack version below `min_supported`, legacy paths past `legacy_sunset`.
-5. Output a remediation checklist; do NOT auto-modify integration.json (human decides).
+5. **Ship-gate probe (read-only)** — does gstack actually reference our signals?
+   Glob WIDE: `$GSTACK_PATH/**/*.md` PLUS the project's `.claude/gstack-rendered/**`
+   (carved skills put content in `sections/`; a narrow skill-dir grep is a
+   false-negative machine), grep for `.claude/signals` / `verify-latest`. Report
+   `gate_status: VERIFIED` (reference found) or `ASSERTED` (our-side convention,
+   unconfirmed). A grep miss MUST render as `ASSERTED` — never as "gstack ignores
+   signals" (absence of a hit is not proof of absence). Watch item: gstack v1.62
+   "host-anchored plan signals" (UNVERIFIED, changelog-summarized) is the nearest
+   upstream convergence point for a real bilateral gate contract.
+6. **Confusion Protocol probe** — read-only grep of gstack's surface for Confusion
+   Protocol references. The `confusion.jsonl` bridge is RESERVED/INACTIVE (no producer
+   observed); hard-delete its bridge row only if this probe confirms upstream sunset at
+   a quarterly check.
+7. Output a remediation checklist; do NOT auto-modify integration.json (human decides).
 
 ## Rules
 

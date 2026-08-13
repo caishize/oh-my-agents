@@ -37,11 +37,13 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    `docs/exec-plans/completed/` for recently finished ones. Each plan is a markdown
    file with task checklists.
 
-3. **Legibility score** — Check for the most recent legibility score output in
-   `.claude/metrics/legibility-*.json` or agent memory.
+3. **Legibility score** — Read `.claude/metrics/legibility-latest.json` for the current
+   score and `.claude/metrics/legibility.jsonl` for the trend (`/legibility-score` writes
+   both; absent ⇒ "Not assessed").
 
-4. **Entropy findings** — Check for the most recent entropy sweep report in
-   `.claude/metrics/entropy-*.json` or agent memory.
+4. **Entropy findings** — Read `.claude/metrics/entropy-latest.json` for current counts
+   and `.claude/metrics/entropy.jsonl` for the trend (`/entropy-sweep` writes both;
+   absent ⇒ "No sweep yet").
 
 5. **Harness config** — Read `.claude/harness.json` for project configuration and
    expected module list.
@@ -50,9 +52,7 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    probe is presence-based — never required.
 
    ```bash
-   SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
-   GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
-   GSTACK_ANALYTICS="$HOME/.gstack/analytics"
+   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
 
    # GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0)
    GBRAIN_WT=""
@@ -155,7 +155,9 @@ Generate the top 3 actionable recommendations based on the data:
 - If nested CLAUDE.md coverage < 50% -> recommend `/harness-init` for modules
 - If gstack installed but no dual reviews -> recommend `/harness-review` for next PR
 - If design docs exist without matching plans -> recommend `/spec-to-task --from-design`
-- If investigate sessions have no corresponding encode-mistake -> recommend `/encode-mistake`
+- If unencoded gbrain candidates exist (candidate queue per `/lifecycle improve`) ->
+  recommend `/encode-mistake --from-gbrain` (the old investigate→encode rate was circular
+  — `investigations.jsonl` is the encode PROVENANCE LEDGER, not a candidate source)
 - If a TASTE-NNN rule (docs/LINTING.md) has matched 0 violations in 30+ days of session
   metrics -> note it as an **evidence-gated sunset candidate** (human-reviewed, never auto-removed)
 - If first-pass-GREEN rate is declining while a TASTE rule keeps matching -> the rule works;
@@ -244,7 +246,7 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
   Reviews: {N} gstack + {N} harness = {N} total ({N} dual-reviewed)
   Design docs: {N} available
   Lifecycle coverage: {phases used} / {total phases}
-  Investigate→encode rate: {N}% (root causes converted to rules)
+  TASTE rules encoded:     {count from docs/LINTING.md registry} (+{N} unencoded gbrain candidates)
   Learnings→encode rate:   {N}% (gstack learnings hardened to TASTE)
   Landing reports (7d):    {N}    Canary reports (7d): {N}
   GBrain federation:       {worktree present | absent}

@@ -44,6 +44,9 @@ This is **"slop"** — technically correct code that degrades codebase quality.
 
 Perform a comprehensive entropy sweep. Use $ARGUMENTS to scope (default: full).
 
+**Scan exclusion**: `.claude/gstack-rendered/` is a gstack-OWNED enclave (v1.57.9
+`gen-skill-docs` output inside our namespace) — never scan or flag it as entropy.
+
 ### Sweep 1: Say No to Slop
 
 **Pillar: Entropy Management**
@@ -235,6 +238,19 @@ give agents confident but wrong instructions.
 | Missing enforcement   |     N | Add rules  |
 | Exec plan health      |     N | Review     |
 | Nested CLAUDE.md      |     N | Update     |
+```
+
+### Metric write (mandatory final step — accountable-writer, /verify pattern)
+
+The sweep that derived the findings writes them (read-only stays true for all project
+code and gstack paths; own-namespace metrics are the accountable-writer exception
+`/verify` established). Write `.claude/metrics/entropy-latest.json` (≤500 bytes: finding
+counts per category, timestamp, commit) AND append the same record as one line to
+`.claude/metrics/entropy.jsonl` (trend history — `/harness-dashboard` reads both):
+
+```bash
+mkdir -p .claude/metrics
+python3 -c "import json,subprocess,datetime; s={'findings':{'slop':N1,'docs':N2,'arch':N3,'dead':N4,'enforcement':N5,'plans':N6,'claude_md':N7},'total':T,'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}; open('.claude/metrics/entropy-latest.json','w').write(json.dumps(s)); open('.claude/metrics/entropy.jsonl','a').write(json.dumps(s)+'\n')"
 ```
 
 ## Rules

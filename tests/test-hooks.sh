@@ -419,6 +419,116 @@ assert_advisory "plan-validation: stays silent when fields present" \
     '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"done\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
     "no"
 
+# --- v3.9.0: schema GUIDE + completion nudge (plan-validation-check) ---
+
+assert_output() {
+    # Generic stderr-content assertion (exit code must be 0 — GUIDE semantics)
+    local name="$1" hook="$2" input="$3" pattern="$4" should_match="$5" cwd="${6:-}"
+    TOTAL=$((TOTAL + 1))
+    local out rc=0
+    if [ -n "$cwd" ]; then
+        out=$(cd "$cwd" && printf '%s' "$input" | bash "$HOOKS_DIR/$hook" 2>&1) || rc=$?
+    else
+        out=$(printf '%s' "$input" | bash "$HOOKS_DIR/$hook" 2>&1) || rc=$?
+    fi
+    local matched="no"
+    echo "$out" | grep -q "$pattern" && matched="yes"
+    if [ "$rc" = "0" ] && [ "$matched" = "$should_match" ]; then
+        PASS=$((PASS + 1)); echo "PASS: $name"
+    else
+        FAIL=$((FAIL + 1)); echo "FAIL: $name (exit=$rc, match=$matched, want=$should_match)"
+    fi
+}
+
+assert_output "plan-validation: schema GUIDE on unknown top-level key" \
+    "plan-validation-check.sh" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"unknown_field\":1,\"tasks\":[{\"id\":\"t-1\",\"status\":\"pending\"}]}"}}' \
+    "Plan schema GUIDE" "yes"
+
+assert_output "plan-validation: schema GUIDE on prose acceptance" \
+    "plan-validation-check.sh" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"pending\",\"acceptance\":\"the user should be able to log in without any errors at all\"}]}"}}' \
+    "acceptance reads as prose" "yes"
+
+assert_output "plan-validation: completion nudge fires when all tasks done + plan active" \
+    "plan-validation-check.sh" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"plan-x\",\"status\":\"active\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"done\",\"acceptance\":\"run-tests\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
+    "next: /verify --plan plan-x" "yes"
+
+# Suppression: a FRESH GREEN verify signal newer than the plan file suppresses the nudge
+NUDGE_TMP=$(mktemp -d)
+mkdir -p "$NUDGE_TMP/docs/exec-plans/active" "$NUDGE_TMP/.claude/signals"
+printf '%s' '{"id":"plan-x","status":"active","tasks":[{"id":"t-1","status":"done","acceptance":"run-tests","context_files":["a"],"failing_tests":["t"]}]}' \
+    > "$NUDGE_TMP/docs/exec-plans/active/p.json"
+sleep 0.01 2>/dev/null || sleep 1
+printf '%s' '{"schema_version":1,"decision":"GREEN"}' > "$NUDGE_TMP/.claude/signals/verify-latest.json"
+assert_output "plan-validation: completion nudge suppressed by fresh GREEN" \
+    "plan-validation-check.sh" \
+    "{\"cwd\":\"$NUDGE_TMP\",\"tool_input\":{\"file_path\":\"$NUDGE_TMP/docs/exec-plans/active/p.json\",\"content\":\"{\\\"id\\\":\\\"plan-x\\\",\\\"status\\\":\\\"active\\\",\\\"tasks\\\":[{\\\"id\\\":\\\"t-1\\\",\\\"status\\\":\\\"done\\\",\\\"acceptance\\\":\\\"run-tests\\\",\\\"context_files\\\":[\\\"a\\\"],\\\"failing_tests\\\":[\\\"t\\\"]}]}\"}}" \
+    "next: /verify" "no"
+rm -rf "$NUDGE_TMP"
+
+# --- v3.9.0: gate-state nudge (doc-drift-check, Stop hook) ---
+
+echo "--- doc-drift-check.sh gate-state nudge ---"
+
+if command -v jq >/dev/null 2>&1; then
+    GATE_TMP=$(mktemp -d)
+    (cd "$GATE_TMP" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init)
+    mkdir -p "$GATE_TMP/.claude/signals"
+    HEAD_SHA=$(git -C "$GATE_TMP" rev-parse HEAD)
+
+    printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$HEAD_SHA" \
+        > "$GATE_TMP/.claude/signals/review-latest.json"
+    assert_output "doc-drift: APPROVE (fresh) nudges gstack /ship" \
+        "doc-drift-check.sh" \
+        "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
+        "next: gstack /ship" "yes"
+
+    printf '{"schema_version":1,"decision":"APPROVE","commit":"stale-sha"}' \
+        > "$GATE_TMP/.claude/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"stale-sha"}' \
+        > "$GATE_TMP/.claude/signals/verify-latest.json"
+    assert_output "doc-drift: stale commit yields WARN, never a nudge" \
+        "doc-drift-check.sh" \
+        "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
+        "is stale (commit mismatch)" "yes"
+
+    rm -f "$GATE_TMP/.claude/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$HEAD_SHA" \
+        > "$GATE_TMP/.claude/signals/verify-latest.json"
+    assert_output "doc-drift: fresh GREEN with no review nudges /harness-review" \
+        "doc-drift-check.sh" \
+        "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
+        "next: /harness-review" "yes"
+    rm -rf "$GATE_TMP"
+else
+    echo "SKIP: doc-drift gate-state tests (jq not installed; hook degrades silently)"
+fi
+
+# --- v3.9.0: self-verify passive overlap measurement (item 15) ---
+
+echo "--- self-verify-check.sh metrics event ---"
+
+SV_TMP=$(mktemp -d)
+printf '{}' > "$SV_TMP/package.json"   # project-root marker
+printf 'def broken(:\n' > "$SV_TMP/bad.py"
+printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$SV_TMP/bad.py\"}}" \
+    | bash "$HOOKS_DIR/self-verify-check.sh" >/dev/null 2>&1 || true
+TOTAL=$((TOTAL + 1))
+if ls "$SV_TMP/.claude/metrics/"session-*.jsonl >/dev/null 2>&1 \
+   && grep -q '"hook":"self-verify-check"' "$SV_TMP/.claude/metrics/"session-*.jsonl; then
+    PASS=$((PASS + 1)); echo "PASS: self-verify: warning appends metrics event"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: self-verify: warning appends metrics event"
+fi
+rm -rf "$SV_TMP"
+
+run_test "self-verify: exit 0 unchanged on triggered warning" \
+    "self-verify-check.sh" \
+    '{"tool_name":"Write","tool_input":{"file_path":"/nonexistent/x.py"}}' \
+    0
+
 # =============================================
 # Summary
 # =============================================

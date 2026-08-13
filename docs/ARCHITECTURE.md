@@ -98,12 +98,12 @@ hooks), supplies the Evaluator its **versioned decision-signal Gate API**
 ([SIGNALS.md](SIGNALS.md) — exactly the machine-readable stage boundary a Dynamic Workflow
 or team-lead gates on), and persists memory between context resets (TASTE rules, nested
 CLAUDE.md). The one sanctioned use of Dynamic Workflows by this plugin is a read-only audit
-that *terminates in a signal* (anti-bloat rule 17); never a delivery script.
+that *terminates in a signal* (anti-bloat rule `single-workflow`); never a delivery script.
 
 | Role | What oh-my-agents contributes | gstack / native counterpart | Handoff artifact |
 |------|-------------------------------|-----------------------------|------------------|
 | **Coordination** | — (deliberately none) | **native Agent Teams** (mailbox) + **Dynamic Workflows** (script); gstack Conductor | shared task list / mailbox / script vars |
-| **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` |
+| **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` — per-task `context_files`/`failing_tests`/`constraints`/runnable `acceptance` ARE the typed handoff; on a RED verify, `/lifecycle recover` derives the retry target AT RECOVER TIME from `verify-latest.json`'s reason + the task list (no pre-declared failure maps — `planner_metadata` cut 2026-08-13, zero consumers) |
 | **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (block); `plan-validation-check` (feedforward GUIDE) — PreToolUse hooks | `/guard` (freeze/careful) | hook block + remediation message in agent context |
 | **Evaluator** | `/verify` + `/harness-review` (decision signals; `/harness-review` reads & reconciles gstack's v1.57.5+ verdict layer read-only) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` (+ `gstack_context`) |
 | **Memory between resets** | nested CLAUDE.md, `docs/LINTING.md` (TASTE rules) | GBrain (`learnings-log`, `timeline-log`, `eureka`) | one-direction bridge: observation → enforcement |
@@ -127,7 +127,7 @@ and deliberate non-coverage — auditable:
 | Documentation as System of Record | Pillar 2 — Documentation as System of Record | **oh-my-agents** (`/harness-init`, docs/) |
 | Observability integration (logs/metrics/spans) | Pillar 3 — Observability & Legibility | **oh-my-agents** (session-metrics, dashboard) |
 | Entropy / quality maintenance | Pillar 4 — Entropy Management | **oh-my-agents** (`/entropy-sweep`, `/encode-mistake`) |
-| **Structured feedback loops** (PR / CI) | decision signals (`verify-latest.json`, `review-latest.json`) + CI template | **shared** — harness emits signals; gstack `/ship` consumes; CI via `templates/github-actions-harness.yml` |
+| **Structured feedback loops** (PR / CI) | decision signals (`verify-latest.json`, `review-latest.json`) + CI template | **shared** — harness emits signals; the pre-`/ship` convention checks them (gstack-side read is `VERIFIED \| ASSERTED` per probe); CI via `templates/github-actions-harness.yml` |
 | **Isolated testing** (reproduce bugs in isolation) | *not reimplemented* | **gstack** `/investigate` + `/qa` (delegated) |
 
 The role-shift OpenAI describes — engineers move from *implementing code* to *specifying
@@ -203,7 +203,7 @@ This plugin leverages specific Claude Code capabilities:
 | `Stop` hooks | doc-drift-check.sh | Advisory warnings after session ends |
 | `$ARGUMENTS` | All skills | Pass user arguments to skill content |
 | Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, gstack `/ship`, Dynamic Workflow stages, Agent Teams |
-| Dynamic Workflows (`.claude/workflows/`) | `harness-audit.js` (1 shipped; rule 17) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it) |
+| Dynamic Workflows (`.claude/workflows/`) | `harness-audit.js` (1 shipped; rule `single-workflow`) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it) |
 
 ## Design Decisions
 

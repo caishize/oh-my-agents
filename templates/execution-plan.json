@@ -5,6 +5,11 @@
   "type": "object",
   "required": ["id", "feature", "status", "created", "tasks"],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "execution-plan-v2",
+      "description": "Plan schema marker checked by hooks/plan-validation-check.sh (unknown-key GUIDE)"
+    },
     "id": {
       "type": "string",
       "pattern": "^plan-",
@@ -32,9 +37,26 @@
       "type": "string",
       "description": "Who created this plan (human or agent identifier)"
     },
+    "spec_source": {
+      "type": "string",
+      "description": "Reference to the original spec (file path, URL, issue number, or 'inline'). Successor of spec_ref."
+    },
     "spec_ref": {
       "type": "string",
-      "description": "Reference to the original spec (file path, URL, or issue number)"
+      "description": "DEPRECATED alias of spec_source — read for backward compatibility, never written by /spec-to-task v2+"
+    },
+    "gstack_design_doc": {
+      "type": "string",
+      "description": "Read-only pointer into ~/.gstack (design doc this plan was derived from), never written to. Consumers: /harness-review context, /lifecycle."
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Progress counters maintained by /spec-to-task on every task-status change. Consumers: plan-completion nudge in hooks/plan-validation-check.sh, /lifecycle routing.",
+      "properties": {
+        "tasks_total": { "type": "integer" },
+        "tasks_done": { "type": "integer" },
+        "tasks_blocked": { "type": "integer" }
+      }
     },
     "pillar": {
       "enum": ["architecture", "documentation", "observability", "entropy"],
@@ -67,7 +89,7 @@
           "phase": {
             "type": "integer",
             "minimum": 1,
-            "description": "Dependency phase (1=types/config … 6=cross-cutting). Tasks in the same phase with no inter-dependency are parallelizable; see planner_metadata.parallelizable_groups."
+            "description": "Dependency phase (1=types/config … 6=cross-cutting). Tasks in the same phase with no depends_on between them are parallelizable — executors derive parallelism from phase + depends_on directly."
           },
           "constraints": {
             "type": "array",
@@ -86,7 +108,7 @@
           },
           "acceptance": {
             "type": "string",
-            "description": "Acceptance criteria or verification command"
+            "description": "A runnable command or named test proving the task is done — never prose. /verify runs it (unconfirmed acceptance caps the decision at YELLOW, fail-any, no averaging)."
           },
           "context_files": {
             "type": "array",
@@ -102,36 +124,6 @@
             "type": "string",
             "description": "Implementation notes or context for the agent"
           }
-        }
-      }
-    },
-    "planner_metadata": {
-      "type": "object",
-      "description": "Optional typed hints for native Agent Teams / Dynamic Workflows executing this plan as the Planner→Generator handoff (Anthropic 3-agent topology). All advisory — executors adapt, never obey blindly.",
-      "properties": {
-        "parallelizable_groups": {
-          "type": "array",
-          "items": { "type": "array", "items": { "type": "string" } },
-          "description": "Groups of task ids with no inter-dependency that MAY run in parallel (e.g. one agent() per task). Derived from `depends_on`; advisory."
-        },
-        "context_budget": {
-          "type": "object",
-          "description": "Context-allocation hints so a Generator session sizes its work before a context reset.",
-          "properties": {
-            "per_task_tokens_hint": { "type": "integer" },
-            "reset_between_tasks": { "type": "boolean" }
-          }
-        },
-        "recovery_edges": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "on_fail": { "type": "string", "description": "task id that, on failure, triggers re-running an earlier task" },
-              "retry": { "type": "string", "description": "task id to re-run / re-plan" }
-            }
-          },
-          "description": "Which earlier task to retry when a later task fails — supports the GAN-style Evaluator→Generator loop without losing Planner intent."
         }
       }
     },

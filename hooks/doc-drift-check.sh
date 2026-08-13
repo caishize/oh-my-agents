@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# Documentation drift detection hook
-# Triggered on Stop event — after Claude finishes responding
-# Checks if recently modified source files have corresponding doc references
-# that might need updating
+# Stop-time advisory: doc drift + gate-state nudge.
+# Triggered on Stop event — after Claude finishes responding.
+# (1) Checks if recently modified source files have corresponding doc references
+#     that might need updating.
+# (2) Reads the two decision signals (freshness-checked per docs/SIGNALS.md) and NAMES
+#     the next gate skill — names, never invokes (rule no-orchestration).
 #
 # Claude Code passes hook input as JSON on stdin:
 #   { "hook_event_name": "Stop", "session_id": "...", "cwd": "..." }
@@ -26,10 +28,36 @@ PROJECT_DIR=$(get_cwd)
 [ -z "$PROJECT_DIR" ] && exit 0
 git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
+# --- Gate-state nudge (advisory; transition mapping source: docs/SIGNALS.md — one
+# mapping, two renderings, never two mappings). Freshness predicate FIRST: a signal
+# whose commit differs from HEAD is stale — WARN, never a next-step nudge off it.
+# Computed up-front so it prints even when no files changed this session. ---
+GATE_NUDGE=""
+HEAD_SHA=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || echo "")
+SIG_DIR="$PROJECT_DIR/.claude/signals"
+if [ -n "$HEAD_SHA" ] && command -v jq >/dev/null 2>&1; then
+    V_SIG="$SIG_DIR/verify-latest.json"; R_SIG="$SIG_DIR/review-latest.json"
+    V_DEC=$(jq -r '.decision // ""' "$V_SIG" 2>/dev/null || echo ""); V_COMMIT=$(jq -r '.commit // ""' "$V_SIG" 2>/dev/null || echo "")
+    R_DEC=$(jq -r '.decision // ""' "$R_SIG" 2>/dev/null || echo ""); R_COMMIT=$(jq -r '.commit // ""' "$R_SIG" 2>/dev/null || echo "")
+    R_KIND=$(jq -r '.needs_human_kind // ""' "$R_SIG" 2>/dev/null || echo "")
+    if [ -n "$V_DEC" ] && [ -n "$V_COMMIT" ] && [ "$V_COMMIT" != "$HEAD_SHA" ]; then
+        GATE_NUDGE="WARN: verify-latest.json is stale (commit mismatch) — re-run /verify"
+    elif [ -n "$R_DEC" ] && [ -n "$R_COMMIT" ] && [ "$R_COMMIT" != "$HEAD_SHA" ]; then
+        GATE_NUDGE="WARN: review-latest.json is stale (commit mismatch) — re-run /harness-review"
+    elif [ "$R_DEC" = "NEEDS_HUMAN" ] && [ "$R_KIND" = "composition-skipped" ]; then
+        GATE_NUDGE="Gate state: review NEEDS_HUMAN (composition-skipped) — next: re-run /harness-review with gstack composition enabled"
+    elif [ "$R_DEC" = "APPROVE" ]; then
+        GATE_NUDGE="Gate state: review APPROVE — next: gstack /ship (run the pre-ship check from docs/SIGNALS.md first)"
+    elif [ "$V_DEC" = "GREEN" ] && { [ -z "$R_DEC" ] || [ ! -f "$R_SIG" ] || [ "$V_SIG" -nt "$R_SIG" ]; }; then
+        GATE_NUDGE="Gate state: verify GREEN with no newer review — next: /harness-review"
+    fi
+fi
+
 # Get files modified in the last commit or staged
 CHANGED_FILES=$(git -C "$PROJECT_DIR" diff --name-only HEAD 2>/dev/null || git -C "$PROJECT_DIR" diff --name-only --staged 2>/dev/null || echo "")
 
 if [ -z "$CHANGED_FILES" ]; then
+    [ -n "$GATE_NUDGE" ] && { echo ""; echo "$GATE_NUDGE"; }
     exit 0
 fi
 
@@ -128,7 +156,7 @@ if [ -d "$PROJECT_DIR" ]; then
             WARNINGS="${WARNINGS}Source files changed under '${REL_CLAUDE_DIR}/' but its CLAUDE.md was not updated.\n"
             WARNINGS="${WARNINGS}   Review: ${CLAUDE_MD_REL}\n\n"
         fi
-    done < <(find "$PROJECT_DIR" -maxdepth 5 -name "CLAUDE.md" -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -not -path "*/.next/*" -not -path "*/dist/*" 2>/dev/null || true)
+    done < <(find "$PROJECT_DIR" -maxdepth 5 -name "CLAUDE.md" -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -not -path "*/.next/*" -not -path "*/dist/*" -not -path "*/.claude/gstack-rendered/*" 2>/dev/null || true)
 fi
 
 # 5. Check if active execution plans reference modified files
@@ -201,12 +229,15 @@ HANDOFF_EOF
 fi
 
 # Output warnings if any
-if [ -n "$WARNINGS" ]; then
+if [ -n "$WARNINGS" ] || [ -n "$GATE_NUDGE" ]; then
     echo ""
-    echo "Documentation Drift Check"
-    echo "========================="
-    echo -e "$WARNINGS"
-    echo "Run /entropy-sweep for a full analysis."
+    if [ -n "$WARNINGS" ]; then
+        echo "Documentation Drift Check"
+        echo "========================="
+        echo -e "$WARNINGS"
+        echo "Run /entropy-sweep for a full analysis."
+    fi
+    [ -n "$GATE_NUDGE" ] && echo "$GATE_NUDGE"
 fi
 
 exit 0

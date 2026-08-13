@@ -2,7 +2,7 @@
 name: lifecycle
 description: "Full development lifecycle ROUTER (not an executor) — detects state, reads decision signals, and NAMES the next phase + exact remediation skill across Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Never invokes delivery skills or advances a phase; worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
 user-invocable: true
-argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--emit-next] [--ux] [--with-codex] [--with-cso]"
+argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux] [--with-codex] [--with-cso]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -38,14 +38,10 @@ Phase from `$ARGUMENTS`: `ideate`, `plan`, `decompose`, `execute`, `verify`, `re
 ## Step 0: Detect Environment (worktree-aware)
 
 ```bash
-GSTACK_PATH=""
-for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
-  [ -d "$p" ] && GSTACK_PATH="$p" && break
-done
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
 HARNESS_JSON=""
 [ -f ".claude/harness.json" ] && HARNESS_JSON=".claude/harness.json"
 BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
 ACTIVE_PLANS=$(ls docs/exec-plans/active/*.json 2>/dev/null | wc -l | tr -d ' ')
 WORKTREE_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 PARALLEL_WT=0
@@ -85,31 +81,20 @@ skill** (see Gate Failure Routing). It never advances delivery itself.
 
 **Router invariant: `/lifecycle` NAMES the next skill and reads its decision signal; it
 never invokes a delivery skill, mutates source, or advances a phase. The day it does, that
-logic moves to gstack — anti-bloat rule 5 + the SIGNAL-not-ARTIFACT bright line.**
+logic moves to gstack — anti-bloat rule `no-orchestration` + the SIGNAL-not-ARTIFACT bright line.**
 
-#### Structured next-step output (`--emit-next` / `--auto`, advisory)
+#### `NEXT:` tail line (machine-parseable router OUTPUT — zero persistence)
 
-With `--emit-next` (implied by `--auto`), also write the route just computed to
-`.claude/signals/lifecycle-next.json` so a native **Dynamic Workflow / Agent Team** can
-auto-load the next skill's args without re-parsing prose. This is **routing METADATA, not a
-gate and not a command** — emitting it is still "naming", not invoking. Consumers CHOOSE to
-act on it; `/lifecycle` never runs the named skill. (Schema note in docs/SIGNALS.md — it is
-explicitly NOT one of the two default-deny decision signals.)
+`next` and `--auto` ALWAYS end their output with one final line:
 
-```bash
-mkdir -p .claude/signals
-# PHASE, SKILL, REASON, ARGS[], PREREQS[], GATES[], ABORT_ON[] come from the detection above.
-# Build JSON with python3/jq/printf (correct escaping). advisory:true is mandatory.
-# e.g. {"schema_version":1,"timestamp":"…","phase":"review","skill":"/harness-review",
-#       "reason":"verify GREEN, no review yet",
-#       "config_hints":{"args":["--plan","plan-…"],
-#         "prerequisites":[".claude/signals/verify-latest.json"],
-#         "gates":["verify-latest decision=GREEN"]},
-#       "abort_on":["RED","YELLOW","NEEDS_HUMAN"],"advisory":true}
+```
+NEXT: {"phase":"review","skill":"/harness-review","args":["--plan","plan-…"],"gates":["verify-latest decision=GREEN"],"advisory":true}
 ```
 
-Absent file ⇒ no projection cached; a consumer falls back to running `/lifecycle next` itself.
-Never default-deny on it — it is a convenience, not a gate.
+Same schema as the retired `lifecycle-next.json`, but as invocation OUTPUT — the shape a
+Dynamic Workflow's structured-output capture (or an Agent Team lead) actually consumes;
+nothing is written to disk, so nothing can be read stale. `advisory:true` is mandatory:
+this is still NAMING, never invoking (rule no-orchestration); the invoker chooses to act.
 
 ### `ideate` — Requires gstack → `/office-hours`
 ### `plan` — Requires gstack → `/autoplan` or individual review passes
@@ -128,9 +113,12 @@ symmetric to the review gate:
 
 - `GREEN` → proceed.
 - `RED` → stop; route per Gate Failure table.
-- `YELLOW` → ask the user.
+- `YELLOW` → ask the user (can mean contract-unmet: an `acceptance` command unconfirmed).
 - signal missing / malformed JSON / **unknown `schema_version`** → **default-deny**: treat as
   "re-run `/verify`"; do NOT advance under `--auto` (symmetric to the review gate; docs/SIGNALS.md).
+- **stale signal (freshness predicate, docs/SIGNALS.md)** — `commit` present but ≠ current
+  `HEAD` (or `branch` mismatch) → route as if the signal were absent, with a WARN naming
+  the mismatch. A stale `GREEN` never advances the projection.
 
 ### `review` — Composition-aware; reads decision signal
 
@@ -149,7 +137,7 @@ SIGNAL=".claude/signals/review-latest.json"
 # Default-deny: validate schema_version too, not just decision (docs/SIGNALS.md). An
 # unrecognized version is treated as a hard halt, exactly like a missing/malformed signal.
 KNOWN_SCHEMA=1
-DECISION="NEEDS_HUMAN"   # default-deny: missing / malformed / unknown-version (Anti-Bloat rule 13)
+DECISION="NEEDS_HUMAN"   # default-deny: missing / malformed / unknown-version (rule default-deny; docs/SIGNALS.md)
 if [ -f "$SIGNAL" ]; then
   DECISION=$(python3 -c "import json,sys; s=json.load(open('$SIGNAL')); sys.exit(1) if s.get('schema_version')!=$KNOWN_SCHEMA else print(s['decision'])" 2>/dev/null) || DECISION="NEEDS_HUMAN"
 fi
@@ -159,6 +147,7 @@ echo "review-decision: $DECISION"
 **Routing rules (the agent reading this router must obey):**
 
 - `APPROVE` → the projected next step is `ship` (gstack `/ship`). Report it; do not invoke it.
+  (Stale `APPROVE` — `commit` ≠ `HEAD` — routes as absent, with a WARN; freshness predicate.)
 - `REQUEST_CHANGES` → **end the projection**; surface `.claude/metrics/reviews.jsonl`
   P0/P1 findings; the next step is back to `execute` (after the user confirms).
 - `NEEDS_HUMAN` → branch on `needs_human_kind` (set by `/harness-review`; see docs/SIGNALS.md):
@@ -171,7 +160,9 @@ echo "review-decision: $DECISION"
 
 ### `ship` — Requires gstack → `/ship` (or guide manual PR)
 
-Pre-flight reads `.claude/signals/verify-latest.json` and `.claude/metrics/reviews.jsonl`.
+Before naming `/ship`, run the OUR-SIDE pre-ship convention check from docs/SIGNALS.md
+(verify GREEN + review APPROVE + both `commit` == HEAD). Whether gstack itself reads our
+signals is `VERIFIED | ASSERTED` per `gstack-sync --contract-check` — never assumed.
 
 ### `deploy` — Requires gstack → `/land-and-deploy`
 
@@ -183,7 +174,25 @@ If absent in gstack version → skip with notice; not a gate failure.
 
 ### `improve` — Guide through feedback encoding
 
-Scan `investigations.jsonl` for unencoded entries; suggest `/encode-mistake` for each.
+Build the unencoded-candidate queue from gstack's DURABLE observation artifacts (read-only
+globs — never gstack CLIs beyond `gbrain doctor`; that policy call is unmade):
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
+ls "${GBRAIN_WT:-$HOME/.gstack-artifacts-worktree}"/learnings-*.jsonl \
+   "$GSTACK_PROJECTS"/*-learnings-*.jsonl \
+   "$GSTACK_PROJECTS"/decisions.jsonl 2>/dev/null
+```
+
+Parse `decisions.jsonl` SCHEMA-TOLERANTLY (its event schema is unverified upstream):
+extract candidate lines defensively; on parse failure degrade LOUD to
+`gbrain-only candidates (decisions.jsonl unparsed)` — never silently compute a wrong
+candidate list. Cross-reference candidates against the `docs/LINTING.md` rule index to
+compute the genuinely-unencoded set; suggest `/encode-mistake --from-gbrain` for each
+(human-gated, always). Graceful skip when gbrain/gstack absent.
+
+`investigations.jsonl` is NOT the candidate source — it is the encode PROVENANCE LEDGER
+(written only by `/encode-mistake` itself; scanning it for candidates was circular).
 
 ### `recover` — Diagnose failed state (always safe)
 
@@ -209,7 +218,7 @@ so the developer (or the next agent invocation) doesn't have to search:
 | ship (CI red) | PR build failed | `/investigate` (gstack); then re-`/verify` |
 | deploy | smoke failed | `/canary` (gstack) if available; rollback decision |
 | canary | regression detected | `/investigate` → `/encode-mistake` to prevent recurrence |
-| any (unknown) | confusion signal raised (gstack v0.18+ Confusion Protocol) | log to `.claude/metrics/confusion.jsonl`; surface in next `/harness-dashboard` |
+| any (unknown) | phase state unreadable / contradictory | halt the projection; report what was probed and what was missing — never guess a route |
 | review (no decision) | signal missing / malformed / unknown `schema_version` | default-deny: hard `NEEDS_HUMAN` halt; never advance (docs/SIGNALS.md) |
 | review (`NEEDS_HUMAN`: `composition-skipped`) | `/codex` or `/cso` was skipped | auto-recoverable: next step is re-run the skipped composition; not a human halt |
 | review (`NEEDS_HUMAN`: `arch-ambiguity` / `judgment-slop`) | architectural ambiguity or judgment-dependent slop | halt; surface verbose `reviews.jsonl` for user |
@@ -227,11 +236,12 @@ so the developer (or the next agent invocation) doesn't have to search:
 - **Worktree-aware**: never operate across `.gstack-worktrees/` siblings
 - **Composition over duplication**: defer slop-deep / security-deep / UX to gstack skills
 - **Capability detection over version pinning**: probe artifact presence, not version strings
-- Confusion signals (gstack v0.18+) are first-class legibility input — always logged
 - **Router, never executor**: this skill names the next skill to run; if it starts
   *implementing* a phase (e.g. drafting a CHANGELOG), that logic belongs in gstack
 - **Review decision signal is mandatory**: `next` will not auto-advance past `review`
   without `.claude/signals/review-latest.json`; missing signal ⇒ `NEEDS_HUMAN`
-- **`lifecycle-next.json` is advisory metadata, NOT a gate** — `--emit-next`/`--auto` may
-  write it for workflow convenience (`advisory:true`); emitting it is still NAMING. Consumers
-  choose to act; `/lifecycle` never invokes the named skill. Never default-deny on its absence.
+- **Freshness predicate applies to every routing read** (docs/SIGNALS.md): a signal whose
+  `commit` ≠ current `HEAD` routes as if absent, with a WARN naming the mismatch
+- **The `NEXT:` tail line is router OUTPUT, not a signal** — zero persistence, always
+  `advisory:true`; emitting it is NAMING, never invoking. (Its cached-file predecessor
+  `lifecycle-next.json` was retired v3.9.0: zero consumers in a full cycle.)

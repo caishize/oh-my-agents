@@ -1,10 +1,10 @@
-// harness-audit — the ONE sanctioned oh-my-agents Dynamic Workflow (anti-bloat rule 17).
+// harness-audit — the ONE sanctioned oh-my-agents Dynamic Workflow (anti-bloat rule `single-workflow`).
 //
 // WHAT: a read-only, fan-out, four-pillar governance audit. Many Explore agents audit the
 // repo in parallel, each finding is adversarially verified (skeptic tries to REFUTE it),
 // and the workflow RETURNS a review-latest.json-shaped decision + the confirmed findings.
 //
-// RULE 17 INVARIANTS (mechanically honored here; do not weaken):
+// RULE single-workflow INVARIANTS (mechanically honored here; do not weaken):
 //   1. READ-ONLY, structurally: every audit/verify agent uses agentType:'Explore', which
 //      CANNOT Write/Edit/NotebookEdit (a real mechanism, not a grep self-test).
 //   2. TERMINATES IN A SIGNAL, not a deployed artifact (the SIGNAL-vs-ARTIFACT bright line).
@@ -115,8 +115,9 @@ const decision = p0 > 0 ? 'REQUEST_CHANGES' : (p1 > 0 ? 'NEEDS_HUMAN' : 'APPROVE
 const needs_human_kind = decision === 'NEEDS_HUMAN' ? 'judgment-slop' : null;
 
 // review-latest.json shape (docs/SIGNALS.md). RETURNED, not written — see header invariant 3.
-// The accountable invoker (a human, or /harness-review re-run) persists this; add `timestamp`
-// (date -u +%Y-%m-%dT%H:%M:%SZ) at persist time. Strip the `_persistence` note before writing.
+// Persistence: docs/SIGNALS.md § "Persisting a /harness-audit result" is the ONLY sanctioned
+// recipe (the accountable invoker stamps timestamp + commit and writes; a mid-run death
+// leaves no signal ⇒ default-deny ⇒ safe halt).
 const signal = {
   schema_version: 1,
   decision,
@@ -127,13 +128,14 @@ const signal = {
   gstack_composed: false,
   plan_id: null,
   reason: `harness-audit: ${p0} P0 / ${p1} P1 / ${p2} P2 confirmed (fan-out+verify)`.slice(0, 120),
-  _persistence: 'RETURNED, not written. The accountable invoker persists to .claude/signals/review-latest.json (add timestamp, drop this field). A relay agent must NOT write it — the spike proved the safety classifier correctly blocks fabricated-verdict writes.',
+  _persistence: 'RETURNED, not written (accountable-writer). Persist via the one-liner recipe in docs/SIGNALS.md — it stamps timestamp + commit (freshness predicate) and tags reason with source:harness-audit.',
 };
 
 log(`harness-audit: ${confirmed.length} confirmed (${p0} P0 / ${p1} P1 / ${p2} P2), ${refuted.length} refuted → decision ${decision}`);
 
 return {
   signal,
+  persist_command: 'See docs/SIGNALS.md § "Persisting a /harness-audit result": save `signal` to a file, review it, then run the documented python3 one-liner (stamps timestamp + commit, writes review-latest.json, appends reviews.jsonl).',
   confirmed: confirmed.map((f) => ({ dimension: f.dimension, severity: f.severity, title: f.title, file: f.file, line: f.line || '', detail: f.detail, confidence: f.verdict.confidence })),
   refuted: refuted.map((f) => ({ title: f.title, why: f.verdict.reason })),
   stats: { dimensions: DIMENSIONS.length, raw: raw.length, confirmed: confirmed.length, refuted: refuted.length },

@@ -141,17 +141,37 @@ are_sibling_layers() {
 
 # --- gstack integration utilities ---
 
-# Detect gstack installation path
+# Detect gstack installation path (glob-based — gstack reorganizes; rule glob-over-exact-path).
+# Probes common install roots; no version-era exact path is baked in here.
 # Sets: GSTACK_PATH (empty if not found)
 detect_gstack() {
     GSTACK_PATH=""
-    for p in "$HOME/.claude/skills/gstack" ".claude/skills/gstack"; do
-        if [ -d "$p" ]; then
-            GSTACK_PATH="$p"
-            return 0
-        fi
+    local candidates=()
+    local root
+    for root in "$HOME/.claude/skills" ".claude/skills" "$HOME/.claude/plugins" ".claude/plugins"; do
+        [ -d "$root" ] || continue
+        while IFS= read -r -d '' p; do
+            candidates+=("$p")
+        done < <(find "$root" -maxdepth 2 -type d -name 'gstack*' -print0 2>/dev/null || true)
     done
+    if [ "${#candidates[@]}" -gt 0 ]; then
+        GSTACK_PATH="${candidates[0]}"
+        return 0
+    fi
     return 1
+}
+
+# ONE-CALL gstack detection for skills and hooks (the single detection implementation —
+# SKILL.md files source this via ${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh and call it
+# instead of restating their own probe snippets).
+# Sets: GSTACK_PATH, SLUG (and PROJECT_SLUG), GSTACK_PROJECTS, GSTACK_ANALYTICS.
+# Returns 0 when gstack is present, 1 when absent (graceful degrade — never an error).
+gstack_detect() {
+    detect_gstack || true
+    resolve_project_slug
+    SLUG="$PROJECT_SLUG"
+    resolve_gstack_paths
+    [ -n "$GSTACK_PATH" ]
 }
 
 # Resolve project slug for gstack artifact paths
@@ -178,6 +198,8 @@ resolve_gstack_paths() {
     # Try integration.json first
     if [ -f "$integration_json" ] && command -v jq >/dev/null 2>&1; then
         GSTACK_PROJECTS=$(jq -r '.bridges.design_docs // ""' "$integration_json" 2>/dev/null | sed "s|{SLUG}|${PROJECT_SLUG:-unknown}|g; s|~|$HOME|g")
+        # design_docs is a FILE glob — consumers need the project DIRECTORY
+        case "$GSTACK_PROJECTS" in *\**) GSTACK_PROJECTS=$(dirname "$GSTACK_PROJECTS") ;; esac
         GSTACK_ANALYTICS=$(jq -r '.bridges.analytics // ""' "$integration_json" 2>/dev/null | sed "s|~|$HOME|g")
     fi
 

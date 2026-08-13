@@ -41,8 +41,7 @@ managed execution plan.
    `/spec-to-task` is the clean DOWNSTREAM that turns a spec into a layer-aware exec-plan
    JSON. Probe for any of them (glob — gstack reorganizes; absence = graceful degrade):
    ```bash
-   SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
-   GSTACK_PROJECTS="$HOME/.gstack/projects/$SLUG"
+   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
    if [ -d "$GSTACK_PROJECTS" ]; then
      echo "=== gstack /spec artifacts ===";  ls -lt "$GSTACK_PROJECTS/"*-spec-*.md   2>/dev/null | head -5
      echo "=== gstack Design Docs ===";       ls -lt "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | head -5
@@ -58,7 +57,9 @@ managed execution plan.
    - Test requirements (from Test Plan artifacts)
    - Review findings that should become plan constraints
    - Consensus tables (if /autoplan was used — cross-validated decisions are higher confidence)
-   Incorporate these into the plan as `spec_source` and pre-populate `decisions` array.
+   Incorporate these as `spec_source` (plus `gstack_design_doc` when a design doc was the
+   source — a read-only pointer, never written to) and record extracted decisions in the
+   companion markdown's Decisions table (Step 6).
 3. Analyze the current codebase:
    - Read `CLAUDE.md` for architecture overview and module map
    - Read `docs/ARCHITECTURE.md` for layer model and boundaries
@@ -162,27 +163,31 @@ Plan ID format: `plan-YYYYMMDD-feature-name` (lowercase, hyphens).
 **Schema source of truth**: `templates/execution-plan.json` in the oh-my-agents
 plugin. Read it once, then conform — do not paraphrase from memory.
 
-Required top-level fields:
-- `$schema` = `"execution-plan-v2"`, `id`, `feature`, `status`, `created`, `updated`
-- `spec_source` (issue URL, file, or inline)
-- `gstack_design_doc`, `gstack_test_plan` (if derived via Step 1)
-- `overview` (1–2 sentences)
-- `risks[]` — each `{ id, description, mitigation, status }`
-- `decisions[]` — each `{ id, question, decision, alternatives, rationale }`
-- `test_plan` — `{ unit[], integration[], structural[] }`
+Top-level fields (every one has a named consumer — the template defines nothing else):
+- `$schema` = `"execution-plan-v2"` (consumer: `plan-validation-check.sh` schema GUIDE)
+- `id`, `feature`, `status`, `created`, `updated`, `author`, `pillar`
+- `spec_source` (issue URL, file, or inline; `spec_ref` is its deprecated read-only alias)
+- `gstack_design_doc` (if derived via Step 1 — read-only pointer into `~/.gstack`)
 - `tasks[]` — see below
-- `metrics` — `{ tasks_total, tasks_done, tasks_blocked }`
+- `metrics` — `{ tasks_total, tasks_done, tasks_blocked }`, updated on every task-status
+  change (consumers: plan-completion nudge in `plan-validation-check.sh`, `/lifecycle`)
+- `constraints[]`, `golden_principles[]` (optional)
+
+Overview, risks, decisions, and the test plan are HUMAN-facing content — they live in the
+companion markdown (Step 6), not as top-level JSON fields (zero machine consumers; audited
+2026-08-13).
 
 Each task object (full schema is `templates/execution-plan.json` — conform to it):
 ```
 { id, title, layer, phase, status, files[], depends_on[], acceptance, context_files[], failing_tests[], constraints[], notes }
 ```
 - `status` transitions: `pending` → `in-progress` → `done` (or `blocked` / `skipped`)
-- `acceptance` — explicit pass criterion (verification command or test-name summary)
+- `acceptance` — a RUNNABLE command or named test, never prose (`/verify` runs it;
+  unconfirmed acceptance caps the verify decision at YELLOW — fail-any, no averaging)
 - `failing_tests[]` — tests that must FAIL first (test-first gate; the Evaluator's acceptance)
 - `context_files[]` — files the agent must READ first, no tacit knowledge (distinct from `files`, which it creates/modifies)
 - `constraints[]` — things the agent must NOT do (just as important as requirements)
-- `phase` — dependency phase; tasks in the same phase with no `depends_on` between them are parallelizable (see `planner_metadata.parallelizable_groups`)
+- `phase` — dependency phase; tasks in the same phase with no `depends_on` between them are parallelizable (executors derive parallelism from `phase` + `depends_on` directly)
 
 Layer order (also defines `phase` numbering):
 ```
@@ -204,15 +209,14 @@ Concrete per-layer constraint cheatsheet:
 
 New sessions read the JSON to understand prior work state — this is "shift handoff".
 
-**Typed handoff for native orchestration (optional `planner_metadata`)** — the exec-plan
-IS the Planner artifact in Anthropic's Planner→Generator→Evaluator topology. When a native
-Agent Team or Dynamic Workflow will execute the plan, populate `planner_metadata` (schema in
-`templates/execution-plan.json`): `parallelizable_groups` (task-id sets with no `depends_on`
-between them — one `agent()`/peer per group), `context_budget` (per-task token hint +
-`reset_between_tasks` for context resets over compaction), and `recovery_edges` (which earlier
-task to retry on a later failure — the Evaluator→Generator loop). Per task, prefer
-`context_files` (read-for-context, distinct from `files` to modify) and `failing_tests`
-(the test-first gate). All advisory — executors adapt, oh-my-agents never orchestrates.
+**Typed handoff for native orchestration** — the exec-plan IS the Planner artifact in
+Anthropic's Planner→Generator→Evaluator topology. The per-task fields ARE the handoff:
+`context_files` (read-for-context, distinct from `files` to modify), `failing_tests` (the
+test-first gate), `constraints`, and a runnable `acceptance`. Executors derive parallelism
+from `phase` + `depends_on` at run time, and derive retry targets AT RECOVER TIME from
+`verify-latest.json`'s reason + the task list — no pre-declared failure maps
+(`planner_metadata` was cut 2026-08-13: zero consumers; runtime retry routing belongs to
+native executors). All advisory — executors adapt, oh-my-agents never orchestrates.
 
 ### Step 6: Generate Human-Readable Markdown Summary
 
