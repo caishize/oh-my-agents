@@ -244,6 +244,32 @@ else
     FAIL=$((FAIL + 1)); echo "FAIL: stray gstack detection in: $STRAY"
 fi
 
+# No skill may create or write a `.claude/` path relative to the shell cwd — a build step
+# may have left the session in a subdirectory, and a signal or metric written there is one
+# the Stop hook and /harness-dashboard never find (issue #22, write side).
+TOTAL=$((TOTAL + 1))
+BARE=$(grep -rn "mkdir -p \.claude\|open('\.claude/\|open(\"\.claude/\|>> \.claude/" \
+    "${SCRIPT_DIR}/../skills" 2>/dev/null || true)
+if [ -z "$BARE" ]; then
+    PASS=$((PASS + 1)); echo "PASS: no skill writes a cwd-relative .claude/ path"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: cwd-relative .claude/ write in: $BARE"
+fi
+
+# Every skill that writes into `.claude/` anchors on harness_root() from the shared lib.
+TOTAL=$((TOTAL + 1))
+UNANCHORED=""
+for sk in verify harness-review entropy-sweep legibility-score; do
+    f="${SCRIPT_DIR}/../skills/${sk}/SKILL.md"
+    [ -f "$f" ] || continue
+    grep -q 'harness_root' "$f" || UNANCHORED="${UNANCHORED} ${sk}"
+done
+if [ -z "$UNANCHORED" ]; then
+    PASS=$((PASS + 1)); echo "PASS: signal/metric writers anchor on harness_root()"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: writers not anchored:$UNANCHORED"
+fi
+
 # =============================================
 # Summary
 # =============================================

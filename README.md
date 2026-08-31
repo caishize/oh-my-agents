@@ -90,7 +90,10 @@ last `cd` left the session") and never `$(pwd)`. On empty a hook says so and exi
 check that established nothing must not read as a check that passed. Creating
 `.claude/metrics` follows from *knowing* the root: an existing ledger is always appended to,
 a missing one is created only under an authoritative root, so the ledger cannot fork
-per-directory.
+per-directory. Skills that write into `.claude/` (signals, metrics) anchor on the same
+lib's `harness_root()` for the same reason — a signal written to `backend/.claude/signals/`
+is one no consumer looks for, and under the Gate API's default-deny rule that reads as
+*absent*, not as *OK*.
 
 ## Dynamic Workflows
 

@@ -40,6 +40,7 @@ fi
 git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 REPO_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "")
 [ -z "$REPO_ROOT" ] && exit 0
+REPO_ROOT=$(_canonical_dir "$REPO_ROOT")   # same physical path as PROJECT_DIR, so they compare
 
 # --- Gate-state nudge (advisory; transition mapping source: docs/SIGNALS.md — one
 # mapping, two renderings, never two mappings). Freshness predicate FIRST: a signal
@@ -73,10 +74,23 @@ fi
 # somewhere nobody looks. Name them. Merging them back is the user's call; deleting them is
 # never the answer to "where did the records go".
 LEDGER_WARN=""
-FORKED_LEDGERS=$(find "$REPO_ROOT" -maxdepth 4 \
+FORKED_LEDGERS=""
+FORK_COUNT=0
+while IFS= read -r cand; do
+    [ -z "$cand" ] && continue
+    [ "$cand" = "$PROJECT_DIR/.claude/metrics" ] && continue
+    # A sibling git work tree (.gstack-worktrees/, ~/conductor/workspaces/, a submodule)
+    # owns its OWN ledger — honouring that is the worktree-aware rule, not a fork. Only a
+    # copy inside THIS work tree is one.
+    CAND_TOP=$(git -C "$cand" rev-parse --show-toplevel 2>/dev/null || echo "")
+    [ "$(_canonical_dir "$CAND_TOP")" = "$REPO_ROOT" ] || continue
+    FORKED_LEDGERS="${FORKED_LEDGERS}${cand}
+"
+    FORK_COUNT=$((FORK_COUNT + 1))
+    [ "$FORK_COUNT" -ge 5 ] && break
+done < <(find "$REPO_ROOT" -maxdepth 4 \
     \( -name node_modules -o -name .git -o -name vendor -o -name dist -o -name .next \) -prune -o \
-    -type d -path "*/.claude/metrics" -print 2>/dev/null \
-    | grep -vxF "$PROJECT_DIR/.claude/metrics" | head -5 || true)
+    -type d -path "*/.claude/metrics" -print 2>/dev/null || true)
 if [ -n "$FORKED_LEDGERS" ]; then
     LEDGER_WARN="WARN: metrics ledger is forked — /harness-dashboard reads only ${PROJECT_DIR}/.claude/metrics:"
     while IFS= read -r fork_dir; do

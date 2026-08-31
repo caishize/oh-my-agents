@@ -251,8 +251,9 @@ per-pillar subtotals, timestamp, commit) AND append the same record as one line 
 `.claude/metrics/legibility.jsonl` (trend history — `/harness-dashboard` reads both):
 
 ```bash
-mkdir -p .claude/metrics
-python3 -c "import json,subprocess,datetime; s={'score':TOTAL,'pillars':{'arch':A,'docs':D,'observ':O},'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}; open('.claude/metrics/legibility-latest.json','w').write(json.dumps(s)); open('.claude/metrics/legibility.jsonl','a').write(json.dumps(s)+'\n')"
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
+mkdir -p "$ROOT/.claude/metrics"
+python3 -c "import json,subprocess,datetime,sys; R=sys.argv[1]; s={'score':TOTAL,'pillars':{'arch':A,'docs':D,'observ':O},'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','-C',R,'rev-parse','HEAD'],text=True).strip()}; open(R+'/.claude/metrics/legibility-latest.json','w').write(json.dumps(s)); open(R+'/.claude/metrics/legibility.jsonl','a').write(json.dumps(s)+'\n')" "$ROOT"
 ```
 
 Present the score card, then list the **top 3 improvements** ranked by impact.

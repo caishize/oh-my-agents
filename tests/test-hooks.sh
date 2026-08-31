@@ -638,6 +638,49 @@ assert_output "doc-drift: names a forked metrics ledger" \
 
 rm -rf "$MONO"
 
+# --- the fork detector must not cry wolf: two ways the root reads as "not itself" ---
+
+# (a) A root reached through a symlink must still compare equal to the git toplevel,
+#     or the hook reports the project's OWN ledger and tells you to delete it.
+SYM=$(mktemp -d)
+mkdir -p "$SYM/real"
+git init -q "$SYM/real"
+mkdir -p "$SYM/real/.claude/metrics"
+printf 'a\n' > "$SYM/real/f.txt"
+GIT_Q -C "$SYM/real" add -A >/dev/null 2>&1
+GIT_Q -C "$SYM/real" commit -q -m init >/dev/null 2>&1
+ln -s "$SYM/real" "$SYM/link"
+TOTAL=$((TOTAL + 1))
+SYM_OUT=$(CLAUDE_PROJECT_DIR="$SYM/link" bash -c "printf '%s' '{\"hook_event_name\":\"Stop\"}' | bash '$HOOKS_DIR/doc-drift-check.sh'" 2>&1 || true)
+if echo "$SYM_OUT" | grep -q "ledger is forked"; then
+    FAIL=$((FAIL + 1)); echo "FAIL: doc-drift: symlinked root reported as its own fork"
+else
+    PASS=$((PASS + 1)); echo "PASS: doc-drift: a symlinked root is not reported as its own fork"
+fi
+rm -rf "$SYM"
+
+# (b) A sibling git work tree owns its own ledger — worktree-aware, never cross-fire.
+WT=$(mktemp -d)
+git init -q "$WT"
+mkdir -p "$WT/.claude/metrics"
+printf 'a\n' > "$WT/f.txt"
+GIT_Q -C "$WT" add -A >/dev/null 2>&1
+GIT_Q -C "$WT" commit -q -m init >/dev/null 2>&1
+GIT_Q -C "$WT" worktree add -q "$WT/.gstack-worktrees/feat-x" -b feat-x >/dev/null 2>&1 || true
+mkdir -p "$WT/.gstack-worktrees/feat-x/.claude/metrics"
+assert_output "doc-drift: a sibling work tree's ledger is not a fork" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$WT\"}" \
+    "ledger is forked" "no"
+
+# ...but a copy inside THIS work tree still is.
+mkdir -p "$WT/sub/.claude/metrics"
+assert_output "doc-drift: a same-work-tree copy is still reported" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$WT\"}" \
+    "sub/.claude/metrics" "yes"
+rm -rf "$WT"
+
 # --- find_project_root / find_build_root: the two roots are not the same question ---
 ROOTS=$(mktemp -d)
 git init -q "$ROOTS"

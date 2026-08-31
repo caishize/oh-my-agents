@@ -275,8 +275,9 @@ derived from OUR four pillars; gstack's verdict is advisory (full rule: docs/SIG
 - Never aggregate, never rewrite our decision mechanically, never write gstack paths.
 
 ```bash
-mkdir -p .claude/signals
-COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
+mkdir -p "$ROOT/.claude/signals"
+COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
 # Compute fields above, then write JSON (include "commit": "$COMMIT"). Use python3 / jq /
 # printf to ensure valid escaping; do NOT use unquoted heredocs with literal placeholders.
 ```

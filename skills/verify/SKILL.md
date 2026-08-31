@@ -124,10 +124,11 @@ Decision from the check results:
 - **RED** — any in-scope check FAILED
 
 ```bash
-mkdir -p .claude/signals .claude/metrics
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
+mkdir -p "$ROOT/.claude/signals" "$ROOT/.claude/metrics"
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
-BRANCH=$(git branch --show-current 2>/dev/null || echo unknown)
-COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
+BRANCH=$(git -C "$ROOT" branch --show-current 2>/dev/null || echo unknown)
+COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
 # Compute DECISION (GREEN|YELLOW|RED), per-check LINT/BUILD/TEST/ARCH (PASS|FAIL|WARN|SKIP),
 # PLAN_ID (from --plan or auto-detected, else null), and REASON (≤120 chars).
 # first_pass = true when no prior RED exists for this plan/branch in verify.jsonl
@@ -136,7 +137,10 @@ COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate
 # unquoted heredoc with literal placeholders. Include "commit": "$COMMIT".
 ```
 
-**Canonical signal** — `.claude/signals/verify-latest.json` (latest only, ≤500 bytes).
+**Canonical signal** — `$ROOT/.claude/signals/verify-latest.json` (latest only, ≤500 bytes).
+`$ROOT` is the project root, not the shell cwd: a build step may have left you in
+`backend/`, and a signal written there is one the Stop hook and `/lifecycle` never find
+— downstream, indistinguishable from no signal at all.
 The full schema lives in **docs/SIGNALS.md — do not restate it**. Verify-specific notes:
 `scope` mirrors `$ARGUMENTS`; `first_pass` is computed from `verify.jsonl` history;
 `commit` = HEAD at derivation time (freshness predicate); `reason` names the first

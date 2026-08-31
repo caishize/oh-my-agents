@@ -21,6 +21,7 @@
 #   find_project_root <path> — walk up to a VCS/.claude/build marker
 #   find_build_root <path> — walk up to the nearest build manifest (monorepo package dir)
 #   resolve_metrics_dir <root> <source> — SETS METRICS_DIR; creates only under env|git roots
+#   harness_root        — project root for SKILL.md snippets (no hook stdin); echoes "." last
 
 # --- Input ---
 
@@ -103,6 +104,24 @@ get_cwd() {
 PROJECT_DIR="${PROJECT_DIR:-}"
 PROJECT_DIR_SOURCE="${PROJECT_DIR_SOURCE:-}"
 
+# Resolve a directory to its physical path. Roots reached by different routes
+# ($CLAUDE_PROJECT_DIR through a symlink vs. `git rev-parse` through the real path) must
+# compare equal, or the same directory reads as two — which would make a hook report the
+# project's own ledger as a stray copy. Always succeeds; echoes the input on failure.
+_canonical_dir() {
+    local d="${1:-}"
+    if [ -z "$d" ]; then
+        echo ""
+        return 0
+    fi
+    ( cd "$d" 2>/dev/null && pwd -P ) || echo "${d%/}"
+}
+
+_set_project_dir() {
+    PROJECT_DIR=$(_canonical_dir "$1")
+    PROJECT_DIR_SOURCE="$2"
+}
+
 # Walk up from <path> (file or directory) to the nearest project-root marker.
 # VCS and harness markers outrank build manifests: in a monorepo `backend/pyproject.toml`
 # marks a package, not the project. Echoes the directory, or empty when nothing matches.
@@ -174,8 +193,7 @@ get_project_dir() {
     PROJECT_DIR_SOURCE=""
 
     if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
-        PROJECT_DIR="${CLAUDE_PROJECT_DIR%/}"
-        PROJECT_DIR_SOURCE="env"
+        _set_project_dir "$CLAUDE_PROJECT_DIR" "env"
         return 0
     fi
 
@@ -184,8 +202,7 @@ get_project_dir() {
     if [ -n "$cwd" ] && [ -d "$cwd" ]; then
         top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || echo "")
         if [ -n "$top" ] && [ -d "$top" ]; then
-            PROJECT_DIR="${top%/}"
-            PROJECT_DIR_SOURCE="git"
+            _set_project_dir "$top" "git"
             return 0
         fi
     fi
@@ -195,14 +212,13 @@ get_project_dir() {
     if [ -n "$hint" ]; then
         top=$(find_project_root "$hint" || echo "")
         if [ -n "$top" ]; then
-            PROJECT_DIR="${top%/}"
             # A VCS root found by the walk is the same fact `git rev-parse` reports, just
             # reached from the file instead of from cwd — authoritative. A bare build
             # manifest is not: in a monorepo it marks a package, so it stays DERIVED.
-            if [ -e "${PROJECT_DIR}/.git" ] || [ -d "${PROJECT_DIR}/.hg" ] || [ -d "${PROJECT_DIR}/.svn" ]; then
-                PROJECT_DIR_SOURCE="git"
+            if [ -e "${top}/.git" ] || [ -d "${top}/.hg" ] || [ -d "${top}/.svn" ]; then
+                _set_project_dir "$top" "git"
             else
-                PROJECT_DIR_SOURCE="marker"
+                _set_project_dir "$top" "marker"
             fi
             return 0
         fi
@@ -237,10 +253,13 @@ resolve_metrics_dir() {
     return 0
 }
 
-# Base directory for repo-local probes (`.claude/skills`, `.claude/integration.json`).
-# A bare relative path resolves against the hook process's cwd — the same
-# "wherever the last cd left us" bug in miniature. Prefer an already-resolved root.
-_project_base() {
+# The project root for callers that have no hook stdin — SKILL.md snippets, and the
+# repo-local probes below (`.claude/skills`, `.claude/integration.json`). Same order as
+# get_project_dir minus the hook-input tier: an already-resolved $PROJECT_DIR, then
+# $CLAUDE_PROJECT_DIR, then the git toplevel of the process cwd, then ".". A bare relative
+# `.claude/...` path would resolve against "wherever the last cd left us" — the same bug in
+# miniature, and the reason every skill that writes into `.claude/` anchors on this.
+harness_root() {
     if [ -n "${PROJECT_DIR:-}" ] && [ -d "${PROJECT_DIR}" ]; then
         echo "${PROJECT_DIR%/}"
         return 0
@@ -331,7 +350,7 @@ detect_gstack() {
     local candidates=()
     local root
     local base
-    base=$(_project_base)
+    base=$(harness_root)
     for root in "$HOME/.claude/skills" "${base}/.claude/skills" "$HOME/.claude/plugins" "${base}/.claude/plugins"; do
         [ -d "$root" ] || continue
         while IFS= read -r -d '' p; do
@@ -367,7 +386,7 @@ resolve_project_slug() {
         PROJECT_SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null || echo "")
     fi
     if [ -z "$PROJECT_SLUG" ]; then
-        PROJECT_SLUG=$(basename "$(git -C "$(_project_base)" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+        PROJECT_SLUG=$(basename "$(git -C "$(harness_root)" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
     fi
 }
 
@@ -376,7 +395,7 @@ resolve_project_slug() {
 # Sets: GSTACK_PROJECTS, GSTACK_ANALYTICS
 resolve_gstack_paths() {
     local integration_json
-    integration_json="$(_project_base)/.claude/integration.json"
+    integration_json="$(harness_root)/.claude/integration.json"
     GSTACK_PROJECTS=""
     GSTACK_ANALYTICS=""
 

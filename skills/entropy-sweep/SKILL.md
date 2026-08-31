@@ -249,8 +249,9 @@ counts per category, timestamp, commit) AND append the same record as one line t
 `.claude/metrics/entropy.jsonl` (trend history — `/harness-dashboard` reads both):
 
 ```bash
-mkdir -p .claude/metrics
-python3 -c "import json,subprocess,datetime; s={'findings':{'slop':N1,'docs':N2,'arch':N3,'dead':N4,'enforcement':N5,'plans':N6,'claude_md':N7},'total':T,'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}; open('.claude/metrics/entropy-latest.json','w').write(json.dumps(s)); open('.claude/metrics/entropy.jsonl','a').write(json.dumps(s)+'\n')"
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
+mkdir -p "$ROOT/.claude/metrics"
+python3 -c "import json,subprocess,datetime,sys; R=sys.argv[1]; s={'findings':{'slop':N1,'docs':N2,'arch':N3,'dead':N4,'enforcement':N5,'plans':N6,'claude_md':N7},'total':T,'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','-C',R,'rev-parse','HEAD'],text=True).strip()}; open(R+'/.claude/metrics/entropy-latest.json','w').write(json.dumps(s)); open(R+'/.claude/metrics/entropy.jsonl','a').write(json.dumps(s)+'\n')" "$ROOT"
 ```
 
 ## Rules
