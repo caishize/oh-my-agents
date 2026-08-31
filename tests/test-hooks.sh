@@ -11,6 +11,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOKS_DIR="${SCRIPT_DIR}/../hooks"
 
+# Tier 1 of get_project_dir reads $CLAUDE_PROJECT_DIR. Under a real session it is set to
+# THIS repo, which would win for every fixture below. Unset it; the tier-1 test sets it
+# explicitly for the one case that asserts its precedence.
+unset CLAUDE_PROJECT_DIR
+
+GIT_Q() { git -c user.email=t@t -c user.name=t "$@"; }
+
+assert_true() {
+    local name="$1"; shift
+    TOTAL=$((TOTAL + 1))
+    if "$@"; then
+        PASS=$((PASS + 1)); echo "PASS: $name"
+    else
+        FAIL=$((FAIL + 1)); echo "FAIL: $name"
+    fi
+}
+
 PASS=0
 FAIL=0
 TOTAL=0
@@ -511,7 +528,8 @@ fi
 echo "--- self-verify-check.sh metrics event ---"
 
 SV_TMP=$(mktemp -d)
-printf '{}' > "$SV_TMP/package.json"   # project-root marker
+git init -q "$SV_TMP"                  # authoritative root — a build manifest alone is not
+printf '{}' > "$SV_TMP/package.json"   # build-root marker (find_build_root)
 printf 'def broken(:\n' > "$SV_TMP/bad.py"
 printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$SV_TMP/bad.py\"}}" \
     | bash "$HOOKS_DIR/self-verify-check.sh" >/dev/null 2>&1 || true
@@ -528,6 +546,165 @@ run_test "self-verify: exit 0 unchanged on triggered warning" \
     "self-verify-check.sh" \
     '{"tool_name":"Write","tool_input":{"file_path":"/nonexistent/x.py"}}' \
     0
+
+
+# =============================================
+# Project-root addressing (issue #22)
+#
+# The bug: hooks took the hook input's .cwd as the project root. Claude Code's Bash tool
+# keeps cwd across calls, so one `cd backend && pytest` left every later hook believing the
+# root was backend/. Two consequences, both silent: the metrics ledger forked per directory,
+# and doc-drift compared repo-root-relative git output against cwd-relative paths, so its
+# checks could never match while still exiting 0.
+# =============================================
+
+echo "--- project-root addressing ---"
+
+# One monorepo fixture, shaped like the report: root .git, backend/pyproject.toml.
+MONO=$(mktemp -d)
+git init -q "$MONO"
+mkdir -p "$MONO/backend/src/api" "$MONO/frontend/lib" "$MONO/.claude/metrics"
+printf '[project]\nname = "be"\n' > "$MONO/backend/pyproject.toml"
+printf '{}\n' > "$MONO/frontend/package.json"
+printf '# backend\n' > "$MONO/backend/CLAUDE.md"
+printf 'x = 1\n' > "$MONO/backend/src/api/handler.py"
+for i in 1 2 3 4 5; do printf 'export const a%s = %s\n' "$i" "$i" > "$MONO/frontend/lib/m$i.js"; done
+GIT_Q -C "$MONO" add -A >/dev/null 2>&1
+GIT_Q -C "$MONO" commit -q -m init >/dev/null 2>&1
+
+# --- session-metrics: one ledger, at the repo root, even when cwd is a package dir ---
+printf '%s' "{\"tool_name\":\"Edit\",\"cwd\":\"$MONO/backend\",\"tool_input\":{\"file_path\":\"$MONO/backend/src/api/handler.py\"}}" \
+    | bash "$HOOKS_DIR/session-metrics.sh" >/dev/null 2>&1 || true
+
+assert_true "session-metrics: records land in the ROOT ledger (cwd was backend/)" \
+    bash -c "ls '$MONO/.claude/metrics/'session-*.jsonl >/dev/null 2>&1"
+assert_true "session-metrics: no forked ledger created under backend/" \
+    bash -c "[ ! -d '$MONO/backend/.claude' ]"
+
+# --- session-metrics: a Bash call with no file_path (the leg that created the fork) ---
+printf '%s' "{\"tool_name\":\"Bash\",\"cwd\":\"$MONO/frontend\",\"tool_input\":{\"command\":\"ls\"}}" \
+    | bash "$HOOKS_DIR/session-metrics.sh" >/dev/null 2>&1 || true
+assert_true "session-metrics: Bash-leg does not fork the ledger under frontend/" \
+    bash -c "[ ! -d '$MONO/frontend/.claude' ]"
+
+# --- session-metrics: a DERIVED root may not invent a .claude/ home ---
+LOOSE=$(mktemp -d)
+mkdir -p "$LOOSE/pkg"
+printf '{}\n' > "$LOOSE/pkg/package.json"
+printf 'const x = 1\n' > "$LOOSE/pkg/a.js"
+printf '%s' "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$LOOSE/pkg/a.js\"}}" \
+    | bash "$HOOKS_DIR/session-metrics.sh" >/dev/null 2>&1 || true
+assert_true "session-metrics: derived root (build manifest only) creates no .claude/" \
+    bash -c "[ ! -d '$LOOSE/pkg/.claude' ]"
+rm -rf "$LOOSE"
+
+# --- \$CLAUDE_PROJECT_DIR outranks a git toplevel (tier 1) ---
+ENVROOT=$(mktemp -d)
+mkdir -p "$ENVROOT/.claude"
+CLAUDE_PROJECT_DIR="$ENVROOT" bash -c "printf '%s' '{\"tool_name\":\"Edit\",\"cwd\":\"$MONO/backend\",\"tool_input\":{\"file_path\":\"$MONO/backend/src/api/handler.py\"}}' | bash '$HOOKS_DIR/session-metrics.sh'" >/dev/null 2>&1 || true
+assert_true "get_project_dir: \$CLAUDE_PROJECT_DIR wins over the git toplevel" \
+    bash -c "ls '$ENVROOT/.claude/metrics/'session-*.jsonl >/dev/null 2>&1"
+rm -rf "$ENVROOT"
+
+# --- doc-drift: the checks that used to be silently unreachable from a subdirectory ---
+printf 'x = 2\n' > "$MONO/backend/src/api/handler.py"      # modified, tracked
+mkdir -p "$MONO/newmod"
+for i in 1 2 3 4 5; do printf 'v = %s\n' "$i" > "$MONO/newmod/f$i.py"; done
+GIT_Q -C "$MONO" add -A >/dev/null 2>&1
+
+assert_output "doc-drift: check 4 fires for a nested CLAUDE.md when cwd is a subdir" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$MONO/backend\"}" \
+    "Source files changed under 'backend/'" "yes"
+
+assert_output "doc-drift: check 6 counts files under the REPO root, not cwd" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$MONO/backend\"}" \
+    "Directory 'newmod/' has 5 files but no CLAUDE.md" "yes"
+
+# --- doc-drift: an unresolvable root is stated, not passed off as a clean run ---
+assert_output "doc-drift: says so when the project root is unresolved" \
+    "doc-drift-check.sh" \
+    '{"hook_event_name":"Stop"}' \
+    "project root unresolved" "yes"
+
+# --- doc-drift: forked ledgers left by earlier versions are named, not left invisible ---
+mkdir -p "$MONO/backend/.claude/metrics"
+printf '{"ts":"2026-08-23T00:00:00Z","tool":"Edit"}\n' > "$MONO/backend/.claude/metrics/session-2026-08-23.jsonl"
+assert_output "doc-drift: names a forked metrics ledger" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$MONO/backend\"}" \
+    "metrics ledger is forked" "yes"
+
+rm -rf "$MONO"
+
+# --- the fork detector must not cry wolf: two ways the root reads as "not itself" ---
+
+# (a) A root reached through a symlink must still compare equal to the git toplevel,
+#     or the hook reports the project's OWN ledger and tells you to delete it.
+SYM=$(mktemp -d)
+mkdir -p "$SYM/real"
+git init -q "$SYM/real"
+mkdir -p "$SYM/real/.claude/metrics"
+printf 'a\n' > "$SYM/real/f.txt"
+GIT_Q -C "$SYM/real" add -A >/dev/null 2>&1
+GIT_Q -C "$SYM/real" commit -q -m init >/dev/null 2>&1
+ln -s "$SYM/real" "$SYM/link"
+TOTAL=$((TOTAL + 1))
+SYM_OUT=$(CLAUDE_PROJECT_DIR="$SYM/link" bash -c "printf '%s' '{\"hook_event_name\":\"Stop\"}' | bash '$HOOKS_DIR/doc-drift-check.sh'" 2>&1 || true)
+if echo "$SYM_OUT" | grep -q "ledger is forked"; then
+    FAIL=$((FAIL + 1)); echo "FAIL: doc-drift: symlinked root reported as its own fork"
+else
+    PASS=$((PASS + 1)); echo "PASS: doc-drift: a symlinked root is not reported as its own fork"
+fi
+rm -rf "$SYM"
+
+# (b) A sibling git work tree owns its own ledger — worktree-aware, never cross-fire.
+WT=$(mktemp -d)
+git init -q "$WT"
+mkdir -p "$WT/.claude/metrics"
+printf 'a\n' > "$WT/f.txt"
+GIT_Q -C "$WT" add -A >/dev/null 2>&1
+GIT_Q -C "$WT" commit -q -m init >/dev/null 2>&1
+GIT_Q -C "$WT" worktree add -q "$WT/.gstack-worktrees/feat-x" -b feat-x >/dev/null 2>&1 || true
+mkdir -p "$WT/.gstack-worktrees/feat-x/.claude/metrics"
+assert_output "doc-drift: a sibling work tree's ledger is not a fork" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$WT\"}" \
+    "ledger is forked" "no"
+
+# ...but a copy inside THIS work tree still is.
+mkdir -p "$WT/sub/.claude/metrics"
+assert_output "doc-drift: a same-work-tree copy is still reported" \
+    "doc-drift-check.sh" \
+    "{\"hook_event_name\":\"Stop\",\"cwd\":\"$WT\"}" \
+    "sub/.claude/metrics" "yes"
+rm -rf "$WT"
+
+# --- find_project_root / find_build_root: the two roots are not the same question ---
+ROOTS=$(mktemp -d)
+git init -q "$ROOTS"
+mkdir -p "$ROOTS/backend/src"
+printf '[project]\n' > "$ROOTS/backend/pyproject.toml"
+printf 'x = 1\n' > "$ROOTS/backend/src/a.py"
+# shellcheck disable=SC1090
+( set +u; source "$HOOKS_DIR/lib/common.sh"
+  [ "$(find_project_root "$ROOTS/backend/src/a.py")" = "$ROOTS" ] ) \
+    && ROOT_OK=0 || ROOT_OK=1
+assert_true "find_project_root: repo root beats a package build manifest" \
+    bash -c "[ '$ROOT_OK' = '0' ]"
+( set +u; source "$HOOKS_DIR/lib/common.sh"
+  [ "$(find_build_root "$ROOTS/backend/src/a.py")" = "$ROOTS/backend" ] ) \
+    && BUILD_OK=0 || BUILD_OK=1
+assert_true "find_build_root: nearest build manifest, i.e. the package dir" \
+    bash -c "[ '$BUILD_OK' = '0' ]"
+rm -rf "$ROOTS"
+
+# --- no hook may fall back to \$(pwd), and \$CLAUDE_PROJECT_DIR must be honoured somewhere ---
+assert_true "hooks: no PROJECT_DIR=\$(pwd) guess remains" \
+    bash -c "! grep -rn 'PROJECT_DIR=\"\\\$(pwd)\"' '$HOOKS_DIR'"
+assert_true "hooks: \$CLAUDE_PROJECT_DIR is consulted" \
+    bash -c "grep -rq 'CLAUDE_PROJECT_DIR' '$HOOKS_DIR/lib/common.sh'"
 
 # =============================================
 # Summary

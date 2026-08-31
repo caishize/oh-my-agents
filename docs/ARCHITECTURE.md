@@ -159,7 +159,8 @@ agents/                                   # Read-only background subagent (1 age
                                           #  doc-drift-check hook + entropy-sweep)
 hooks/                                    # Event hook scripts (7 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
-├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution)
+├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution,
+│                                         #  project-root addressing: get_project_dir)
 ├── arch-check.sh                         # PreToolUse (Edit|Write): layer boundary check
 ├── safety-check.sh                       # PreToolUse (Edit|Write): hardcoded secrets detection
 ├── plan-validation-check.sh             # PreToolUse (Edit|Write): exec-plan handoff GUIDE (advisory)
@@ -206,6 +207,38 @@ This plugin leverages specific Claude Code capabilities:
 | Dynamic Workflows (`.claude/workflows/`) | `harness-audit.js` (1 shipped; rule `single-workflow`) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it) |
 
 ## Design Decisions
+
+### Hook addressing: the project root is resolved, never assumed
+
+A hook's stdin carries `.cwd`, but Claude Code's Bash tool keeps cwd across calls by design,
+so `.cwd` means "wherever the last `cd` left the session" — in a monorepo, one
+`cd backend && pytest` and it is `backend/` for the rest of the session. Taking it as the
+project root failed twice over, both times silently: the metrics ledger forked per directory
+(records intact, but not where `/harness-dashboard` reads), and `doc-drift-check` compared
+repo-root-relative `git diff` output against cwd-relative paths, so those comparisons could
+never match while the hook still exited 0.
+
+`get_project_dir()` (`hooks/lib/common.sh`) is the single addressing order:
+
+| Tier | Source | `PROJECT_DIR_SOURCE` | Authoritative |
+|------|--------|----------------------|---------------|
+| 1 | `$CLAUDE_PROJECT_DIR` | `env` | yes |
+| 2 | git toplevel of `.cwd` | `git` | yes |
+| 3 | walk up from the edited file to a VCS root | `git` | yes |
+| 3 | walk up to `.claude/` or a build manifest | `marker` | no |
+| 4 | nothing | `""` | — (caller exits 0 **and says so**) |
+
+Two rules follow. **Creation is a consequence of knowing the root**: `resolve_metrics_dir`
+appends to an existing ledger anywhere, but creates a missing one only under an
+authoritative root — a build manifest marks a monorepo *package*, not a project, so it never
+earns a new `.claude/`. **One path system**: every path comparison is repo-root-relative,
+the shape `git -C ROOT diff --name-only` natively emits. `doc-drift-check` therefore keeps
+`PROJECT_DIR` (harness root — `.claude/signals`, `.claude/metrics`) and `REPO_ROOT` (git
+toplevel — every scan and comparison) as separate names, and never mixes them in one test.
+
+The build root is a different question and keeps its own helper: `find_build_root()` returns
+the nearest build manifest, because `tsc`/`cargo` must run in `backend/`, exactly where the
+ledger must not.
 
 ### Skills vs Agents for the same concern
 

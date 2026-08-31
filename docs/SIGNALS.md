@@ -39,6 +39,12 @@ So they are promoted to a versioned **Gate API** consumed by:
    verbose report lives in the matching `.claude/metrics/*.jsonl` history log.
 5. **Atomic-ish write.** Write the signal even on early exit. Producers compute fields
    with `python3`/`jq`/`printf` (correct escaping) — never an unquoted heredoc.
+5b. **Rooted at the project root, never the shell cwd.** Every path in this document is
+   relative to the project root. Producers and consumers resolve it explicitly —
+   `ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)` — because a
+   build or test step may have left the session in a subdirectory. A signal written to
+   `backend/.claude/signals/` is one no consumer looks for, and under rule 2 that reads as
+   *absent* ⇒ blocking. Silent, and indistinguishable from a signal that said OK.
 6. **Accountable-writer.** A signal must be written by the entity that *derived* the verdict
    (the `/verify` / `/harness-review` run, or a human). A relay agent handed a decision it did
    not itself compute must NOT write it — the safety classifier correctly treats that as a
@@ -176,10 +182,12 @@ convention: the accountable human (or their project harness config) runs this be
 invoking `/ship`:
 
 ```bash
-jq -e --arg head "$(git rev-parse HEAD)" \
-  'select(.decision=="GREEN" and (.commit // $head)==$head)' .claude/signals/verify-latest.json >/dev/null \
-&& jq -e --arg head "$(git rev-parse HEAD)" \
-  'select(.decision=="APPROVE" and (.commit // $head)==$head)' .claude/signals/review-latest.json >/dev/null \
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # rule 5b
+HEAD_SHA=$(git -C "$ROOT" rev-parse HEAD)
+jq -e --arg head "$HEAD_SHA" \
+  'select(.decision=="GREEN" and (.commit // $head)==$head)' "$ROOT/.claude/signals/verify-latest.json" >/dev/null \
+&& jq -e --arg head "$HEAD_SHA" \
+  'select(.decision=="APPROVE" and (.commit // $head)==$head)' "$ROOT/.claude/signals/review-latest.json" >/dev/null \
 && echo "SHIP GATE: pass" || echo "SHIP GATE: blocked (stale/missing/blocking signal)"
 ```
 
@@ -192,16 +200,18 @@ stamp the persisted signal is stale-by-definition under the freshness predicate)
 provenance:
 
 ```bash
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # rule 5b
 python3 -c '
 import json, subprocess, sys, datetime
 sig = json.load(open(sys.argv[1]))          # the returned object, saved to a file
+root = sys.argv[2]
 sig.pop("_persistence", None)
 sig["timestamp"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-sig["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+sig["commit"] = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
 sig["reason"] = ("source:harness-audit " + sig.get("reason", ""))[:120]
-open(".claude/signals/review-latest.json", "w").write(json.dumps(sig))
-open(".claude/metrics/reviews.jsonl", "a").write(json.dumps(sig) + "\n")
-' /path/to/returned-signal.json
+open(root + "/.claude/signals/review-latest.json", "w").write(json.dumps(sig))
+open(root + "/.claude/metrics/reviews.jsonl", "a").write(json.dumps(sig) + "\n")
+' /path/to/returned-signal.json "$ROOT"
 ```
 
 ## Versioning policy

@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Harness-engineering toolkit for Claude Code — skills, agents, and hooks implementing OpenAI's methodology for AI-native development, composed with gstack (v1.46+; reconciles its v1.57.5+ verdict layer read-only) for delivery workflow (read-only sensors; never orchestrates). Emits a versioned decision-signal Gate API for Dynamic Workflows + Agent Teams.",
-    "version": "3.9.0"
+    "version": "3.9.1"
   },
   "plugins": [
     {
       "name": "oh-my-agents",
       "source": "./",
       "description": "Lean harness-engineering plugin: four pillars (architecture guardrails, documentation as system of record, observability & legibility, entropy management) enforced as repo-local mechanical constraints. Composes with gstack (v1.46+; reconciles its v1.57.5+ verdict layer read-only) for delivery — never orchestrates. Emits a versioned verify/review decision-signal Gate API (docs/SIGNALS.md) that Dynamic Workflows, Agent Teams, and the pre-ship convention check gate on; coordination ceded to the platform.",
-      "version": "3.9.0",
+      "version": "3.9.1",
       "keywords": ["harness-engineering", "ai-coding", "code-review", "architecture", "gstack-integration", "composition", "decision-signal", "gate-api", "dynamic-workflows", "agent-teams"],
       "category": "productivity"
     }

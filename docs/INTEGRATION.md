@@ -128,7 +128,7 @@ See `.claude/integration.json` for the canonical list.
 | conductor (v0.16+) | Multi-session state | `conductor.json` | /verify, hooks (worktree-aware) |
 | worktrees | Parallel sprint dirs | `.gstack-worktrees/` | /verify, hooks (scope guard) |
 | /investigate | Root cause | Session context | /encode-mistake |
-| session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` | /harness-dashboard, /retro |
+| session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` (project root; one ledger) | /harness-dashboard, /retro |
 | Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | RESERVED/INACTIVE — no producer observed; upstream probed at contract check; hard-delete if probe confirms sunset |
 | gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | /harness-dashboard |
 | gstack analytics | Eureka moments | `~/.gstack/analytics/eureka.jsonl` | /harness-dashboard |
@@ -255,7 +255,7 @@ defers cross-cutting concerns that gstack already owns.
 
 ## Anti-Bloat Constraints
 
-*Hard rules (current through v3.9.0). Stable anchor — linked from CLAUDE.md.*
+*Hard rules (current through v3.9.1). Stable anchor — linked from CLAUDE.md.*
 ***Cite rules by their kebab-case NAME*** *(renumber-proof — numbers below are layout,
 not identity; a "rule N" citation anywhere is drift).*
 

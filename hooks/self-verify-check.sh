@@ -29,19 +29,14 @@ if [ -z "$FILE_PATH" ] || [ ! -f "$FILE_PATH" ]; then
     exit 0
 fi
 
-# --- Determine project root ---
-PROJECT_DIR=""
-SEARCH_DIR=$(dirname "$FILE_PATH")
-while [ "$SEARCH_DIR" != "/" ] && [ "$SEARCH_DIR" != "." ]; do
-    if [ -f "${SEARCH_DIR}/package.json" ] || [ -f "${SEARCH_DIR}/tsconfig.json" ] || \
-       [ -f "${SEARCH_DIR}/pyproject.toml" ] || [ -f "${SEARCH_DIR}/Cargo.toml" ]; then
-        PROJECT_DIR="$SEARCH_DIR"
-        break
-    fi
-    SEARCH_DIR=$(dirname "$SEARCH_DIR")
-done
+# --- Determine the BUILD root (not the project root) ---
+# A type-check or compile has to run where the manifest is: for backend/src/x.py in a
+# monorepo that is backend/, not the repo. This is deliberately NOT the project root —
+# the ledger write further down uses get_project_dir, because a per-package ledger is
+# exactly the fork this hook must not create.
+BUILD_DIR=$(find_build_root "$FILE_PATH" || true)
 
-if [ -z "$PROJECT_DIR" ]; then
+if [ -z "$BUILD_DIR" ]; then
     exit 0
 fi
 
@@ -64,8 +59,8 @@ WARNINGS=""
 
 case "$FILE_PATH" in
     *.ts|*.tsx)
-        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${PROJECT_DIR}/tsconfig.json" ]; then
-            TSC_OUTPUT=$(cd "$PROJECT_DIR" && timeout 8 npx --no-install tsc --noEmit --pretty false 2>&1 | head -5 || true)
+        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${BUILD_DIR}/tsconfig.json" ]; then
+            TSC_OUTPUT=$(cd "$BUILD_DIR" && timeout 8 npx --no-install tsc --noEmit --pretty false 2>&1 | head -5 || true)
             if echo "$TSC_OUTPUT" | grep -qE "error TS[0-9]+" 2>/dev/null; then
                 ERROR_COUNT=$(echo "$TSC_OUTPUT" | grep -cE "error TS[0-9]+" 2>/dev/null || echo "0")
                 FIRST_ERROR=$(echo "$TSC_OUTPUT" | grep -E "error TS[0-9]+" | head -1 | sed 's/^[[:space:]]*//')
@@ -96,8 +91,8 @@ case "$FILE_PATH" in
         fi
         ;;
     *.rs)
-        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${PROJECT_DIR}/Cargo.toml" ]; then
-            RS_OUTPUT=$(cd "$PROJECT_DIR" && timeout 15 cargo check --message-format=short 2>&1 | grep "^error" | head -3 || true)
+        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${BUILD_DIR}/Cargo.toml" ]; then
+            RS_OUTPUT=$(cd "$BUILD_DIR" && timeout 15 cargo check --message-format=short 2>&1 | grep "^error" | head -3 || true)
             if [ -n "$RS_OUTPUT" ]; then
                 WARNINGS="Self-verify: Rust compilation errors detected after edit.\n"
                 WARNINGS="${WARNINGS}  ${RS_OUTPUT}\n"
@@ -127,8 +122,9 @@ if [ -n "$WARNINGS" ]; then
     # Passive overlap measurement (v3.9.0): append one structured event to the existing
     # session metrics stream so the Q4 council can diff these warnings against what
     # native post-edit diagnostics surfaced in the same sessions. No new file, no flag.
-    METRICS_DIR="${PROJECT_DIR}/.claude/metrics"
-    if [ -d "$METRICS_DIR" ] || mkdir -p "$METRICS_DIR" 2>/dev/null; then
+    # ONE ledger per project: address off the project root, never off the build root.
+    # Writing to "${BUILD_DIR}/.claude/metrics" is what forked the ledger per package.
+    if get_project_dir "$FILE_PATH" && resolve_metrics_dir "$PROJECT_DIR" "$PROJECT_DIR_SOURCE"; then
         ISSUE_CLASS=$(printf '%s' "$WARNINGS" | head -1 | tr -d '"\\' | cut -c1-80)
         printf '{"ts":"%s","hook":"self-verify-check","file":"%s","issue_class":"%s"}\n' \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \

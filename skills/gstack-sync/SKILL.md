@@ -109,7 +109,8 @@ hand-rolled skill enumeration. It is gstack's authoritative index of skills/comm
 
 ```bash
 # Compare detected version to integration.json's min_supported
-MIN_SUPPORTED=$(python3 -c 'import json;print(json.load(open(".claude/integration.json"))["gstack"]["min_supported"])' 2>/dev/null)
+ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)
+MIN_SUPPORTED=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]+"/.claude/integration.json"))["gstack"]["min_supported"])' "$ROOT" 2>/dev/null)
 ver_lt() { [ "$(printf '%s\n%s' "$1" "$2" | sort -V | head -1)" = "$1" ] && [ "$1" != "$2" ]; }
 [ -n "$MIN_SUPPORTED" ] && ver_lt "$GSTACK_VERSION" "$MIN_SUPPORTED" && \
   echo "DRIFT: gstack v$GSTACK_VERSION below min_supported v$MIN_SUPPORTED" || true
@@ -197,8 +198,9 @@ Output this structure (Markdown):
 3. Add to `.gitignore` if missing: `.gstack/`, `.gstack-worktrees/`, `conductor.json`,
    `.claude/signals/`, `.claude/metrics/`, `.claude/gstack-rendered/` (gstack-owned
    enclave, v1.57.9+ — gstack writes rendered docs there; we never track or flag it).
-4. Create `.claude/signals/` directory for verify + review decision signals
-   (`verify-latest.json`, `review-latest.json`).
+4. Create the signals directory at the **project root** for verify + review decision
+   signals (`verify-latest.json`, `review-latest.json`):
+   `ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root); mkdir -p "$ROOT/.claude/signals"`.
 5. Print summary; do not modify gstack files.
 
 ### Step 4: Metrics Sync (--metrics)

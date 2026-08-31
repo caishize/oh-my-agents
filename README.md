@@ -1,4 +1,4 @@
-# oh-my-agents `v3.9.0`
+# oh-my-agents `v3.9.1`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
@@ -81,6 +81,19 @@ agent was a redundant third layer.)
 (blocks credential leaks) · `self-verify-check` (post-edit syntax warn; deprecation
 candidate vs native diagnostics) · `session-metrics` (JSONL activity log) ·
 `doc-drift-check` (Stop-time doc drift + gate-state nudge).
+
+**Addressing (v3.9.1)** — every hook resolves the project root through
+`get_project_dir()` in [`hooks/lib/common.sh`](hooks/lib/common.sh), in one fixed order:
+`$CLAUDE_PROJECT_DIR` → git toplevel of the input's `.cwd` → a VCS/`.claude`/build-manifest
+walk up from the edited file → **empty**. Never the raw `.cwd` (which is only "wherever the
+last `cd` left the session") and never `$(pwd)`. On empty a hook says so and exits 0 — a
+check that established nothing must not read as a check that passed. Creating
+`.claude/metrics` follows from *knowing* the root: an existing ledger is always appended to,
+a missing one is created only under an authoritative root, so the ledger cannot fork
+per-directory. Skills that write into `.claude/` (signals, metrics) anchor on the same
+lib's `harness_root()` for the same reason — a signal written to `backend/.claude/signals/`
+is one no consumer looks for, and under the Gate API's default-deny rule that reads as
+*absent*, not as *OK*.
 
 ## Dynamic Workflows
 
@@ -190,7 +203,7 @@ dead-sensor cull + gstack v1.62 resync + evaluator blindness + sprint-contract v
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.9.0)
+.claude-plugin/plugin.json         # Plugin manifest (v3.9.1)
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md

@@ -42,33 +42,20 @@ if [ -n "$FILE_PATH" ]; then
 fi
 
 # --- Determine metrics directory ---
-METRICS_DIR=""
-if [ -n "$FILE_PATH" ]; then
-    SEARCH_DIR=$(dirname "$FILE_PATH")
-    while [ "$SEARCH_DIR" != "/" ] && [ "$SEARCH_DIR" != "." ]; do
-        if [ -d "${SEARCH_DIR}/.claude" ]; then
-            METRICS_DIR="${SEARCH_DIR}/.claude/metrics"
-            break
-        fi
-        SEARCH_DIR=$(dirname "$SEARCH_DIR")
-    done
-fi
-
-# Fallback: try cwd from input
-if [ -z "$METRICS_DIR" ]; then
-    CWD=$(get_cwd)
-    if [ -n "$CWD" ] && [ "$CWD" != "." ] && [ -d "$CWD" ]; then
-        METRICS_DIR="${CWD}/.claude/metrics"
-    fi
-fi
-
-# If we still have no metrics dir, silently exit
-if [ -z "$METRICS_DIR" ]; then
+# ONE ledger per project, addressed off the project root (common.sh get_project_dir) — never
+# off the session cwd. Addressing off cwd used to fork the ledger: `cd backend` once and this
+# hook created backend/.claude/metrics/, after which the marker walk found that copy first
+# and routed the whole subtree into it. The fork is invisible (all of it gitignored) and
+# self-reinforcing, so the fix is at both ends: address off the root, and create a ledger
+# only under an authoritative root (resolve_metrics_dir).
+if ! get_project_dir "$FILE_PATH"; then
+    # Root unestablished — record nothing rather than invent a home for it.
     exit 0
 fi
 
-# --- Ensure directory exists ---
-mkdir -p "$METRICS_DIR" 2>/dev/null || exit 0
+if ! resolve_metrics_dir "$PROJECT_DIR" "$PROJECT_DIR_SOURCE"; then
+    exit 0
+fi
 
 # --- Append JSONL line ---
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

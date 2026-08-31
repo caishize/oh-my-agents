@@ -20,7 +20,9 @@ Runtime observability configuration for agent-driven development.
 
 ## Metrics Collection
 Session metrics are automatically collected by the `session-metrics.sh` hook.
-Stored in `.claude/metrics/session-{date}.jsonl`.
+Stored in `.claude/metrics/session-{date}.jsonl` at the **project root** — one ledger per
+project, addressed off the resolved root rather than the session's current directory, so a
+monorepo does not accumulate a per-package copy that no dashboard reads.
 View with `/harness-dashboard` or `/harness-dashboard --query`.
 
 ## Verification Patterns

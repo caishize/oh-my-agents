@@ -45,8 +45,12 @@ CONTENT=$(get_content)
 #      FRESH GREEN verify signal exists ⇒ name /verify as the next step (names, never
 #      invokes — rule no-orchestration; suppressed when a fresh GREEN already covers it)
 TEMPLATE_FILE="${SCRIPT_DIR}/../templates/execution-plan.json"
-PROJECT_DIR=$(get_cwd)
-[ -z "$PROJECT_DIR" ] && PROJECT_DIR="$(pwd)"
+
+# Project root for the signal read below. Addressed off the project (common.sh
+# get_project_dir), never off the session cwd and never off $(pwd): a guessed root reads a
+# signal that isn't there, and "no signal" is indistinguishable from "signal says OK".
+# Unresolved stays EMPTY — sections 1 and 2 need no root, and section 3 says it didn't look.
+get_project_dir "$FILE_PATH" || true
 
 GUIDANCE=""
 if command -v python3 >/dev/null 2>&1; then
@@ -114,19 +118,22 @@ if tasks:
 elif isinstance(m.get("tasks_total"), int) and m.get("tasks_total", 0) > 0:
     all_done = m.get("tasks_done") == m.get("tasks_total")
 if all_done and str(plan.get("status", "")).lower() == "active":
-    sig = os.path.join(project_dir, ".claude", "signals", "verify-latest.json")
     fresh_green = False
-    try:
-        with open(sig) as f:
-            s = json.load(f)
-        fresh_green = (s.get("decision") == "GREEN"
-                       and os.path.getmtime(sig) > os.path.getmtime(plan_path))
-    except Exception:
-        fresh_green = False
+    if project_dir:
+        sig = os.path.join(project_dir, ".claude", "signals", "verify-latest.json")
+        try:
+            with open(sig) as f:
+                s = json.load(f)
+            fresh_green = (s.get("decision") == "GREEN"
+                           and os.path.getmtime(sig) > os.path.getmtime(plan_path))
+        except Exception:
+            fresh_green = False
     if not fresh_green:
         n = len(tasks) or m.get("tasks_total", 0)
         print("COMPLETE")
         print("  All %d/%d tasks done — next: /verify --plan %s" % (n, n, plan.get("id", "?")))
+        if not project_dir:
+            print("  (project root unresolved — the verify signal was not read, not found GREEN)")
 ' "$TEMPLATE_FILE" "$PROJECT_DIR" "$FILE_PATH" 2>/dev/null || echo "")
 fi
 
