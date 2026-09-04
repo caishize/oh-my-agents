@@ -1,26 +1,61 @@
 {
   "version": "2.1",
-  "pillars": ["architecture", "documentation", "observability", "entropy"],
+  "pillars": [
+    "architecture",
+    "documentation",
+    "observability",
+    "entropy"
+  ],
   "plugin_structure": {
     "note": "oh-my-agents is a Claude Code plugin, not a standard layered application. The directories below describe plugin components, not the target project's architecture layers.",
     "components": {
       "skills": "skills/",
-      "agents": "agents/",
       "hooks": "hooks/",
       "templates": "templates/",
-      "docs": "docs/"
+      "docs": "docs/",
+      "workflows": ".claude/workflows/"
     }
   },
   "target_layer_model": {
     "note": "The layer model that oh-my-agents enforces on target projects via arch-check.sh and /arch-guard.",
-    "layers": ["types", "config", "repo", "service", "runtime", "ui"],
+    "layers": [
+      "types",
+      "config",
+      "repo",
+      "service",
+      "runtime",
+      "ui"
+    ],
     "default_layer_dirs": {
-      "types": ["**/types/**", "**/models/**", "**/interfaces/**"],
-      "config": ["**/config/**", "**/configuration/**"],
-      "repo": ["**/repo/**", "**/repository/**", "**/dal/**"],
-      "service": ["**/service/**", "**/services/**"],
-      "runtime": ["**/runtime/**", "**/server/**", "**/api/**"],
-      "ui": ["**/ui/**", "**/components/**", "**/pages/**", "**/views/**"]
+      "types": [
+        "**/types/**",
+        "**/models/**",
+        "**/interfaces/**"
+      ],
+      "config": [
+        "**/config/**",
+        "**/configuration/**"
+      ],
+      "repo": [
+        "**/repo/**",
+        "**/repository/**",
+        "**/dal/**"
+      ],
+      "service": [
+        "**/service/**",
+        "**/services/**"
+      ],
+      "runtime": [
+        "**/runtime/**",
+        "**/server/**",
+        "**/api/**"
+      ],
+      "ui": [
+        "**/ui/**",
+        "**/components/**",
+        "**/pages/**",
+        "**/views/**"
+      ]
     }
   },
   "providers_path": null,

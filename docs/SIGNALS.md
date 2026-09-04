@@ -39,12 +39,18 @@ So they are promoted to a versioned **Gate API** consumed by:
    verbose report lives in the matching `.claude/metrics/*.jsonl` history log.
 5. **Atomic-ish write.** Write the signal even on early exit. Producers compute fields
    with `python3`/`jq`/`printf` (correct escaping) — never an unquoted heredoc.
-5b. **Rooted at the project root, never the shell cwd.** Every path in this document is
-   relative to the project root. Producers and consumers resolve it explicitly —
+5b. **Rooted at the project root, never the shell cwd** (`project-root`). Every path in this
+   document is relative to the project root. Producers and consumers resolve it explicitly —
    `ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)` — because a
    build or test step may have left the session in a subdirectory. A signal written to
-   `backend/.claude/signals/` is one no consumer looks for, and under rule 2 that reads as
-   *absent* ⇒ blocking. Silent, and indistinguishable from a signal that said OK.
+   `backend/.claude/signals/` is one no consumer looks for, and under `default-deny` that
+   reads as *absent* ⇒ blocking. Silent, and indistinguishable from a signal that said OK.
+5c. **History logs have ONE writer.** `verify.jsonl` / `reviews.jsonl` are appended through
+   `append_history_record` (hooks/lib/common.sh): validated JSON, flock, LOUD on failure.
+   A prose "append the record" instruction is not a writer — it is how the 2026-05-23 P0
+   happened. (Contract rules are named — `versioned`, `default-deny`, `append-only`,
+   `latest-only`, `atomic-write`, `project-root`, `one-writer`, `accountable-writer` —
+   cite them by name, never by number.)
 6. **Accountable-writer.** A signal must be written by the entity that *derived* the verdict
    (the `/verify` / `/harness-review` run, or a human). A relay agent handed a decision it did
    not itself compute must NOT write it — the safety classifier correctly treats that as a
@@ -66,6 +72,15 @@ the verdict was derived. The predicate:
 - A **HUMAN** consumer sees a WARN and decides; humans may knowingly act on a stale signal.
 - A signal without `commit` (pre-v3.9.0 producer) is treated by automated consumers as
   stale-unknown: WARN + re-run recommendation, never silent advance.
+- **Dirty-tree clause (v3.10.0, ADVANCE points only).** `commit == HEAD` says nothing about
+  edits made since. At the three ADVANCE points — the pre-ship check below, `/lifecycle
+  --auto`'s projection, and the audit-persist recipe (which stamps HEAD onto a returned
+  verdict) — an AUTOMATED consumer also requires a clean working tree: `worktree_dirty
+  "$ROOT"` (common.sh; untracked SOURCE counts, our own `.claude/`/`.gstack/` never do) ⇒
+  route as stale with reason `uncommitted changes since verdict`. The Stop hook applies it
+  to the `APPROVE` branch only (the hand-off to the irreversible step); mid-session dirt
+  is a WARN, never a halt. Consumer-side by design: no producer field, no schema change —
+  a `dirty` boolean stamped at derivation time would be stale on the next keystroke.
 
 This is what makes push-style stage nudges (plan-complete → `/verify`; Stop-time
 gate-state → `/harness-review` / gstack `/ship`) safe: a nudge is only ever emitted off a
@@ -117,7 +132,7 @@ Path: `.claude/signals/review-latest.json` · History: `.claude/metrics/reviews.
 | `tags_present` | string[] | Subset of `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]` |
 | `gstack_composed` | boolean | True if any gstack skill was composed |
 | `commit` | string (optional) | `git rev-parse HEAD` at derivation time (freshness predicate) |
-| `gstack_context` | object \| null | gstack v1.57.5+ verdict, read read-only for reconciliation (below). `null`/absent when the gstack decision layer is not present |
+| `gstack_context` | object \| null | gstack verdict, read read-only for reconciliation (below): `{present, review_status, currency, source}`. `null`/absent when the gstack decision layer is not present. `decisions_unresolved` is DEPRECATED-optional (v3.10.0: never produced — `decisions.active.json` is a rebuildable cache; consumers tolerate its absence; kept documented so `schema_version` stays 1 under `append-only`) |
 | `plan_id` | string \| null | Active exec-plan id, if any |
 | `reason` | string (≤120 chars) | One-line rationale |
 
@@ -148,8 +163,11 @@ arbiter** without violating the SIGNAL-not-ARTIFACT bright line:
    mechanically rewrites our decision and never an aggregate.
 2. **Surface, don't merge.** When the gstack layer is present, record it in the optional
    `gstack_context` object (small, within the ≤500-byte cap), e.g.
-   `{"present":true,"review_status":"issues_found","decisions_unresolved":2,"source":"gstack-review-log"}`,
-   and show both verdicts side-by-side in the report text.
+   `{"present":true,"review_status":"issues_found","currency":"current","source":"gstack-review-log"}`,
+   and show both verdicts side-by-side in the report text. **Currency (v3.10.0):** gstack's
+   review records are content-addressed (`wtree` = working-tree fingerprint from
+   `bin/gstack-wtree`); a record whose `wtree` differs from the live one is STALE and is
+   treated as absent — loudly (`verdict-stale`), never as agreement or divergence.
 3. **Agree ⇒ pass through.** If gstack and our pass agree on direction (both block or both
    allow), emit our `decision` unchanged.
 4. **Diverge ⇒ halt for judgment.** If they point opposite directions (e.g. we'd `APPROVE`
@@ -162,6 +180,24 @@ arbiter** without violating the SIGNAL-not-ARTIFACT bright line:
 
 `gstack_context` is an **optional** field ⇒ `schema_version` stays `1` (consumers that
 don't read it are unaffected; the versioning policy below covers this).
+
+## History logs — `verify.jsonl` / `reviews.jsonl` (the verbose side of each signal)
+
+The ≤500-byte cap (`latest-only`) binds the two signal FILES only. Each history line is
+the signal object plus report detail, appended through `append_history_record`
+(`one-writer`). `reviews.jsonl` lines carry the typed work list a `REQUEST_CHANGES`
+hands to the next Generator turn:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `findings[]` | array ≤10, ≤4 KB | `{fingerprint: "<file>:<line>:<dimension>", severity: P0\|P1\|P2, tag: [HARNESS]\|…, fix: "<≤80 chars>"}` — highest severity first |
+| `dimension` | enum | `slop\|arch\|docs\|observ\|contract\|reconcile` — our four-pillar vocabulary (the same `/harness-audit` returns); never gstack's `CRITICAL\|INFORMATIONAL` |
+
+Consumers: `/lifecycle` (`REQUEST_CHANGES` routing — a count is not a work item),
+`/harness-dashboard` velocity, the Stop hook's termination sensor (`verify.jsonl`: three
+consecutive `RED` with the same `reason` ⇒ the loop is not converging; it names
+`/investigate` / `/encode-mistake`, never another `/verify` — so producers keep `reason`
+stable for the same failure).
 
 ## Related: the `NEXT:` tail line — router OUTPUT, not a signal
 
@@ -182,36 +218,52 @@ convention: the accountable human (or their project harness config) runs this be
 invoking `/ship`:
 
 ```bash
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # rule 5b
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"; ROOT=$(harness_root)   # rule project-root
 HEAD_SHA=$(git -C "$ROOT" rev-parse HEAD)
-jq -e --arg head "$HEAD_SHA" \
+! worktree_dirty "$ROOT" \
+&& jq -e --arg head "$HEAD_SHA" \
   'select(.decision=="GREEN" and (.commit // $head)==$head)' "$ROOT/.claude/signals/verify-latest.json" >/dev/null \
 && jq -e --arg head "$HEAD_SHA" \
   'select(.decision=="APPROVE" and (.commit // $head)==$head)' "$ROOT/.claude/signals/review-latest.json" >/dev/null \
-&& echo "SHIP GATE: pass" || echo "SHIP GATE: blocked (stale/missing/blocking signal)"
+&& echo "SHIP GATE: pass" || echo "SHIP GATE: blocked (dirty tree / stale / missing / blocking signal)"
 ```
+
+Verified against gstack v1.79 source (2026-09-04): `/ship` reads nothing under
+`.claude/signals` — ASSERTED is the confirmed state, not a probe miss. The one bilateral
+surface is gstack's own `bin/gstack-verify-gate` (Stop hook, opt-in, `--trust`-gated,
+fail-open) reading `<!-- gstack:verify: <cmd> -->` from the PROJECT's CLAUDE.md —
+`/harness-init` EXPORTS that line from the confirmed test command (ours→gstack); `/verify`
+reads the commands table as primary and the marker only as a named fallback.
 
 ## Persisting a `/harness-audit` result — the ONLY sanctioned recipe
 
-The workflow RETURNS a `review-latest.json`-shaped object (accountable-writer, contract rule above);
-no relay agent may write it. The accountable invoking human reviews the returned object,
-then persists it with ONE command that stamps `timestamp` + `commit` (without the commit
-stamp the persisted signal is stale-by-definition under the freshness predicate) and tags
-provenance:
+The workflow RETURNS `{signal, confirmed, refuted, stats}` (accountable-writer, contract
+rule above); no relay agent may write it. The accountable invoking human reviews the
+returned object, then persists it with ONE command that stamps `timestamp` + `commit`
+(without the commit stamp the persisted signal is stale-by-definition), refuses a dirty
+tree (the stamp would mint a maximally-fresh verdict over code that was never audited),
+writes ONLY `signal` to the signal file (≤500 bytes), and `signal` + `findings[]` (from
+`confirmed`, mapped to the history-log shape above) to the history log:
 
 ```bash
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # rule 5b
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"; ROOT=$(harness_root)   # rule project-root
+worktree_dirty "$ROOT" && { echo "refusing: uncommitted changes since the audit"; exit 1; }
 python3 -c '
 import json, subprocess, sys, datetime
-sig = json.load(open(sys.argv[1]))          # the returned object, saved to a file
+ret = json.load(open(sys.argv[1]))          # the WHOLE returned object, saved to a file
 root = sys.argv[2]
-sig.pop("_persistence", None)
+sig = ret["signal"]; sig.pop("_persistence", None)
 sig["timestamp"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 sig["commit"] = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
 sig["reason"] = ("source:harness-audit " + sig.get("reason", ""))[:120]
 open(root + "/.claude/signals/review-latest.json", "w").write(json.dumps(sig))
-open(root + "/.claude/metrics/reviews.jsonl", "a").write(json.dumps(sig) + "\n")
-' /path/to/returned-signal.json "$ROOT"
+order = {"P0": 0, "P1": 1, "P2": 2}
+findings = [{"fingerprint": "%s:%s:%s" % (f["file"], f.get("line") or "0", f["dimension"]),
+             "severity": f["severity"], "tag": "[HARNESS]", "fix": f["title"][:80]}
+            for f in sorted(ret.get("confirmed", []), key=lambda f: order.get(f["severity"], 9))[:10]]
+print(json.dumps(dict(sig, findings=findings)))
+' /path/to/returned.json "$ROOT" > /tmp/audit-history.json \
+&& append_history_record "$ROOT/.claude/metrics" reviews.jsonl "$(cat /tmp/audit-history.json)"
 ```
 
 ## Versioning policy
@@ -221,4 +273,6 @@ open(root + "/.claude/metrics/reviews.jsonl", "a").write(json.dumps(sig) + "\n")
 - Removing/renaming a field or repurposing an enum ⇒ **breaking**: bump `schema_version`
   and update this file + both producers + every consumer in the same change.
 
-Anchor: [docs/TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md).
+Anchors: [docs/TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md) (Gate API),
+[docs/TEAM-DISCUSSION-2026-09-04.md](TEAM-DISCUSSION-2026-09-04.md) (dirty-tree clause, history-log
+schema, termination sensor, currency).

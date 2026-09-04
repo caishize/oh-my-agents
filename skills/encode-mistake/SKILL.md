@@ -60,9 +60,9 @@ candidate TASTE rule. gstack writes *observations* (what happened), this skill w
 
 1. **`gbrain` CLI present** (v1.26+) → `gbrain search --type <type> --since 30d --limit <n>`
    gives federated, queryable results across machines.
-2. **GBrain worktree present** → `tail` the matching JSONL at `~/.gstack-artifacts-worktree/`
-   (current path only; legacy `gstack-brain*` dropped in the v3.6.0 sunset).
-3. **Per-project log fallback** → `~/.gstack/projects/$SLUG/*-learnings-*.jsonl`.
+2. **GBrain worktree present** → `tail` the matching JSONL at `~/.gstack-brain-worktree/`
+   (env `GSTACK_BRAIN_WORKTREE`; resolved by `gbrain_detect()` — never hand-probed here).
+3. **Per-project log** → `~/.gstack/projects/$SLUG/learnings.jsonl` (`$GBRAIN_LEARNINGS`).
 4. **None** → print "no gbrain source available; skip" and exit 0 (graceful).
 
 **Argument parsing**: from `$ARGUMENTS`, extract the token after `--from-gbrain`
@@ -70,14 +70,9 @@ as `TYPE` (default `learning`), and the next token as `LIMIT` (default `5`).
 The deprecated alias `--from-gstack-learnings <n>` sets `TYPE=learning, LIMIT=<n>`.
 
 ```bash
-SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true   # sets SLUG, GBRAIN_WT, GBRAIN_LEARNINGS, GBRAIN_CLI
 TYPE="${TYPE:-learning}"       # learning | eureka | retro | all (set by parsing above)
 LIMIT="${LIMIT:-5}"
-PROJ_DIR="$HOME/.gstack/projects/$SLUG"
-
-# GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0).
-GBRAIN_WT=""
-[ -d "$HOME/.gstack-artifacts-worktree" ] && GBRAIN_WT="$HOME/.gstack-artifacts-worktree"
 
 # Prefer CLI when present (v1.26+).
 if command -v gbrain >/dev/null 2>&1; then
@@ -88,16 +83,16 @@ if command -v gbrain >/dev/null 2>&1; then
   fi
 elif [ -n "$GBRAIN_WT" ]; then
   case "$TYPE" in
-    learning) PATTERN="learnings-*.jsonl" ;;
-    eureka)   PATTERN="eureka-*.jsonl" ;;
-    retro)    PATTERN="retro-*.jsonl" ;;
-    all)      PATTERN="*-*.jsonl" ;;
-    *)        PATTERN="learnings-*.jsonl" ;;
+    learning) PATTERN="*learnings*.jsonl" ;;
+    eureka)   PATTERN="*eureka*.jsonl" ;;
+    retro)    PATTERN="*retro*.jsonl" ;;
+    all)      PATTERN="*.jsonl" ;;
+    *)        PATTERN="*learnings*.jsonl" ;;
   esac
   LOG=$(ls -t $GBRAIN_WT/$PATTERN 2>/dev/null | head -1)
   [ -n "$LOG" ] && tail -200 "$LOG" | grep -v '"taste_id"' | tail -"$LIMIT"
-elif [ "$TYPE" = "learning" ] && [ -d "$PROJ_DIR" ]; then
-  LOG=$(ls -t $PROJ_DIR/*-learnings-*.jsonl 2>/dev/null | head -1)
+elif [ "$TYPE" = "learning" ]; then
+  LOG=$(ls -t $GBRAIN_LEARNINGS 2>/dev/null | head -1)
   [ -n "$LOG" ] && tail -200 "$LOG" | grep -v '"taste_id"' | tail -"$LIMIT"
 else
   echo "No gbrain source available — skipping ingest"

@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 #
-# Stop-time advisory: doc drift + gate-state nudge.
-# Triggered on Stop event — after Claude finishes responding.
+# Advisory hook bound to TWO events (one script, hooks.json registers it twice):
+#   Stop         — doc drift + gate-state nudge + verify-loop termination sensor.
+#   SessionStart — gate-state ONLY (which signal is fresh, the next gate skill, the active
+#                  plan), injected into the model's context at session open so nobody asks
+#                  "what state is this branch in?"; returns before any repo walk.
 # (1) Checks if recently modified source files have corresponding doc references
-#     that might need updating.
+#     that might need updating (Stop only).
 # (2) Reads the two decision signals (freshness-checked per docs/SIGNALS.md) and NAMES
 #     the next gate skill — names, never invokes (rule no-orchestration).
+# (3) Termination sensor (Stop only): three consecutive RED verify records with the SAME
+#     reason ⇒ the loop is not converging; name /investigate or /encode-mistake instead of
+#     another /verify. A sensor, never a controller — it never exits 2.
 #
 # Claude Code passes hook input as JSON on stdin:
-#   { "hook_event_name": "Stop", "session_id": "...", "cwd": "..." }
+#   { "hook_event_name": "Stop"|"SessionStart", "session_id": "...", "cwd": "..." }
 #
 # Exit codes:
 #   0 - always (advisory only, never blocks)
-# Output on stdout is shown to the user as a notification
+# Output: one JSON envelope on stdout via emit_advisory (systemMessage for the user;
+# additionalContext for the model on SessionStart). Nothing when there is nothing to say.
+# This hook WRITES NOTHING (the v3.9 handoff-<branch>.json writer — zero consumers, and an
+# unquoted-heredoc JSON build the Gate API forbids — was deleted in v3.10.0).
 
 set -euo pipefail
 
@@ -21,6 +30,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 read_input
+EVENT=$(json_get '.hook_event_name // ""' "import sys,json; print(json.load(sys.stdin).get('hook_event_name',''))")
+[ -z "$EVENT" ] && EVENT="Stop"
 
 # --- Addressing: two roots, named once, never mixed ---
 # PROJECT_DIR — the harness root; `.claude/signals` and `.claude/metrics` live here.
@@ -31,9 +42,7 @@ read_input
 # match could never fire and the hook exited 0 looking exactly like a clean pass.
 if ! get_project_dir; then
     # Say it. A check that established nothing must not look like a check that passed.
-    echo ""
-    echo "Doc-drift check skipped: project root unresolved."
-    echo "  Set CLAUDE_PROJECT_DIR, or run the session inside a git work tree."
+    emit_advisory "$EVENT" "Doc-drift check skipped: project root unresolved. Set CLAUDE_PROJECT_DIR, or run the session inside a git work tree."
     exit 0
 fi
 
@@ -61,9 +70,42 @@ if [ -n "$HEAD_SHA" ] && command -v jq >/dev/null 2>&1; then
     elif [ "$R_DEC" = "NEEDS_HUMAN" ] && [ "$R_KIND" = "composition-skipped" ]; then
         GATE_NUDGE="Gate state: review NEEDS_HUMAN (composition-skipped) — next: re-run /harness-review with gstack composition enabled"
     elif [ "$R_DEC" = "APPROVE" ]; then
-        GATE_NUDGE="Gate state: review APPROVE — next: gstack /ship (run the pre-ship check from docs/SIGNALS.md first)"
+        # APPROVE hands the user to the irreversible step, so the dirty-tree clause of the
+        # freshness predicate (docs/SIGNALS.md) applies here and only here: a verdict at
+        # commit X over a tree edited since does not describe the code being shipped.
+        if worktree_dirty "$REPO_ROOT"; then
+            GATE_NUDGE="WARN: review APPROVE but the working tree has uncommitted changes since the verdict — commit, then re-run /verify and /harness-review before /ship"
+        else
+            GATE_NUDGE="Gate state: review APPROVE — next: gstack /ship (run the pre-ship check from docs/SIGNALS.md first)"
+        fi
     elif [ "$V_DEC" = "GREEN" ] && { [ -z "$R_DEC" ] || [ ! -f "$R_SIG" ] || [ "$V_SIG" -nt "$R_SIG" ]; }; then
         GATE_NUDGE="Gate state: verify GREEN with no newer review — next: /harness-review"
+    fi
+fi
+
+# --- SessionStart: gate state only, then out (before any repo walk) ---
+if [ "$EVENT" = "SessionStart" ]; then
+    ACTIVE_PLAN=""
+    if [ -d "$REPO_ROOT/docs/exec-plans/active" ]; then
+        ACTIVE_PLAN=$(ls "$REPO_ROOT/docs/exec-plans/active/"*.json 2>/dev/null | head -1 | xargs -r basename 2>/dev/null || echo "")
+    fi
+    MSG="$GATE_NUDGE"
+    [ -n "$ACTIVE_PLAN" ] && MSG="${MSG:+$MSG
+}Active exec-plan: docs/exec-plans/active/${ACTIVE_PLAN} — continue it or run /lifecycle next"
+    emit_advisory SessionStart "$MSG"
+    exit 0
+fi
+
+# --- Termination sensor (Stop only; docs/SIGNALS.md no-change-cycle rule) ---
+# Three consecutive RED records with the SAME reason means another /verify will not help.
+# Same-HEAD would be wrong in both directions (RED→fix→GREEN happens at one HEAD; the loop
+# that burns an afternoon commits between attempts). Reads the history log only; this
+# block resolves METRICS_DIR itself and never exits 2 — a sensor, never a controller.
+if command -v jq >/dev/null 2>&1 && resolve_metrics_dir "$PROJECT_DIR" "$PROJECT_DIR_SOURCE" && [ -f "$METRICS_DIR/verify.jsonl" ]; then
+    LAST3=$(tail -3 "$METRICS_DIR/verify.jsonl" 2>/dev/null | jq -r 'select(.decision=="RED") | .reason // ""' 2>/dev/null || echo "")
+    if [ "$(printf '%s\n' "$LAST3" | grep -c .)" -eq 3 ] && [ "$(printf '%s\n' "$LAST3" | sort -u | wc -l | tr -d ' ')" -eq 1 ]; then
+        SAME_REASON=$(printf '%s\n' "$LAST3" | head -1)
+        GATE_NUDGE="Gate state: 3 consecutive RED with identical reason (${SAME_REASON}) — the loop is not converging; next: /investigate (gstack) or /encode-mistake, not another /verify"
     fi
 fi
 
@@ -106,11 +148,8 @@ fi
 CHANGED_FILES=$(git -C "$REPO_ROOT" diff --name-only HEAD 2>/dev/null || git -C "$REPO_ROOT" diff --name-only --staged 2>/dev/null || echo "")
 
 if [ -z "$CHANGED_FILES" ]; then
-    if [ -n "$GATE_NUDGE" ] || [ -n "$LEDGER_WARN" ]; then
-        echo ""
-        [ -n "$LEDGER_WARN" ] && echo "$LEDGER_WARN"
-        [ -n "$GATE_NUDGE" ] && echo "$GATE_NUDGE"
-    fi
+    emit_advisory Stop "${LEDGER_WARN:+$LEDGER_WARN
+}${GATE_NUDGE}"
     exit 0
 fi
 
@@ -253,51 +292,15 @@ while IFS= read -r dir; do
     fi
 done <<< "$NEW_DIRS"
 
-# --- Session handoff note ---
-# Write a structured handoff file so the next session can bootstrap context quickly.
-# This enables /lifecycle next to pick up where the previous session left off.
-if resolve_metrics_dir "$PROJECT_DIR" "$PROJECT_DIR_SOURCE"; then
-    BRANCH=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo "unknown")
-    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")
-    FILE_COUNT=$(echo "$CHANGED_FILES" | grep -c . 2>/dev/null || echo "0")
-
-    # Find active plan
-    ACTIVE_PLAN=""
-    if [ -d "$REPO_ROOT/docs/exec-plans/active" ]; then
-        ACTIVE_PLAN=$(ls "$REPO_ROOT/docs/exec-plans/active/"*.json 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-    fi
-
-    # Last verify status
-    LAST_VERIFY=""
-    if [ -f "$METRICS_DIR/verify.jsonl" ]; then
-        LAST_VERIFY=$(tail -1 "$METRICS_DIR/verify.jsonl" 2>/dev/null || echo "")
-    fi
-
-    # Build handoff JSON (atomic write via tmp + rename)
-    # Sanitize variables to prevent JSON injection (strip quotes and backslashes)
-    SAFE_BRANCH=$(echo "$BRANCH" | tr -d '"\\\n')
-    SAFE_PLAN=$(echo "$ACTIVE_PLAN" | tr -d '"\\\n')
-    SAFE_VERIFY=$(echo "$LAST_VERIFY" | tr -d '"\\\n')
-    SAFE_FILES=$(echo "$CHANGED_FILES" | head -20 | tr '\n' ',' | sed 's/,$//' | tr -d '"\\\n')
-    HANDOFF_TMP="$METRICS_DIR/.handoff-tmp-$$"
-    HANDOFF_FILE="$METRICS_DIR/handoff-${SAFE_BRANCH}.json"
-    cat > "$HANDOFF_TMP" 2>/dev/null <<HANDOFF_EOF
-{"timestamp":"$TIMESTAMP","branch":"$SAFE_BRANCH","files_modified":$FILE_COUNT,"active_plan":"$SAFE_PLAN","last_verify":"$SAFE_VERIFY","changed_files":"$SAFE_FILES","has_warnings":$([ -n "$WARNINGS" ] && echo "true" || echo "false")}
-HANDOFF_EOF
-    mv "$HANDOFF_TMP" "$HANDOFF_FILE" 2>/dev/null || true
+# Output warnings if any — one envelope through emit_advisory (zero bytes when clean).
+OUT=""
+if [ -n "$WARNINGS" ]; then
+    OUT=$(printf 'Documentation Drift Check\n%b\nRun /entropy-sweep for a full analysis.' "$WARNINGS")
 fi
-
-# Output warnings if any
-if [ -n "$WARNINGS" ] || [ -n "$GATE_NUDGE" ] || [ -n "$LEDGER_WARN" ]; then
-    echo ""
-    if [ -n "$WARNINGS" ]; then
-        echo "Documentation Drift Check"
-        echo "========================="
-        echo -e "$WARNINGS"
-        echo "Run /entropy-sweep for a full analysis."
-    fi
-    [ -n "$LEDGER_WARN" ] && echo "$LEDGER_WARN"
-    [ -n "$GATE_NUDGE" ] && echo "$GATE_NUDGE"
-fi
+[ -n "$LEDGER_WARN" ] && OUT="${OUT:+$OUT
+}$LEDGER_WARN"
+[ -n "$GATE_NUDGE" ] && OUT="${OUT:+$OUT
+}$GATE_NUDGE"
+emit_advisory Stop "$OUT"
 
 exit 0

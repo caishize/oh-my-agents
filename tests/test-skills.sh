@@ -78,14 +78,25 @@ for skill in $EXPECTED_SKILLS; do
     [ ! -f "$SKILL_FILE" ] && continue
     LINE_COUNT=$(wc -l < "$SKILL_FILE" | tr -d ' ')
     TOTAL=$((TOTAL + 1))
-    if [ "$LINE_COUNT" -le 900 ]; then
+    if [ "$LINE_COUNT" -le 400 ]; then
         PASS=$((PASS + 1))
-        echo "PASS: size: $skill ($LINE_COUNT lines <= 900)"
+        echo "PASS: size: $skill ($LINE_COUNT lines <= 400, rule skill-line-cap)"
     else
         FAIL=$((FAIL + 1))
-        echo "FAIL: size: $skill ($LINE_COUNT lines > 900 limit)"
+        echo "FAIL: size: $skill ($LINE_COUNT lines > 400 — rule skill-line-cap)"
     fi
 done
+
+# Root CLAUDE.md ≤ 60 lines (rule skill-line-cap, root clause — the cap drifted to 69 while
+# it lived only inside the file it governs; evidence: ETH Zurich 2602.11988, HumanLayer <60)
+ROOT_CLAUDE="${SCRIPT_DIR}/../CLAUDE.md"
+TOTAL=$((TOTAL + 1))
+ROOT_LINES=$(wc -l < "$ROOT_CLAUDE" | tr -d ' ')
+if [ "$ROOT_LINES" -le 60 ]; then
+    PASS=$((PASS + 1)); echo "PASS: size: root CLAUDE.md ($ROOT_LINES lines <= 60)"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: size: root CLAUDE.md ($ROOT_LINES lines > 60 — rule skill-line-cap)"
+fi
 
 # --- Description quality ---
 echo ""
@@ -189,26 +200,26 @@ WF_DIR="${SCRIPT_DIR}/../.claude/workflows"
 WF_COUNT=$(ls "$WF_DIR"/*.js 2>/dev/null | wc -l | tr -d ' ')
 TOTAL=$((TOTAL + 1))
 if [ "$WF_COUNT" -le 1 ]; then
-    PASS=$((PASS + 1)); echo "PASS: rule17 cap: $WF_COUNT workflow(s) <= 1"
+    PASS=$((PASS + 1)); echo "PASS: single-workflow cap: $WF_COUNT workflow(s) <= 1"
 else
-    FAIL=$((FAIL + 1)); echo "FAIL: rule17 cap: $WF_COUNT workflows > 1"
+    FAIL=$((FAIL + 1)); echo "FAIL: single-workflow cap: $WF_COUNT workflows > 1"
 fi
 
 AUDIT_WF="${WF_DIR}/harness-audit.js"
 if [ -f "$AUDIT_WF" ]; then
     # Read-only guarantee: audit/verify agents must use the Explore agentType.
-    assert_contains "rule17: harness-audit uses Explore agents" "$AUDIT_WF" "agentType: 'Explore'"
+    assert_contains "single-workflow: harness-audit uses Explore agents" "$AUDIT_WF" "agentType: 'Explore'"
     # No delivery orchestration / mutation (SIGNAL-not-ARTIFACT bright line).
     for forbidden in "git commit" "git push" "/ship" "/land-and-deploy" "/canary"; do
         TOTAL=$((TOTAL + 1))
         if grep -qF "$forbidden" "$AUDIT_WF" 2>/dev/null; then
-            FAIL=$((FAIL + 1)); echo "FAIL: rule17 no-delivery: harness-audit references '$forbidden'"
+            FAIL=$((FAIL + 1)); echo "FAIL: single-workflow no-delivery: harness-audit references '$forbidden'"
         else
-            PASS=$((PASS + 1)); echo "PASS: rule17 no-delivery: harness-audit free of '$forbidden'"
+            PASS=$((PASS + 1)); echo "PASS: single-workflow no-delivery: harness-audit free of '$forbidden'"
         fi
     done
     # Accountable-writer: the workflow RETURNS a signal rather than relay-writing it.
-    assert_contains "rule17: harness-audit returns a signal" "$AUDIT_WF" "return \{"
+    assert_contains "single-workflow: harness-audit returns a signal" "$AUDIT_WF" "return \{"
 fi
 
 # --- v3.9.0: shared gstack_detect() usable from skill context (item: dedupe) ---
@@ -268,6 +279,148 @@ if [ -z "$UNANCHORED" ]; then
     PASS=$((PASS + 1)); echo "PASS: signal/metric writers anchor on harness_root()"
 else
     FAIL=$((FAIL + 1)); echo "FAIL: writers not anchored:$UNANCHORED"
+fi
+
+# =============================================
+# v3.10.0 — constitution enforced in CI (docs/TEAM-DISCUSSION-2026-09-04.md)
+# =============================================
+
+echo ""
+echo "--- v3.10.0: history writer, slug identity, declared artifacts, anti-regression ---"
+
+# append_history_record: one tested writer for verify.jsonl / reviews.jsonl (rule one-writer)
+AHR_TMP=$(mktemp -d)
+TOTAL=$((TOTAL + 1))
+if bash -c "source '$COMMON_SH'; append_history_record '$AHR_TMP/m' verify.jsonl '{\"decision\":\"GREEN\",\"reason\":\"ok\"}'" 2>/dev/null \
+   && [ "$(wc -l < "$AHR_TMP/m/verify.jsonl" | tr -d ' ')" = "1" ] \
+   && python3 -m json.tool "$AHR_TMP/m/verify.jsonl" >/dev/null 2>&1; then
+    PASS=$((PASS + 1)); echo "PASS: append_history_record writes exactly one valid JSONL line"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: append_history_record writes exactly one valid JSONL line"
+fi
+TOTAL=$((TOTAL + 1))
+if ! bash -c "source '$COMMON_SH'; append_history_record '$AHR_TMP/m' verify.jsonl 'not json'" 2>/dev/null \
+   && [ "$(wc -l < "$AHR_TMP/m/verify.jsonl" | tr -d ' ')" = "1" ]; then
+    PASS=$((PASS + 1)); echo "PASS: append_history_record refuses invalid JSON (LOUD, nothing appended)"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: append_history_record refuses invalid JSON"
+fi
+rm -rf "$AHR_TMP"
+
+# Slug identity: gstack-slug prints `SLUG=…` + `BRANCH=…` — only the SLUG= line is the slug,
+# and GSTACK_PROJECTS resolves under $GSTACK_HOME/projects/<slug> ({SLUG} templated).
+SLUG_TMP=$(mktemp -d)
+mkdir -p "$SLUG_TMP/gs/bin"
+printf '#!/bin/sh\necho "SLUG=owner-repo"\necho "BRANCH=main"\n' > "$SLUG_TMP/gs/bin/gstack-slug"
+chmod +x "$SLUG_TMP/gs/bin/gstack-slug"
+TOTAL=$((TOTAL + 1))
+SLUG_OUT=$(bash -c "set -u; source '$COMMON_SH'; GSTACK_PATH='$SLUG_TMP/gs'; unset GSTACK_PROJECT_SLUG; resolve_project_slug; GSTACK_HOME='$SLUG_TMP/home' resolve_gstack_paths; printf '%s|%s' \"\$PROJECT_SLUG\" \"\$GSTACK_PROJECTS\"" 2>/dev/null || echo "")
+if [ "$SLUG_OUT" = "owner-repo|$SLUG_TMP/home/projects/owner-repo" ]; then
+    PASS=$((PASS + 1)); echo "PASS: slug identity: SLUG= line parsed, GSTACK_HOME honored, {SLUG} templated ($SLUG_OUT)"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: slug identity: got '$SLUG_OUT'"
+fi
+TOTAL=$((TOTAL + 1))
+if bash -c "set -u; source '$COMMON_SH'; GSTACK_PROJECT_SLUG=env-slug resolve_project_slug; [ \"\$PROJECT_SLUG\" = env-slug ]" 2>/dev/null; then
+    PASS=$((PASS + 1)); echo "PASS: slug identity: GSTACK_PROJECT_SLUG env override wins"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: slug identity: GSTACK_PROJECT_SLUG env override"
+fi
+rm -rf "$SLUG_TMP"
+
+INTEGRATION_JSON="${SCRIPT_DIR}/../.claude/integration.json"
+INTEGRATION_MD="${SCRIPT_DIR}/../docs/INTEGRATION.md"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'projects/oh-my-agents' "$INTEGRATION_JSON" && grep -q '{SLUG}' "$INTEGRATION_JSON"; then
+    PASS=$((PASS + 1)); echo "PASS: integration.json bridges are {SLUG}-templated (no baked literal slug)"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: integration.json carries a literal slug or no {SLUG} placeholder"
+fi
+
+# Rule declared-artifact: every .claude/metrics|signals basename a hook or skill writes must
+# be declared in docs/INTEGRATION.md (bridge table) or .claude/integration.json bridges —
+# or listed here as write-only-by-design WITH a reason. The failure message IS the rule.
+WRITE_ONLY_BY_DESIGN="investigations.jsonl"   # encode provenance ledger, read only by --from-investigation (declared too)
+TOTAL=$((TOTAL + 1))
+UNDECLARED=""
+for name in $(grep -rhoE '\.claude/(metrics|signals)/[A-Za-z0-9_.*<>{}$-]+\.(json|jsonl)' "${SCRIPT_DIR}/../hooks" "${SCRIPT_DIR}/../skills" 2>/dev/null \
+              | sed -E 's#.*/##' | sort -u); do
+    stem=$(printf '%s' "$name" | sed -E 's/[-*<>{}$].*//')   # session-<date>.jsonl -> session ; verify.jsonl -> verify.jsonl
+    if grep -qF "$name" "$INTEGRATION_MD" "$INTEGRATION_JSON" 2>/dev/null \
+       || { [ -n "$stem" ] && grep -qE "$stem[-*]" "$INTEGRATION_MD" "$INTEGRATION_JSON" 2>/dev/null; } \
+       || printf '%s' " $WRITE_ONLY_BY_DESIGN " | grep -qF " $name "; then
+        continue
+    fi
+    UNDECLARED="${UNDECLARED} ${name}"
+done
+if [ -z "$UNDECLARED" ]; then
+    PASS=$((PASS + 1)); echo "PASS: declared-artifact: every written .claude/metrics|signals file names its reader"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: declared-artifact: undeclared artifact(s):$UNDECLARED — declare the consumer in docs/INTEGRATION.md or add to WRITE_ONLY_BY_DESIGN with a reason"
+fi
+
+# Anti-regression greps: gstack shapes VERIFIED dead at v1.79 (docs/TEAM-DISCUSSION-2026-09-04.md)
+# must not reappear in code or the bridge manifest. Council minutes are history, not surface.
+echo "--- v3.10.0: dead gstack shapes (verified against v1.79 source) ---"
+DEAD_PATTERNS='\$HOME/\.gstack-artifacts-worktree|landing-reports/\*\.json|canary-reports/\*\.json|deploy-reports/\*\.json|\*-learnings-\*\.jsonl|learnings-\*\.jsonl|\.get\(.unresolved.|/find-decisions'
+for target in "${SCRIPT_DIR}/../skills" "${SCRIPT_DIR}/../hooks" "$INTEGRATION_JSON"; do
+    TOTAL=$((TOTAL + 1))
+    HITS=$(grep -rnE "$DEAD_PATTERNS" "$target" 2>/dev/null | grep -vE 'never existed|zero hits|CI-grepped|NEVER existed|has ZERO|never probed|deleted in v3\.10|DEPRECATED' || true)
+    if [ -z "$HITS" ]; then
+        PASS=$((PASS + 1)); echo "PASS: no dead gstack shape in $(basename "$target")"
+    else
+        FAIL=$((FAIL + 1)); echo "FAIL: dead gstack shape reintroduced in $(basename "$target"): $HITS"
+    fi
+done
+TOTAL=$((TOTAL + 1))
+if ! grep -qE 'landing-reports/\*\.json|canary-reports/\*\.json|deploy-reports/\*\.json|~/\.gstack-artifacts-worktree/' "$INTEGRATION_MD"; then
+    PASS=$((PASS + 1)); echo "PASS: docs/INTEGRATION.md bridge table carries no dead gstack shape"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: docs/INTEGRATION.md still declares a dead gstack shape"
+fi
+
+# Anti-bloat citations by kebab-case NAME, never number — scoped to code/tests/workflows
+echo "--- v3.10.0: rule citations by name ---"
+TOTAL=$((TOTAL + 1))
+NUMERIC=$(grep -rnE '\b[Rr]ule[- ]?1[0-9]\b|\brule17\b|Rule-17' "${SCRIPT_DIR}/../skills" "${SCRIPT_DIR}/../hooks" "${SCRIPT_DIR}/../tests" "${SCRIPT_DIR}/../.claude/workflows" 2>/dev/null | grep -v 'rule citations by name' | grep -v "NUMERIC=" || true)
+if [ -z "$NUMERIC" ]; then
+    PASS=$((PASS + 1)); echo "PASS: anti-bloat rules cited by kebab-case name in skills/hooks/tests/workflows"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: numeric rule citation (cite by kebab-case name): $NUMERIC"
+fi
+
+# The one workflow must parse (node) — SKIP, not FAIL, when node is absent
+TOTAL=$((TOTAL + 1))
+if command -v node >/dev/null 2>&1; then
+    if node --check "$AUDIT_WF" 2>/dev/null; then
+        PASS=$((PASS + 1)); echo "PASS: harness-audit.js parses (node --check)"
+    else
+        FAIL=$((FAIL + 1)); echo "FAIL: harness-audit.js does not parse"
+    fi
+else
+    PASS=$((PASS + 1)); echo "SKIP: node not installed — harness-audit.js syntax not checked (counted as pass)"
+fi
+
+# Contract text present (documented — NOT proof the line is printed; consume-or-cut binding in lifecycle)
+assert_contains "next-contract-documented: lifecycle documents the NEXT: tail line" "${SKILLS_DIR}/lifecycle/SKILL.md" 'NEXT: \{"phase"'
+assert_contains "next-contract-documented: consume-or-cut binding recorded" "${SKILLS_DIR}/lifecycle/SKILL.md" "Consume-or-cut"
+assert_contains "harness-review: typed findings[] fingerprint documented" "$REVIEW_MD" "fingerprint"
+assert_contains "harness-review: decisions.active.json no longer parsed for a count" "$REVIEW_MD" "is NOT read"
+assert_contains "verify: history log via append_history_record" "$VERIFY_MD" "append_history_record"
+assert_contains "harness-review: history log via append_history_record" "$REVIEW_MD" "append_history_record"
+assert_contains "harness-init: gstack verify marker emitted only in the confirmed-command branch" "${SKILLS_DIR}/harness-init/SKILL.md" "human confirms the exact string"
+assert_contains "gstack-sync: --metrics deleted" "${SKILLS_DIR}/gstack-sync/SKILL.md" "were deleted in v3.10.0"
+TOTAL=$((TOTAL + 1))
+if ! grep -q '^argument-hint:.*--metrics' "${SKILLS_DIR}/gstack-sync/SKILL.md"; then
+    PASS=$((PASS + 1)); echo "PASS: gstack-sync argument-hint no longer advertises --metrics"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: gstack-sync argument-hint still advertises --metrics"
+fi
+TOTAL=$((TOTAL + 1))
+if [ ! -d "${SCRIPT_DIR}/../agents" ]; then
+    PASS=$((PASS + 1)); echo "PASS: no agents/ directory (session-observer retired v3.10.0, consume-or-cut)"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: agents/ directory exists — an agent needs ≥1 mechanical trigger and ≥1 machine reader"
 fi
 
 # =============================================

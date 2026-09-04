@@ -1,4 +1,6 @@
 // harness-audit — the ONE sanctioned oh-my-agents Dynamic Workflow (anti-bloat rule `single-workflow`).
+// This is THIS repository's project-local workflow (.claude/workflows/); it is not distributed
+// as a plugin asset until plugin-level workflow distribution is confirmed (watch item).
 //
 // WHAT: a read-only, fan-out, four-pillar governance audit. Many Explore agents audit the
 // repo in parallel, each finding is adversarially verified (skeptic tries to REFUTE it),
@@ -23,7 +25,7 @@
 
 export const meta = {
   name: 'harness-audit',
-  description: 'Read-only four-pillar governance audit: fan-out Explore agents + adversarial verification; returns a review-latest.json-shaped decision (never writes it). Rule-17 governed.',
+  description: 'Read-only four-pillar governance audit: fan-out Explore agents + adversarial verification; returns a review-latest.json-shaped decision (never writes it). Governed by anti-bloat rule single-workflow.',
   phases: [
     { title: 'Audit', detail: 'Read-only Explore agents, one per pillar/dimension' },
     { title: 'Verify', detail: 'Adversarially refute each finding (read-only)' },

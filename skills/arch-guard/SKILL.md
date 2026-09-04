@@ -158,7 +158,7 @@ BAD:  Error: Invalid import
 GOOD: Error: Module 'ui/components' cannot import from 'service/auth'.
       UI layer can only import from: types/, config/, and other ui/ modules.
       Fix: Move shared logic to types/ or create a service interface.
-      See docs/ARCHITECTURE.md#dependency-layers
+      See docs/ARCHITECTURE.md (layer model + dependency rules)
 ```
 
 ### Step 8: Nested CLAUDE.md Integration

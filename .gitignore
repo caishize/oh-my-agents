@@ -1,3 +1,4 @@
 .gstack/
 .claude/metrics/
 .claude/signals/
+.claude/gstack-rendered/

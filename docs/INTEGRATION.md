@@ -9,7 +9,7 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths (v1.46+ floor, v1.62.0.0 current)
+## Complementary Strengths (v1.46+ floor, v1.79.0.0 current)
 
 > **Anchor docs**:
 > [TEAM-DISCUSSION-2026-04.md](TEAM-DISCUSSION-2026-04.md) (composition v1),
@@ -17,11 +17,16 @@ metric namespaces.
 > [TEAM-DISCUSSION-2026-05-08.md](TEAM-DISCUSSION-2026-05-08.md) (v1.28 + dual-value
 > paths + decision-signal flow), [TEAM-DISCUSSION-2026-05-23.md](TEAM-DISCUSSION-2026-05-23.md)
 > (verify-signal contract + native Agent Teams + llms.txt oracle), and
-> **[TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md) (gstack v1.56 reground +
-> native Dynamic Workflows + signals → versioned Gate API + legacy sunset)**.
-> Quarterly contract review is supplemented by **lightweight drift check on every
-> `/gstack-sync --status`** — gstack ships ~daily (v1.28 → v1.58.4.0 across 2026-Q2;
-> v1.57.5+ added an event-sourced decision/verdict layer we now reconcile read-only).
+> [TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md) (gstack v1.56 reground +
+> native Dynamic Workflows + signals → versioned Gate API + legacy sunset),
+> [TEAM-DISCUSSION-2026-06-25.md](TEAM-DISCUSSION-2026-06-25.md) (v3.8 verdict reconciliation),
+> [TEAM-DISCUSSION-2026-08-13.md](TEAM-DISCUSSION-2026-08-13.md) (v3.9 push nudges + freshness), and
+> **[TEAM-DISCUSSION-2026-09-04.md](TEAM-DISCUSSION-2026-09-04.md) (v3.10 harness-fusion v3:
+> source-verified gstack v1.79 resync, advisory channel, SessionStart gate state, Q4 cut)**.
+> Quarterly contract review is nudged mechanically on every `/gstack-sync --status`
+> (`CONTRACT-CHECK OVERDUE` when the recorded quarter is behind the clock) — gstack ships
+> ~daily (v1.62 → v1.79 between 2026-08-13 and 2026-09-01; five of our reads had silently
+> drifted onto shapes that do not exist).
 
 ## Differentiation Anchor (where oh-my-agents is irreplaceable)
 
@@ -44,7 +49,7 @@ oh-my-agents must explicitly anchor its differentiation. **Locked decisions:**
 | Planning | /autoplan (triple-voice) | — | Consensus tables → plan constraints |
 | Decomposition | — | /spec-to-task (layer-aware) | Design doc auto-imported |
 | Execution | /guard (freeze/careful) | hooks (arch/safety/metrics) | Dual hook systems coexist |
-| Verification | — | /verify (lint→build→test→arch) | **Emits .claude/signals/verify-latest.json** — checked pre-`/ship` by our-side convention (SIGNALS.md) |
+| Verification | `bin/gstack-verify-gate` (Stop hook; reads `<!-- gstack:verify: cmd -->` from the PROJECT CLAUDE.md, opt-in, `--trust` gated) | /verify (lint→build→test→arch) | **Emits .claude/signals/verify-latest.json** — checked pre-`/ship` by our-side convention (SIGNALS.md); `/harness-init` EXPORTS the marker from the confirmed test command (ours→gstack) |
 | Review (structural) | /review | — | Composed by /harness-review, tag `[STRUCTURAL]` |
 | Review (architecture/entropy) | — | /harness-review | Owns four-pillar + dedup orchestration |
 | Review (cross-model) | /codex | — | Composed when `--with-codex`, tag `[CROSS-MODEL]` |
@@ -55,9 +60,11 @@ oh-my-agents must explicitly anchor its differentiation. **Locked decisions:**
 | Monitoring | /canary | — | Health report → /harness-dashboard quality trend |
 | Multi-session | conductor.json + .gstack-worktrees/ | **worktree-aware** verify/hooks | No cross-fire across sibling sprints |
 | Confusion (v0.18) | Confusion Protocol | — | `confusion.jsonl` bridge RESERVED/INACTIVE (no producer observed; probed at contract check) |
+| **Usage / lifecycle coverage** | `projects/<slug>/timeline.jsonl` (always-on; `skill-usage.jsonl` is telemetry-gated, default off) | `/harness-dashboard` (read-only) | which phases ran, from data that exists |
+| **Spawned subagents** | `GSTACK_SESSION_KIND=spawned` (env, inherited) | `emit_advisory` (hooks) | our advisory nudges stay silent inside gstack-dispatched subagents |
 | **Observation layer (v1.9+, ingest v1.26+)** | GBrain memory (`learnings`, `eureka`, `retro`, `timeline` via `gbrain put`) | `/encode-mistake --from-gbrain [type]` | Observations → TASTE rules (enforcement); two layers, single direction; human-gated |
-| **Cross-machine memory (v1.17+, renamed v1.27)** | `~/.gstack-artifacts-worktree/` (current path only; legacy `gstack-brain*` sunset v3.6.0) | `/gstack-sync` + `/harness-dashboard` (read-only) | Agent learning persists across machines |
-| **Deploy metrics (v1.11+)** | `/landing-report` | `/harness-dashboard` DORA proxy → grounded | deployment_frequency, lead_time, change_failure_rate sourced from real ships |
+| **Cross-machine memory** | `~/.gstack-brain-worktree/` (env `GSTACK_BRAIN_WORKTREE`; `gstack-artifacts-worktree` has zero hits at v1.79 — corrected v3.10.0) | `/gstack-sync` + `/harness-dashboard` (read-only via `gbrain_detect()`) | Agent learning persists across machines |
+| **Deploy metrics** | `.gstack/deploy-reports/*.md` + `.gstack/canary-reports/*.md` (`/landing-report` writes no files) | `/harness-dashboard` DORA proxy | deployment_frequency + change_failure_rate as `[proxy]` file counts; lead_time/MTTR not reported (no data) |
 | **Workspace-aware ship (v1.11+)** | `bin/gstack-next-version` + version-gate.yml | `/verify` (no-op; gstack handles parallel-PR safety) | We do not compete with version allocation |
 | **Conductor workspaces (v1.11+)** | `~/conductor/workspaces/` | hooks + verify (presence detection only) | Coexists with `.gstack-worktrees/`; both honored |
 | Documentation | /document-release | doc-drift-check hook | Auto-sync + drift detection |
@@ -116,24 +123,28 @@ See `.claude/integration.json` for the canonical list.
 | /autoplan | Consensus tables | In plan file | /spec-to-task (extracted) |
 | /spec-to-task | Exec plan JSON | `docs/exec-plans/active/*.json` | /verify --plan |
 | /verify | Results JSONL | `.claude/metrics/verify.jsonl` | /harness-dashboard |
-| /verify | **Readiness signal** | `.claude/signals/verify-latest.json` | pre-`/ship` convention check (SIGNALS.md; gstack-side read `VERIFIED \| ASSERTED`) |
-| /harness-review | Findings JSONL | `.claude/metrics/reviews.jsonl` | /ship, /harness-dashboard |
+| /verify | **Readiness signal** | `.claude/signals/verify-latest.json` | pre-`/ship` convention check (SIGNALS.md; gstack-side read VERIFIED-no at v1.79 ⇒ `ASSERTED`) |
+| /harness-review | Findings JSONL (+ typed `findings[]`) | `.claude/metrics/reviews.jsonl` | /lifecycle (`REQUEST_CHANGES` work list), /harness-dashboard |
+| /verify | History log | `.claude/metrics/verify.jsonl` | /harness-dashboard velocity, Stop-hook termination sensor (3 RED same reason) |
+| /harness-init | **gstack verify marker** (DERIVED EXPORT ours→gstack) | `CLAUDE.md` `<!-- gstack:verify: cmd -->` | gstack `bin/gstack-verify-gate`; /verify reads the commands table as primary |
+| gstack-skill-start/-end | Usage timeline (always-on) | `~/.gstack/projects/$SLUG/timeline.jsonl` | /harness-dashboard, /gstack-sync |
 | /review | Review log | `~/.gstack/projects/$SLUG/*-reviews.jsonl` | /ship, /harness-review (dedup) |
 | /codex (v0.15+) | Cross-model report | `~/.gstack/projects/$SLUG/*-codex-*.md` | /harness-review (`[CROSS-MODEL]`) |
 | /cso | Security audit | `~/.gstack/projects/$SLUG/*-cso-*.md` | /harness-review (`[SECURITY]`) |
 | /design-review | UX report | `~/.gstack/projects/$SLUG/*-design-review-*.md` | /harness-review (`[UX]`) |
 | /qa | Test outcome | `~/.gstack/projects/$SLUG/*-test-outcome-*.md` | /harness-dashboard |
-| /canary | Health report | `.gstack/canary-reports/*.json` | /harness-dashboard (quality trend) |
-| /land-and-deploy | Deploy report | `.gstack/deploy-reports/*.json` | /harness-dashboard (DORA proxy) |
+| /canary | Health report | `.gstack/canary-reports/*.md` (never `.json`) | /harness-dashboard (quality trend) |
+| /land-and-deploy | Deploy report | `.gstack/deploy-reports/*.md` (never `.json`) | /harness-dashboard (DORA proxy) |
 | conductor (v0.16+) | Multi-session state | `conductor.json` | /verify, hooks (worktree-aware) |
 | worktrees | Parallel sprint dirs | `.gstack-worktrees/` | /verify, hooks (scope guard) |
 | /investigate | Root cause | Session context | /encode-mistake |
 | session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` (project root; one ledger) | /harness-dashboard, /retro |
+| /encode-mistake | Encode provenance ledger (write-only by design) | `.claude/metrics/investigations.jsonl` | `--from-investigation` only |
 | Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | RESERVED/INACTIVE — no producer observed; upstream probed at contract check; hard-delete if probe confirms sunset |
-| gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | /harness-dashboard |
+| gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | none — telemetry-gated (default off); `timeline.jsonl` is the source |
 | gstack analytics | Eureka moments | `~/.gstack/analytics/eureka.jsonl` | /harness-dashboard |
-| **GBrain (v1.12+, renamed v1.27)** | Federation worktree | `~/.gstack-artifacts-worktree/` (current path only; legacy `gstack-brain*` sunset v3.6.0) | /gstack-sync, /harness-dashboard |
-| **GBrain (v1.9+)** | Learnings log | `${GBRAIN_WT}/learnings-*.jsonl` **OR** fallback `~/.gstack/projects/$SLUG/*-learnings-*.jsonl` | **/encode-mistake `--from-gbrain learning`** |
+| **GBrain** | Federation worktree | `~/.gstack-brain-worktree/` (env `GSTACK_BRAIN_WORKTREE`; resolved by `gbrain_detect()`) | /gstack-sync, /harness-dashboard |
+| **GBrain** | Learnings log | `~/.gstack/projects/$SLUG/*learnings*.jsonl` (ONE file, `learnings.jsonl`) | **/encode-mistake `--from-gbrain learning`**, /lifecycle improve |
 | **GBrain (v1.9+)** | Timeline log | `${GBRAIN_WT}/timeline-*.jsonl` | /harness-dashboard |
 | **GBrain (v1.9+)** | Review log | `${GBRAIN_WT}/review-*.jsonl` | /harness-dashboard |
 | **GBrain (v1.9+)** | Developer profile | `${GBRAIN_WT}/developer-profile-*.json` | /harness-dashboard |
@@ -142,8 +153,7 @@ See `.claude/integration.json` for the canonical list.
 | **llms.txt index (v1.28+)** | Authoritative skill/command index | `<gstack_root>/**/llms.txt` (glob — carved/rendered layouts) | /gstack-sync (ordered capability oracle: local VERSION → llms.txt → skill index → raw CHANGELOG fetch) |
 | **gstack-rendered enclave (v1.57.9+)** | Rendered skill docs gstack writes into OUR namespace | `.claude/gstack-rendered/` | none — gstack-OWNED: gitignored, excluded from entropy-sweep + doc-drift-check, never flagged |
 | **memory-ingest binary (v1.26+)** | Internal gstack ingest tool | `<gstack_root>/bin/gstack-memory-ingest` | presence probe only — we never invoke |
-| **review decision signal (v3.4+)** | Decision tag from `/harness-review` | `.claude/signals/review-latest.json` | /lifecycle next (gates auto-advance) |
-| **/landing-report (v1.11+)** | Post-ship metrics (local) | `.gstack/landing-reports/*.json` | /harness-dashboard (DORA grounded) |
+| **review decision signal (v3.4+)** | Decision tag from `/harness-review` | `.claude/signals/review-latest.json` | /lifecycle next (routes — NAMES the next skill, never advances), Stop/SessionStart gate-state nudge |
 | **/landing-report (v1.11+)** | Post-ship metrics (project) | `~/.gstack/projects/$SLUG/*-landing-*.md` | /harness-dashboard |
 | **Conductor workspaces (v1.11+)** | Parallel sprint dirs | `~/conductor/workspaces/` | hooks (presence only) |
 
@@ -249,24 +259,27 @@ defers cross-cutting concerns that gstack already owns.
 | Security deep-audit | **gstack /cso** | /harness-review delegates; hooks are backstop |
 | UX / DX audit | **gstack /design-review + /devex-review** | /harness-review auto-suggests on UI diffs |
 | Cross-model verification | **gstack /codex** | opt-in via `--with-codex` |
-| Ship/Deploy/Canary | gstack | reads `.claude/signals/verify-latest.json` |
+| Ship/Deploy/Canary | gstack | our-side pre-ship convention checks our signals; gstack reads none of them (VERIFIED at v1.79) |
 | Velocity retro | gstack /retro | — |
 | Governance retro | oh-my-agents /harness-dashboard | DORA proxy + dual-review rate |
 
 ## Anti-Bloat Constraints
 
-*Hard rules (current through v3.9.1). Stable anchor — linked from CLAUDE.md.*
+*Hard rules (current through v3.10.0). Stable anchor — linked from CLAUDE.md.*
 ***Cite rules by their kebab-case NAME*** *(renumber-proof — numbers below are layout,
 not identity; a "rule N" citation anywhere is drift).*
 
 1. **`no-new-skills`** — no new skills for integration purposes; modify existing skills only.
-2. **`skill-line-cap`** — SKILL.md ≤ 400 lines per skill; over-budget triggers immediate
-   trim (this rule itself caught `spec-to-task` at 465 → trimmed to 317 lines).
+2. **`skill-line-cap`** — SKILL.md ≤ 400 lines per skill; **root CLAUDE.md ≤ 60 lines**
+   (evidence: ETH Zurich arXiv 2602.11988 — context files raise cost >20% for ~0 gain;
+   Anthropic "Steering Claude Code" 2026-06; HumanLayer <60). Both enforced by
+   `tests/test-skills.sh` since v3.10.0 (the test asserted 900 through v3.9 — 2.25× the
+   cap). Over-budget triggers immediate trim.
 3. **`glob-over-exact-path`** — glob for every gstack bridge; gstack reorganizes
    frequently (~daily releases; 7 versions in 8 days during 2026-Q2).
 4. **`loose-version-match`** — probe artifact presence, not version strings.
-5. **`read-only-bridge`** — never write to `~/.gstack/` or `~/.gstack-artifacts-worktree/`
-   (post-v1.27 rename; legacy `gstack-brain*` path sunset v3.6.0).
+5. **`read-only-bridge`** — never write to `~/.gstack/` (or `$GSTACK_HOME`) or `~/.gstack-brain-worktree/`
+   (memory worktree; env `GSTACK_BRAIN_WORKTREE`) — read-only, always.
 6. **`lightweight-drift-check`** — on every `/gstack-sync --status`; deep contract
    review still quarterly (`--contract-check`).
 7. **`capability-floor`** — `min_supported` tracks gstack's major capability milestones,
@@ -289,8 +302,10 @@ not identity; a "rule N" citation anywhere is drift).*
     hold after gstack's next release?"* If no — replace with capability detection.
 11. **`transient-dual-value`** — bridge dual-value is TRANSIENT, not permanent: a gstack rename is probed at both
     the legacy and current paths *only until* `min_supported` clears the rename floor, then
-    the legacy path is dropped (see rule 16). Both absent ⇒ graceful degrade. As of v3.6.0
-    the `gstack-brain*` → `gstack-artifacts*` dual-value has sunset; single-path probes only.
+    the legacy path is dropped (see `legacy-sunset`). Both absent ⇒ graceful degrade.
+    **Corrected v3.10.0:** the v3.6.0 sunset dropped the WRONG side — gstack's memory
+    worktree is `~/.gstack-brain-worktree`; `gstack-artifacts-worktree` never existed at
+    v1.79. Single-path probes only, via `gbrain_detect()`; the dead name is CI-grepped.
 12. **`milestone-floor`** — `min_supported` bumps at major capability surfaces
     (e.g. Memory Ingest v1 = v1.26; eval-first = v1.46), not at minor releases.
 13. **`no-orchestration`** — `/lifecycle` is router + reporter, never executor.
@@ -344,6 +359,28 @@ not identity; a "rule N" citation anywhere is drift).*
       adversarial verification filtered ~17% false positives. Use it for governance/release
       audits; use single-pass `/harness-review` for PR/hotfix validation.
     - **Corollary:** `/lifecycle` is NEVER reimplemented as a workflow.
+    - **Distribution:** `harness-audit.js` is THIS repository's project-local workflow;
+      plugin-level workflow distribution is an UNVERIFIED watch item — never a per-project
+      copy (an un-upgradeable fork of the one governed workflow).
+
+18. **`hook-latency-budget`** — every `hooks/hooks.json` timeout ≤ its event's ceiling:
+    PreToolUse 10000 ms · PostToolUse 5000 ms · Stop 8000 ms · SessionStart 3000 ms
+    (asserted by `tests/test-hooks.sh`). gstack registers its own Stop + SessionStart hooks
+    in global `~/.claude/settings.json`, so latency stacks across plugins and a slow chain
+    gets disabled by the user (`/checkup` turns off slow hooks) — taking the blocking
+    arch/safety gates down with it. Worst case today on PostToolUse Edit|Write:
+    session-metrics 2000 + self-verify 5000 = 7 s.
+19. **`declared-artifact`** — every `.claude/metrics/*` / `.claude/signals/*` basename a
+    hook or skill writes must appear in this file's bridge table or in
+    `.claude/integration.json` `bridges` (or in the test's `WRITE_ONLY_BY_DESIGN` list with a
+    reason). CI fails otherwise. A writer shipped without a declared reader is how
+    `lifecycle-next.json`, `integrated-report.json` and `handoff-<branch>.json` each waited
+    a full cycle to be found dead.
+20. **`ablate-per-model`** — every hook and rule names the model/platform failure it
+    compensates for; at each major model bump, remove ONE component at a time and measure
+    (Anthropic: "every component in a harness encodes an assumption about what the model
+    can't do … those assumptions go stale"). Deletions this rule has fired: context-reset
+    shift-handoff (session-observer, v3.10.0), heavy self-verify (v3.10.0).
 
 ## Foundational Principles
 

@@ -95,15 +95,15 @@ Check for:
 
 Scoring guide:
 - **0**: No CLAUDE.md exists
-- **1**: Root CLAUDE.md exists but is over 100 lines or lacks structure
+- **1**: Root CLAUDE.md exists but is over 60 lines (rule `skill-line-cap`) or lacks structure
   (missing directory overview, key commands, or module descriptions)
-- **2**: Root CLAUDE.md is under 100 lines with proper structure
+- **2**: Root CLAUDE.md is ≤ 60 lines with proper structure
   (acts as table of contents, progressive disclosure, key entry points)
 - **3**: Root CLAUDE.md + nested CLAUDE.md for all qualifying modules
   (modules with 5+ files get their own CLAUDE.md with layer rules and conventions)
 
 Check for:
-- [ ] CLAUDE.md exists and is under 100 lines
+- [ ] CLAUDE.md exists and is ≤ 60 lines (evidence: ETH Zurich 2602.11988; Anthropic "Steering Claude Code"; HumanLayer)
 - [ ] It acts as a table of contents, not an encyclopedia (progressive disclosure)
 - [ ] Directory structure is explained
 - [ ] Key modules and their responsibilities are listed

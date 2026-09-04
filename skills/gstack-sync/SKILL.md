@@ -1,8 +1,8 @@
 ---
 name: gstack-sync
-description: "Detect gstack installation, set up artifact bridges, sync metrics bidirectionally. The integration hub for oh-my-agents + gstack combined workflows. Aliases: gstack同步, 插件同步, gstack集成"
+description: "Detect gstack installation, configure read-only artifact bridges, report integration health with a mechanical contract-drift nudge. The integration hub for oh-my-agents + gstack combined workflows (never writes gstack paths). Aliases: gstack同步, 插件同步, gstack集成"
 user-invocable: true
-argument-hint: "[--status] [--setup] [--metrics] [--contract-check]"
+argument-hint: "[--status] [--setup] [--contract-check]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -17,7 +17,9 @@ gstack version drift is expected (daily releases) — match versions loosely, de
 
 ## Task
 
-`$ARGUMENTS`: `--status` (default), `--setup`, `--metrics`, or `--contract-check`
+`$ARGUMENTS`: `--status` (default), `--setup`, or `--contract-check`
+(`--metrics` / `integrated-report.json` were deleted in v3.10.0 — one producer, zero
+consumers, triple-dead upstream inputs; everything wanted lives in `/harness-dashboard`)
 
 ### Step 0: Detect gstack (loose match)
 
@@ -39,28 +41,23 @@ Probe the artifact surface — NOT the command list (commands change too often).
 gstack ships ~daily; rely on **artifact presence**, not version strings.
 
 ```bash
-GSTACK_HOME="$HOME/.gstack"
-PROJ_DIR="$GSTACK_HOME/projects/$SLUG"
-ANALYTICS_DIR="$GSTACK_HOME/analytics"
-
-# GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0 once
-# min_supported rose to 1.46 > the v1.27 rename floor). Absent = graceful degrade.
-GBRAIN_WT=""
-[ -d "$HOME/.gstack-artifacts-worktree" ] && GBRAIN_WT="$HOME/.gstack-artifacts-worktree"
+ROOT=$(harness_root)                       # project root — never the shell cwd
+GSTACK_HOME_DIR=$(gstack_home)             # honors $GSTACK_HOME like gstack's own bin/gstack-paths
+PROJ_DIR="$GSTACK_PROJECTS"                # from gstack_detect (slug = owner-repo, {SLUG}-templated)
+ANALYTICS_DIR="$GSTACK_ANALYTICS"
+# gbrain: GBRAIN_WT / GBRAIN_LEARNINGS / GBRAIN_CLI / GBRAIN_REMOTE / GSTACK_ARTIFACTS_REMOTE /
+# GSTACK_TIMELINE are all set by gstack_detect (ONE implementation — hooks/lib/common.sh).
+# Worktree = ~/.gstack-brain-worktree (env GSTACK_BRAIN_WORKTREE); learnings = ONE file
+# under projects/<slug>/. Absent = graceful degrade.
 
 # Capability probes (presence > version)
-GBRAIN_CLI=$(command -v gbrain 2>/dev/null || echo "")               # v1.26+ memory ingest CLI
 # llms.txt: GLOB, not exact paths — carved skills (v1.56+ skeleton+sections/) and rendered
 # layouts move it around. Also check the project-local gstack-rendered enclave.
 LLMS_TXT=$(find "$GSTACK_PATH" .claude/gstack-rendered -name 'llms.txt' 2>/dev/null | head -1)  # v1.28+
 INGEST_BIN=""
 [ -x "$GSTACK_PATH/bin/gstack-memory-ingest" ] && INGEST_BIN="$GSTACK_PATH/bin/gstack-memory-ingest"  # v1.26+
-ARTIFACTS_REMOTE=""
-[ -f "$HOME/.gstack-artifacts-remote.txt" ] && ARTIFACTS_REMOTE="present"  # sync/distribution remote
-# brain-remote is a DISTINCT remote from artifacts-remote (NOT a rename) — gbrain memory lives here.
-# Never infer "gbrain absent" from artifacts-only; gbrain presence = CLI/doctor OR worktree OR this file.
-BRAIN_REMOTE=""
-[ -f "$HOME/.gstack-brain-remote.txt" ] && BRAIN_REMOTE="present"
+ARTIFACTS_REMOTE="$GSTACK_ARTIFACTS_REMOTE"   # sync/distribution remote
+BRAIN_REMOTE="$GBRAIN_REMOTE"                 # DISTINCT remote — gbrain memory; never infer "gbrain absent" from artifacts-only
 GBRAIN_DOCTOR=$( { command -v gbrain >/dev/null 2>&1 && gbrain doctor >/dev/null 2>&1; } && echo "ok" || echo "")  # v1.26+ MCP/health
 
 # gstack decision/verdict layer (v1.57.5+): event-sourced decisions + active snapshot + review verdict.
@@ -68,7 +65,7 @@ GBRAIN_DOCTOR=$( { command -v gbrain >/dev/null 2>&1 && gbrain doctor >/dev/null
 DECISIONS_LOG=$([ -f "$PROJ_DIR/decisions.jsonl" ] && echo 1 || echo 0)              # v1.57.5+
 DECISIONS_ACTIVE=$([ -f "$PROJ_DIR/decisions.active.json" ] && echo 1 || echo 0)     # v1.57.5+
 REVIEW_VERDICT=$(ls -t $PROJ_DIR/*-reviews.jsonl 2>/dev/null | head -1 | xargs -I{} tail -1 {} 2>/dev/null \
-  | python3 -c "import sys,json; print(json.loads(sys.stdin.read() or '{}').get('status',''))" 2>/dev/null || echo "")  # gstack-review-log
+  | python3 -c "import sys,json; raw=sys.stdin.read().strip(); print(json.loads(raw).get('status','verdict-unparsed') if raw else '')" 2>/dev/null || echo "verdict-unparsed")  # gstack-review-log; LOUD degrade, never silent ""
 HEALTH_HISTORY=$([ -f "$PROJ_DIR/health-history.jsonl" ] && echo 1 || echo 0)        # v1.x /health
 
 # Core artifacts (legacy, pre-v1)
@@ -79,24 +76,22 @@ CAP_QA=$(ls $PROJ_DIR/*-test-outcome-*.md 2>/dev/null | wc -l)
 CAP_CODEX=$(ls $PROJ_DIR/*-codex-*.md 2>/dev/null | wc -l)
 CAP_CSO=$(ls $PROJ_DIR/*-cso-*.md 2>/dev/null | wc -l)
 CAP_DESIGN_REVIEW=$(ls $PROJ_DIR/*-design-review-*.md 2>/dev/null | wc -l)  # was /ux-audit pre-v1.x
-CAP_CANARY=$(ls .gstack/canary-reports/*.json 2>/dev/null | wc -l)
-CAP_DEPLOY=$(ls .gstack/deploy-reports/*.json 2>/dev/null | wc -l)
+CAP_CANARY=$(ls "$ROOT"/.gstack/canary-reports/*.md 2>/dev/null | wc -l)   # gstack writes {date}-canary.md (never .json); rooted, never cwd-relative
+CAP_DEPLOY=$(ls "$ROOT"/.gstack/deploy-reports/*.md 2>/dev/null | wc -l)   # {date}-pr{n}-deploy.md
 CAP_CONDUCTOR=$([ -f "conductor.json" ] && echo 1 || echo 0)
 CAP_WORKTREES=$([ -d ".gstack-worktrees" ] && ls -1 .gstack-worktrees | wc -l || echo 0)
 CAP_SKILL_USAGE=$([ -f "$ANALYTICS_DIR/skill-usage.jsonl" ] && echo 1 || echo 0)
 CAP_EUREKA=$([ -f "$ANALYTICS_DIR/eureka.jsonl" ] && echo 1 || echo 0)
 
-# Post-v0.18 additions (v1.x era)
-CAP_LANDING_LOCAL=$(ls .gstack/landing-reports/*.json 2>/dev/null | wc -l)       # v1.11+
+# Post-v0.18 additions (v1.x era). `.gstack/landing-reports/` NEVER existed (verified v1.79) — no probe.
 CAP_LANDING_PROJ=$(ls $PROJ_DIR/*-landing-*.md 2>/dev/null | wc -l)              # v1.11+
-CAP_GBRAIN_WT=$([ -n "$GBRAIN_WT" ] && echo 1 || echo 0)                         # v1.17+ / v1.27 renamed
-CAP_GBRAIN_LEARNINGS=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l || echo 0)
+CAP_TIMELINE=$([ -f "$GSTACK_TIMELINE" ] && wc -l < "$GSTACK_TIMELINE" || echo 0) # ALWAYS-ON usage log (skill-usage.jsonl is telemetry-gated, default off)
+CAP_GBRAIN_WT=$([ -n "$GBRAIN_WT" ] && echo 1 || echo 0)                         # ~/.gstack-brain-worktree
+CAP_GBRAIN_LEARNINGS=$(cat $GBRAIN_LEARNINGS 2>/dev/null | wc -l)                # projects/<slug>/learnings.jsonl entries
 CAP_GBRAIN_TIMELINE=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l || echo 0)
 CAP_GBRAIN_REVIEWS=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/review-*.jsonl 2>/dev/null | wc -l || echo 0)
 CAP_GBRAIN_PROFILE=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/developer-profile-*.json 2>/dev/null | wc -l || echo 0)
-CAP_GBRAIN_POLICY=$([ -f "$GSTACK_HOME/gbrain-repo-policy.json" ] && echo 1 || echo 0)  # v1.12+
-# Fallback path if user is pre-v1.17 (learnings still in projects/)
-CAP_LEARNINGS_FB=$(ls $PROJ_DIR/*-learnings-*.jsonl 2>/dev/null | wc -l)
+CAP_GBRAIN_POLICY=$([ -f "$GSTACK_HOME_DIR/gbrain-repo-policy.json" ] && echo 1 || echo 0)  # v1.12+
 # Conductor workspaces (v1.11+); presence only — never write
 CAP_CONDUCTOR_WS=$([ -d "$HOME/conductor/workspaces" ] && echo 1 || echo 0)
 ```
@@ -114,6 +109,12 @@ MIN_SUPPORTED=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]+"/.
 ver_lt() { [ "$(printf '%s\n%s' "$1" "$2" | sort -V | head -1)" = "$1" ] && [ "$1" != "$2" ]; }
 [ -n "$MIN_SUPPORTED" ] && ver_lt "$GSTACK_VERSION" "$MIN_SUPPORTED" && \
   echo "DRIFT: gstack v$GSTACK_VERSION below min_supported v$MIN_SUPPORTED" || true
+# Contract-check overdue nudge (v3.10): the recorded quarter is BOTH trigger and receipt.
+# Current quarter computed from the clock (never a hard-coded string). Silent when current.
+REC_Q=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]+"/.claude/integration.json"))["policies"].get("review_contract_quarter",""))' "$ROOT" 2>/dev/null)
+NOW_Q=$(date -u +%Y)-Q$(( ($(date -u +%-m) - 1) / 3 + 1 ))
+[ -n "$REC_Q" ] && [ "$REC_Q" \< "$NOW_Q" ] && \
+  echo "CONTRACT-CHECK OVERDUE: last recorded $REC_Q, now $NOW_Q — next: /gstack-sync --contract-check" || true
 ```
 
 ### Step 2: Status Report (default)
@@ -132,14 +133,15 @@ Output this structure (Markdown):
 - review logs: {count}            - QA outcomes: {count}
 - codex reports: {count}          - cso reports: {count}
 - design-review reports: {count}  - canary reports: {count}
-- deploy reports: {count}         - landing reports: {local + project count}
+- deploy reports: {count}         - landing reports (project): {count}
+- timeline entries: {count}       (gstack always-on usage log — lifecycle coverage source)
 - conductor.json: {present}       - .gstack-worktrees/: {N parallel}
 - conductor workspaces (v1.11+): {present|absent}
 
 ### GBrain (v1.12+ memory subsystem, read-only; v1.26+ ingest; v1.27 rename — legacy sunset v3.6.0)
 - worktree present       : {none | present (gstack-artifacts)}
 - worktree path          : {resolved $GBRAIN_WT or "—"}
-- learnings entries      : {N from worktree, or fallback projects/*-learnings-*.jsonl}
+- learnings entries      : {N from projects/<slug>/learnings.jsonl}
 - timeline entries       : {N}
 - review log entries     : {N}
 - developer profile      : {present|absent}
@@ -153,8 +155,8 @@ Output this structure (Markdown):
 
 ### Decision/verdict layer (gstack v1.57.5+, read-only — feeds /harness-review reconciliation)
 - decisions.jsonl        : {present|absent}              (event-sourced decision memory)
-- decisions.active.json  : {present|absent}              ({N} unresolved if present)
-- review verdict         : {clean | issues_found | "—"}  (gstack-review-log status)
+- decisions.active.json  : {present|absent}              (presence only — a rebuildable cache, never counted)
+- review verdict         : {clean | issues_found | verdict-unparsed | "—"}  (gstack-review-log status; currency by `wtree` in /harness-review)
 - health-history.jsonl   : {present|absent}
 - reconciliation         : {our review-latest.json + gstack verdict → agree=pass / diverge=NEEDS_HUMAN:judgment-slop}
 
@@ -193,7 +195,12 @@ Output this structure (Markdown):
 
 ### Step 3: Setup (--setup)
 
-1. Ensure `.claude/integration.json` exists (already shipped at v1.1+); if older, migrate.
+1. Ensure `$ROOT/.claude/integration.json` exists. It is NOT created by `/harness-init`; when
+   absent, copy the plugin's own manifest as the template —
+   `cp "${CLAUDE_PLUGIN_ROOT}/.claude/integration.json" "$ROOT/.claude/integration.json"` —
+   it carries `{SLUG}` placeholders (substituted at read time by `resolve_gstack_paths`,
+   never baked) and `policies.review_contract_quarter`, which the overdue nudge needs. Set
+   `project.slug` to `$SLUG`. If older, migrate.
 2. Update CLAUDE.md workflow section if it lacks current gstack lifecycle commands.
 3. Add to `.gitignore` if missing: `.gstack/`, `.gstack-worktrees/`, `conductor.json`,
    `.claude/signals/`, `.claude/metrics/`, `.claude/gstack-rendered/` (gstack-owned
@@ -203,51 +210,7 @@ Output this structure (Markdown):
    `ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root); mkdir -p "$ROOT/.claude/signals"`.
 5. Print summary; do not modify gstack files.
 
-### Step 4: Metrics Sync (--metrics)
-
-Generate `.claude/metrics/integrated-report.json`. Reference originals, do not copy:
-
-```json
-{
-  "generated_at": "ISO8601",
-  "harness": {
-    "hooks_fired_7d": {...},
-    "violations_blocked_7d": N,
-    "verify_runs_7d": N,
-    "verify_pass_rate": 0.0,
-    "review_runs_7d": N,
-    "encode_mistake_count_7d": N,
-    "entropy_sweeps_7d": N
-  },
-  "gstack": {
-    "source": "~/.gstack/analytics/skill-usage.jsonl",
-    "skills_used_7d": {...},
-    "ships_7d": N,
-    "ships_with_verify_signal": N,
-    "qa_runs_7d": N,
-    "codex_reviews_7d": N,
-    "cso_audits_7d": N,
-    "ux_audits_7d": N,
-    "investigates_7d": N
-  },
-  "combined": {
-    "lifecycle_phase_coverage": {"ideate": N, "plan": N, ..., "improve": N},
-    "dual_review_rate": 0.0,
-    "taste_rules_encoded": "N (from docs/LINTING.md registry) + unencoded gbrain candidates",
-    "ship_to_verify_signal_rate": 0.0
-  },
-  "dora_proxy": {
-    "deployment_frequency_per_week": 0.0,
-    "lead_time_days_p50": 0.0,
-    "change_failure_rate_proxy": 0.0,
-    "mttr_hours_proxy": 0.0
-  }
-}
-```
-
-DORA proxies are best-effort estimates from available signals — flag as "proxy" in output.
-
-### Step 5: Contract Check (--contract-check)
+### Step 4: Contract Check (--contract-check)
 
 Quarterly governance gate — run before/after each quarter:
 
@@ -270,14 +233,18 @@ Quarterly governance gate — run before/after each quarter:
    false-negative machine), grep for `.claude/signals` / `verify-latest`. Report
    `gate_status: VERIFIED` (reference found) or `ASSERTED` (our-side convention,
    unconfirmed). A grep miss MUST render as `ASSERTED` — never as "gstack ignores
-   signals" (absence of a hit is not proof of absence). Watch item: gstack v1.62
-   "host-anchored plan signals" (UNVERIFIED, changelog-summarized) is the nearest
-   upstream convergence point for a real bilateral gate contract.
+   signals" (absence of a hit is not proof of absence). Verified against v1.79 source
+   (2026-09-04): `/ship` reads nothing of ours — ASSERTED is the confirmed state. The one
+   bilateral surface is `bin/gstack-verify-gate` reading `<!-- gstack:verify: … -->` from
+   the PROJECT's CLAUDE.md (our `/harness-init` exports it, confirmed-command only).
 6. **Confusion Protocol probe** — read-only grep of gstack's surface for Confusion
    Protocol references. The `confusion.jsonl` bridge is RESERVED/INACTIVE (no producer
    observed); hard-delete its bridge row only if this probe confirms upstream sunset at
    a quarterly check.
 7. Output a remediation checklist; do NOT auto-modify integration.json (human decides).
+8. **Record the check** by bumping `policies.review_contract_quarter` to the current
+   quarter — a ONE-LINE HUMAN-CONFIRMED edit, never auto-written (the check must not mark
+   itself done without running). That recorded quarter is the next `--status` run's trigger.
 
 ## Rules
 
@@ -289,14 +256,14 @@ Quarterly governance gate — run before/after each quarter:
 - **Loose version match** — accept `min_supported` and above; warn but don't fail on drift
 - **Worktree-aware** — if `.gstack-worktrees/` present, scope reports to current worktree
 - **No skill duplication** — never invoke gstack commands; only discover their outputs
-- **Legacy sunset FIRED (v3.6.0)** — the v1.27 *worktree* rename (`gstack-brain-worktree`
-  → `gstack-artifacts-worktree`) is past the floor, so the legacy worktree path is dropped;
-  probe `~/.gstack-artifacts-worktree` only. **Caveat (v3.8):** this sunset is about the
-  WORKTREE rename — it does NOT mean "gbrain is gone". `~/.gstack-brain-remote.txt` is a
-  DISTINCT remote from `~/.gstack-artifacts-remote.txt` (gbrain memory vs sync), so gbrain
-  presence = CLI/`gbrain doctor` OR worktree OR brain-remote — never artifacts-only. A FUTURE
-  gstack rename re-introduces dual-value bridges temporarily, then sunsets on the same rule.
+- **gbrain paths (corrected v3.10.0)** — the memory worktree is `~/.gstack-brain-worktree`
+  (env `GSTACK_BRAIN_WORKTREE`); `~/.gstack-artifacts-worktree` has zero hits in gstack
+  v1.79 and is never probed. `~/.gstack-brain-remote.txt` and `~/.gstack-artifacts-remote.txt`
+  are two DISTINCT remotes (memory vs sync); gbrain presence = CLI/`gbrain doctor` OR
+  worktree OR brain-remote — never artifacts-only. ONE detection implementation:
+  `gbrain_detect()` in hooks/lib/common.sh (a future rename is a 3-line edit there).
 - **Prefer llms.txt over enumeration** (v1.28+) — when present, it is gstack's
   authoritative skill/command index; do not duplicate or stale-cache it locally
 - **No orchestration** — this skill discovers and reports; never executes gstack workflow
-- Quarterly contract check is mandatory; record results in `.claude/metrics/integrated-report.json`
+- Quarterly contract check is nudged mechanically on every `--status`; its result is the
+  recorded `review_contract_quarter` (human-bumped in integration.json)

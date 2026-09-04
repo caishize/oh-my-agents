@@ -65,6 +65,8 @@ if not isinstance(plan, dict):
 template_file, project_dir, plan_path = sys.argv[1], sys.argv[2], sys.argv[3]
 
 # --- 1. Handoff checklist ---
+# transient-dual-value: `in_progress` (pre-v3.10 spelling) stays readable here until v3.11;
+# the template enum is `in-progress` and section 2 reports the underscore as drift.
 ACTIVE = {"in_progress", "in-progress", "done"}
 lines = []
 for t in (plan.get("tasks") or []):
@@ -98,6 +100,26 @@ if known:
     unknown = [k for k in plan.keys() if k not in known]
     if unknown:
         drift.append("  - top-level keys not in templates/execution-plan.json: %s" % ", ".join(sorted(unknown)))
+# Status enums (the template is the SSOT for spelling too). Tolerant on the READ above —
+# `in_progress` is accepted in ACTIVE until the transient-dual-value sunset (v3.11) — and
+# strict on the REPORT here, so a misspelling is caught while the plan is authored, not
+# when a consumer spelling it the other way silently sees zero active tasks.
+try:
+    with open(template_file) as f:
+        tpl = json.load(f).get("properties", {})
+    plan_enum = set(tpl.get("status", {}).get("enum", []))
+    task_enum = set(tpl.get("tasks", {}).get("items", {}).get("properties", {}).get("status", {}).get("enum", []))
+except Exception:
+    plan_enum, task_enum = set(), set()
+def _hint(v, allowed):
+    alt = v.replace("_", "-")
+    return " (did you mean %r?)" % alt if alt in allowed and alt != v else ""
+if plan_enum and plan.get("status") is not None and plan.get("status") not in plan_enum:
+    drift.append("  - plan status %r not in template enum%s" % (plan.get("status"), _hint(str(plan.get("status")), plan_enum)))
+if task_enum:
+    for t in (plan.get("tasks") or []):
+        if isinstance(t, dict) and t.get("status") is not None and t.get("status") not in task_enum:
+            drift.append("  - task %s: status %r not in template enum%s" % (t.get("id", "?"), t.get("status"), _hint(str(t.get("status")), task_enum)))
 CMDISH = re.compile(r"(^\./|^[\w.-]+/|\b(test|spec)\w*\b|\b(npm|pnpm|yarn|npx|pytest|jest|vitest|cargo|go|make|mvn|gradle|sh|bash|python3?|node|rspec|phpunit|dotnet|tsc|eslint|ruff)\b)", re.I)
 for t in (plan.get("tasks") or []):
     if not isinstance(t, dict):
@@ -137,15 +159,18 @@ if all_done and str(plan.get("status", "")).lower() == "active":
 ' "$TEMPLATE_FILE" "$PROJECT_DIR" "$FILE_PATH" 2>/dev/null || echo "")
 fi
 
+# Delivery: through emit_advisory (common.sh) — stdout JSON with additionalContext, the one
+# channel a PreToolUse hook at exit 0 has into the model's context. Through v3.9 this block
+# went to stderr at exit 0, which reaches neither the model nor a parsed envelope.
 if [ -n "$GUIDANCE" ]; then
-    {
+    ADVISORY=$({
         if printf '%s' "$GUIDANCE" | grep -q '^HANDOFF$'; then
             echo "Plan handoff checklist (feedforward — not blocking): some active tasks are"
             echo "under-specified for the Planner→Generator handoff. A context-reset Generator"
             echo "needs these to start without re-deriving intent:"
             printf '%s\n' "$GUIDANCE" | sed -n '/^HANDOFF$/,/^\(DRIFT\|COMPLETE\)$/p' | grep '^  -' || true
             echo "  Fix: add acceptance criteria, context_files (read-for-context), and the"
-            echo "  failing_tests gate per templates/execution-plan.json before marking in_progress."
+            echo "  failing_tests gate per templates/execution-plan.json before marking in-progress."
         fi
         if printf '%s' "$GUIDANCE" | grep -q '^DRIFT$'; then
             echo "Plan schema GUIDE (templates/execution-plan.json is the source of truth):"
@@ -155,7 +180,8 @@ if [ -n "$GUIDANCE" ]; then
             echo "Plan complete (advisory — names the next skill, never invokes it):"
             printf '%s\n' "$GUIDANCE" | sed -n '/^COMPLETE$/,$p' | grep '^  ' || true
         fi
-    } >&2
+    })
+    emit_advisory PreToolUse "$ADVISORY"
 fi
 
 exit 0

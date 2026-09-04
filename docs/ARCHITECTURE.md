@@ -46,11 +46,13 @@ Agents and humans can see what happened, why it happened, and where the system s
 
 - **Session metrics** — tool usage, layer activity, enforcement events tracked per session
 - **Harness dashboard** — aggregated health overview and trend analysis
-- **Shift-handoff** — session observer writes structured summaries to agent memory
+- **Shift-handoff** — the decision signals ARE the handoff: the SessionStart hook injects
+  gate state + active plan into the model's context at session open (the background
+  `session-observer` agent was retired v3.10.0 — zero triggers, zero readers)
 - **Nested CLAUDE.md** — module-level context for agent navigation
 
-Implemented by: `/harness-dashboard`, `/harness-dashboard --query`, `session-observer-agent`,
-`session-metrics.sh`
+Implemented by: `/harness-dashboard`, `/harness-dashboard --query`, `doc-drift-check.sh`
+(SessionStart), `session-metrics.sh`
 
 ### 4. Entropy Management ("Garbage Collection")
 
@@ -153,21 +155,22 @@ skills/                                   # User-invocable slash commands (11 sk
 ├── harness-dashboard/SKILL.md            # Session metrics and health overview (--query for deep-dive)
 ├── gstack-sync/SKILL.md                  # Detect gstack, configure bridges, sync metrics
 └── lifecycle/SKILL.md                    # Lifecycle router (names next phase; never executes)
-agents/                                   # Read-only background subagent (1 agent)
-└── session-observer-agent.md             # Session tracking and shift-handoff
-                                          # (doc-gardening-agent retired v3.6.0 — covered by
-                                          #  doc-drift-check hook + entropy-sweep)
+                                          # (no agents/ since v3.10.0: session-observer retired —
+                                          #  SessionStart gate-state injection + signals replace it;
+                                          #  doc-gardening-agent retired v3.6.0)
 hooks/                                    # Event hook scripts (7 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution,
-│                                         #  project-root addressing: get_project_dir)
+│                                         #  project-root addressing: get_project_dir; gstack +
+│                                         #  gbrain detection; emit_advisory; append_history_record)
 ├── arch-check.sh                         # PreToolUse (Edit|Write): layer boundary check
 ├── safety-check.sh                       # PreToolUse (Edit|Write): hardcoded secrets detection
 ├── plan-validation-check.sh             # PreToolUse (Edit|Write): exec-plan handoff GUIDE (advisory)
 ├── bash-safety-check.sh                  # PreToolUse (Bash): credential leak detection
-├── self-verify-check.sh                  # PostToolUse (Edit|Write): syntax/type self-verification
+├── self-verify-check.sh                  # PostToolUse (Edit|Write): syntax self-verification (py/js)
 ├── session-metrics.sh                    # PostToolUse (Edit|Write|Bash): JSONL activity logging
-└── doc-drift-check.sh                    # Stop: documentation drift warning
+└── doc-drift-check.sh                    # Stop: drift + gate-state nudge + termination sensor;
+                                          # SessionStart: gate state injected into context
 docs/                                     # Template docs for target projects
 ├── ARCHITECTURE.md                       # Layer model, boundaries, decisions
 ├── CONVENTIONS.md                        # Naming, size, patterns
@@ -177,7 +180,9 @@ docs/                                     # Template docs for target projects
 ├── PROVIDERS.md                          # Cross-cutting interface definition
 ├── OBSERVABILITY.md                      # Logging, metrics, tracing strategy
 ├── WORKFLOW.md                           # Full development lifecycle
-└── INTEGRATION.md                        # gstack integration guide and artifact bridges
+├── SIGNALS.md                            # The Gate API (decision signals, freshness, history logs)
+├── INTEGRATION.md                        # gstack integration guide, bridges, anti-bloat rules
+└── TEAM-DISCUSSION-*.md                  # Council decision records (system of record)
 templates/                                # Starter templates for target projects
 ├── harness-config.json                   # .claude/harness.json template
 ├── execution-plan.json                   # Execution plan schema
@@ -197,13 +202,13 @@ This plugin leverages specific Claude Code capabilities:
 | `marketplace.json` | Plugin root | Distribution via `/plugin marketplace add` |
 | `${CLAUDE_PLUGIN_ROOT}` | hooks.json, hook scripts | Portable path resolution within plugin |
 | `allowed-tools` | legibility-score, harness-review, entropy-sweep | Enforce read-only behavior for review/scan skills |
-| `memory: project` | All agents | Accumulate findings across sessions |
-| `background: true` | session-observer-agent | Run scans without blocking the main conversation |
-| `disallowedTools` | All agents | Prevent agents from modifying code |
+| Hook JSON output (`hookSpecificOutput.additionalContext`, `systemMessage`) | `emit_advisory` in lib/common.sh | Advisory nudges reach the MODEL (stderr at exit 0 reaches nobody) |
 | `PreToolUse` hooks | arch-check.sh | Block layer violations before Edit/Write |
-| `Stop` hooks | doc-drift-check.sh | Advisory warnings after session ends |
+| `Stop` hooks | doc-drift-check.sh | Advisory drift + gate state + termination sensor after each turn |
+| `SessionStart` hooks | doc-drift-check.sh | Gate state + active plan injected at session open |
+| Built-in `Explore` subagent | /harness-review blind judge, harness-audit.js | Read-only, fresh-context Evaluator with no agent file of ours |
 | `$ARGUMENTS` | All skills | Pass user arguments to skill content |
-| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, gstack `/ship`, Dynamic Workflow stages, Agent Teams |
+| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, the pre-ship convention check, Dynamic Workflow stages, Agent Teams (gstack `/ship` reads none of it — VERIFIED v1.79) |
 | Dynamic Workflows (`.claude/workflows/`) | `harness-audit.js` (1 shipped; rule `single-workflow`) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it) |
 
 ## Design Decisions
@@ -240,19 +245,15 @@ The build root is a different question and keeps its own helper: `find_build_roo
 the nearest build manifest, because `tsc`/`cargo` must run in `backend/`, exactly where the
 ledger must not.
 
-### Skills vs Agents for the same concern
+### No agents of our own (since v3.10.0)
 
-Skills are interactive and user-invoked — they can modify files and set things up.
-Agents are read-only background workers — they report but never modify. This matches
-OpenAI's principle: "Engineers own the final review and merge process."
-
-### Read-only agents with persistent memory
-
-All agents have `disallowedTools: Write, Edit, NotebookEdit, Agent` — they cannot
-modify code or spawn sub-agents. They use `memory: project` to accumulate findings
-across sessions, building institutional knowledge about architectural patterns,
-recurring violations, and entropy trends. The `background: true` flag on scanning
-agents lets them run without blocking the main conversation.
+Both background agents this plugin once shipped were retired on evidence: doc-gardening
+(v3.6.0 — the Stop hook + `/entropy-sweep` covered it) and session-observer (v3.10.0 —
+zero mechanical triggers, zero readers of its memory after a binding consume-or-cut;
+its shift-handoff job is done by the decision signals plus SessionStart context injection).
+Where a read-only, fresh-context judge is needed (`/harness-review` blindness,
+`/harness-audit`), the built-in `Explore` subagent is used — a native primitive, no
+agent file to maintain. This is rule `ablate-per-model` in practice.
 
 ### Shell-based hooks
 
@@ -265,7 +266,7 @@ remediation instructions."
 
 CLAUDE.md is the table of contents (~60 lines); docs/ contains the full details.
 OpenAI found that one massive instruction file failed — context is scarce and crowds
-out actual task details. **Note:** gstack v1.46–1.58 converged onto on-demand content
+out actual task details. **Note:** gstack v1.46–1.79 converged onto on-demand content
 loading (25–49% token cut; "carved skills" = skeleton + on-demand `sections/`), so
 progressive disclosure is now table stakes both platforms ship — we keep the practice but
 no longer claim it as a moat. The moat is the repo-local edit-time mechanical enforcement
