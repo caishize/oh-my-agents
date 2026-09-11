@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Self-verification hook — PostToolUse for Edit/Write
-# Runs a lightweight type-check or syntax check after file edits.
+# Runs a lightweight syntax check after file edits (py_compile / node --check).
 # Implements OpenAI's self-verification middleware pattern:
 #   "Agents must confirm their own changes work before requesting review."
 #
@@ -40,36 +40,17 @@ if [ -z "$BUILD_DIR" ]; then
     exit 0
 fi
 
-# --- Check if heavy verification is enabled (off by default) ---
-# Heavy checks (tsc --noEmit, cargo check, go vet) run full compilation passes
-# and add 3-15 seconds per edit. Enable via harness.json: "self_verify_heavy": true
-HEAVY_VERIFY=false
-if find_harness_json "$(dirname "$FILE_PATH")"; then
-    if command -v jq >/dev/null 2>&1; then
-        HEAVY_VERIFY=$(jq -r '.self_verify_heavy // false' "$HARNESS_FILE" 2>/dev/null || echo "false")
-    elif command -v python3 >/dev/null 2>&1; then
-        HEAVY_VERIFY=$(python3 -c "import json; print(str(json.load(open('$HARNESS_FILE')).get('self_verify_heavy', False)).lower())" 2>/dev/null || echo "false")
-    fi
-fi
-
 # --- Run language-specific syntax check ---
-# Default: lightweight syntax checks only (py_compile, node --check) — <100ms
-# Heavy mode: full type-check / compilation (tsc, cargo check, go vet) — 3-15s
+# Lightweight syntax checks only (py_compile, node --check) — <100ms. The "heavy" path
+# (tsc / cargo check / go vet behind a `self_verify_heavy` harness.json key) was deleted
+# in v3.10.0: the key was documented nowhere, so no user could have opted in; the branches
+# were untested; and the 15s timeout it needed is exactly what gets a PostToolUse chain
+# disabled (taking arch-check and safety-check with it). Type errors belong to the
+# project's own LSP / `/verify`. A stale `self_verify_heavy` key is RETIRED — /harness-init
+# reports it rather than silently ignoring it.
 WARNINGS=""
 
 case "$FILE_PATH" in
-    *.ts|*.tsx)
-        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${BUILD_DIR}/tsconfig.json" ]; then
-            TSC_OUTPUT=$(cd "$BUILD_DIR" && timeout 8 npx --no-install tsc --noEmit --pretty false 2>&1 | head -5 || true)
-            if echo "$TSC_OUTPUT" | grep -qE "error TS[0-9]+" 2>/dev/null; then
-                ERROR_COUNT=$(echo "$TSC_OUTPUT" | grep -cE "error TS[0-9]+" 2>/dev/null || echo "0")
-                FIRST_ERROR=$(echo "$TSC_OUTPUT" | grep -E "error TS[0-9]+" | head -1 | sed 's/^[[:space:]]*//')
-                WARNINGS="Self-verify: TypeScript type errors detected after edit (${ERROR_COUNT} errors).\n"
-                WARNINGS="${WARNINGS}  First error: ${FIRST_ERROR}\n"
-                WARNINGS="${WARNINGS}  Run: npx tsc --noEmit\n"
-            fi
-        fi
-        ;;
     *.py)
         # Lightweight: syntax check only (~50ms)
         if command -v python3 >/dev/null 2>&1; then
@@ -90,34 +71,12 @@ case "$FILE_PATH" in
             fi
         fi
         ;;
-    *.rs)
-        if [ "$HEAVY_VERIFY" = "true" ] && [ -f "${BUILD_DIR}/Cargo.toml" ]; then
-            RS_OUTPUT=$(cd "$BUILD_DIR" && timeout 15 cargo check --message-format=short 2>&1 | grep "^error" | head -3 || true)
-            if [ -n "$RS_OUTPUT" ]; then
-                WARNINGS="Self-verify: Rust compilation errors detected after edit.\n"
-                WARNINGS="${WARNINGS}  ${RS_OUTPUT}\n"
-            fi
-        fi
-        ;;
-    *.go)
-        if [ "$HEAVY_VERIFY" = "true" ] && command -v go >/dev/null 2>&1; then
-            GO_DIR=$(dirname "$FILE_PATH")
-            GO_OUTPUT=$(cd "$GO_DIR" && timeout 8 go vet ./... 2>&1 | head -3 || true)
-            if [ -n "$GO_OUTPUT" ]; then
-                WARNINGS="Self-verify: Go vet issues detected after edit.\n"
-                WARNINGS="${WARNINGS}  ${GO_OUTPUT}\n"
-            fi
-        fi
-        ;;
 esac
 
-# Output warnings if any
+# Output warnings if any — through emit_advisory (stdout JSON with additionalContext), the
+# channel a PostToolUse hook at exit 0 has into the model's context.
 if [ -n "$WARNINGS" ]; then
-    echo ""
-    echo "Self-Verification Check"
-    echo "======================="
-    echo -e "$WARNINGS"
-    echo "Fix before proceeding. Persistent errors? -> /encode-mistake"
+    emit_advisory PostToolUse "$(printf 'Self-Verification Check\n%b\nFix before proceeding. Persistent errors? -> /encode-mistake' "$WARNINGS")"
 
     # Passive overlap measurement (v3.9.0): append one structured event to the existing
     # session metrics stream so the Q4 council can diff these warnings against what

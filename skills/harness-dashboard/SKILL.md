@@ -2,7 +2,7 @@
 name: harness-dashboard
 description: "Harness health overview and metric analysis — session metrics, enforcement activity, plan progress, layer balance, trends. Supports deep-dive queries (layer-balance, violations, trends, export). Aliases: 仪表盘, 看板, 运行状态, 指标查询, 度量分析"
 user-invocable: true
-argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|violations|trends|export]"
+argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|violations|trends|velocity|export]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -53,14 +53,13 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
 
    ```bash
    source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
+   ROOT=$(harness_root)   # `.gstack/…` globs are rooted here, never at the shell cwd
 
-   # GBrain worktree — current path only (legacy gstack-brain* sunset in v3.6.0)
-   GBRAIN_WT=""
-   [ -d "$HOME/.gstack-artifacts-worktree" ] && GBRAIN_WT="$HOME/.gstack-artifacts-worktree"
-
-   # Core usage
-   [ -f "$GSTACK_ANALYTICS/skill-usage.jsonl" ] && \
-     echo "Skill usage entries: $(wc -l < "$GSTACK_ANALYTICS/skill-usage.jsonl")"
+   # Usage: projects/<slug>/timeline.jsonl is ALWAYS written by gstack-skill-start/-end
+   # ({skill,event:started|completed,branch,outcome,duration_s,ts}); skill-usage.jsonl is
+   # telemetry-gated (default off) and is NOT read. Lifecycle coverage comes from here.
+   [ -f "$GSTACK_TIMELINE" ] && \
+     echo "Timeline entries: $(wc -l < "$GSTACK_TIMELINE") — skills completed (7d): $(grep -h '"completed"' "$GSTACK_TIMELINE" | grep -oE '"skill":"[^"]+"' | sort | uniq -c | sort -rn | head -8)"
 
    # Project artifacts
    if [ -d "$GSTACK_PROJECTS" ]; then
@@ -71,23 +70,15 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
      echo "Landings:   $(ls $GSTACK_PROJECTS/*-landing-*.md 2>/dev/null | wc -l)"
    fi
 
-   # Local-repo deploy artifacts (v1.11+)
-   LANDING_LOCAL=$(ls .gstack/landing-reports/*.json 2>/dev/null | wc -l)
-   CANARY_LOCAL=$(ls .gstack/canary-reports/*.json 2>/dev/null | wc -l)
-   echo "Landing reports (local): $LANDING_LOCAL"
-   echo "Canary reports (local):  $CANARY_LOCAL"
+   # Local-repo deploy artifacts — markdown, not JSON (`.gstack/landing-reports/` never existed)
+   DEPLOY_LOCAL=$(ls "$ROOT"/.gstack/deploy-reports/*.md 2>/dev/null | wc -l)
+   CANARY_LOCAL=$(ls "$ROOT"/.gstack/canary-reports/*.md 2>/dev/null | wc -l)
+   echo "Deploy reports (local):  $DEPLOY_LOCAL    Canary reports (local): $CANARY_LOCAL"
 
-   # GBrain (v1.12+, federated via worktree v1.17+, renamed v1.27+)
-   if [ -n "$GBRAIN_WT" ]; then
-     echo "GBrain root:      $GBRAIN_WT"
-     echo "GBrain learnings: $(cat $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)"
-     echo "GBrain timeline:  $(cat $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l)"
-     # Unencoded learnings = those without taste_id field — feed encode-mistake
-     echo "Unencoded learnings (proposable to /encode-mistake): $(grep -hv '"taste_id"' $GBRAIN_WT/learnings-*.jsonl 2>/dev/null | wc -l)"
-   fi
-
-   # gbrain CLI (v1.26+) federates queries across machines
-   command -v gbrain >/dev/null 2>&1 && echo "gbrain CLI: present (v1.26+)"
+   # gbrain (paths from gbrain_detect: ~/.gstack-brain-worktree + projects/<slug>/learnings.jsonl)
+   [ -n "$GBRAIN_WT" ] && echo "GBrain worktree:  $GBRAIN_WT"
+   echo "Learnings: $(cat $GBRAIN_LEARNINGS 2>/dev/null | wc -l) — unencoded (no taste_id, proposable to /encode-mistake): $(grep -hv '"taste_id"' $GBRAIN_LEARNINGS 2>/dev/null | wc -l)"
+   [ -n "$GBRAIN_CLI" ] && echo "gbrain CLI: present"
 
    [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ] && \
      echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
@@ -117,12 +108,18 @@ Compute these from the raw data:
 - Doc drift warnings
 - Hook execution failures
 
-**Velocity** — delivery speed metrics (drives continuous improvement):
+**Velocity** — delivery-quality leading indicators (drives continuous improvement; full
+table in [DEEP-DIVE.md](DEEP-DIVE.md#query-velocity)):
 - Tasks completed per session (from exec-plan JSON transition timestamps)
 - Average verify-to-review time (from verify.jsonl and reviews.jsonl timestamps)
 - First-pass verify success rate (% of verify runs that return GREEN on first try)
-- Week-over-week trend arrows: ↑ improving, → stable, ↓ declining
-- If multiple weeks of data available, show a 4-week sparkline trend
+- **Re-verify count per plan_id** (RED→…→GREEN attempts; rework before review — DORA's
+  "shift AI feedback to the author phase") — from verify.jsonl
+- **Gate-block rate** — `blocked_by` events per 100 edits from session-*.jsonl; prints the
+  LOUD degrade `hook_results present in N of M samples` and suppresses the row at N=0
+- Lifecycle coverage — which gstack phases ran, from the always-on `timeline.jsonl`
+- Week-over-week trend arrows: ↑ improving, → stable, ↓ declining; 4-week sparkline when available
+- Panel-wide: print `n=<sample>` and `insufficient data` below 3 samples — never a confident 0
 
 These metrics directly drive behavior: a declining first-pass success rate signals
 the need for better hooks or more `/encode-mistake` usage.
@@ -162,8 +159,8 @@ Generate the top 3 actionable recommendations based on the data:
   metrics -> note it as an **evidence-gated sunset candidate** (human-reviewed, never auto-removed)
 - If first-pass-GREEN rate is declining while a TASTE rule keeps matching -> the rule works;
   if the same violation recurs *despite* a rule, the enforcement is weak -> recommend `/arch-guard`
-- If unencoded GBrain learnings > 5 -> recommend `/encode-mistake --from-gbrain learning`
-- If gbrain CLI present and no eureka encoded yet -> note `/encode-mistake --from-gbrain eureka` is also available
+- If unencoded learnings > 5 -> recommend `/encode-mistake --from-gbrain learning`
+- If a plan's re-verify count ≥ 3 with the same reason -> the loop is not converging; recommend `/investigate` (gstack) then `/encode-mistake`
 - If gstack version < integration.json min_supported -> recommend `/gstack-sync --contract-check`
 - If landing reports exist but DORA shows [proxy] only -> note the mapping is wired
 - If lifecycle phases are skipped -> recommend `/lifecycle status` to identify gaps
@@ -227,10 +224,12 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
 | plan-auth-refactor | 4/6 tasks | active | 2 days ago |
 | plan-api-v2 | 1/8 tasks | stale | 9 days ago |
 
-### Velocity
+### Velocity (n={samples}; "insufficient data" below 3)
   Tasks/session:     {N} avg (↑↓→ vs last week)
   Verify→review:     {N}min avg
   First-pass GREEN:  {N}% (↑↓→ vs last week)
+  Re-verify/plan:    {N} avg (RED attempts before GREEN)
+  Gate-block rate:   {N} per 100 edits   (hook_results present in {n} of {m} samples; hidden at 0)
   Cycle time:        {N}h avg (plan start → verify pass)
 
 ### Harness Health
@@ -242,23 +241,18 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
 ### gstack Integration (if available)
   Status: {CONNECTED / NOT INSTALLED / NOT CONFIGURED}
   gstack version: {X.Y.Z.W}    min_supported: {V}    {OK | DRIFT}
-  Skills used (7d): {list of gstack skills used}
+  Skills completed (7d): {from projects/<slug>/timeline.jsonl — always-on}
   Reviews: {N} gstack + {N} harness = {N} total ({N} dual-reviewed)
   Design docs: {N} available
-  Lifecycle coverage: {phases used} / {total phases}
-  TASTE rules encoded:     {count from docs/LINTING.md registry} (+{N} unencoded gbrain candidates)
-  Learnings→encode rate:   {N}% (gstack learnings hardened to TASTE)
-  Landing reports (7d):    {N}    Canary reports (7d): {N}
-  GBrain federation:       {worktree present | absent}
-  Eureka moments: {N} logged
+  Lifecycle coverage: {phases used} / {total phases}   (source: timeline.jsonl)
+  TASTE rules encoded:     {count from docs/LINTING.md registry — "0 (registry empty — ratchet has never fired)" is a valid, honest line} (+{N} unencoded gbrain candidates)
+  Deploy reports (7d):     {N}    Canary reports (7d): {N}    (.gstack/*-reports/*.md)
 
 ### DORA proxy
-  deployment_frequency:    {N/week}        [grounded if landings present, else proxy]
-  lead_time_p50:           {N days}        [grounded if landings have plan-id refs]
-  change_failure_rate:     {N%}            [grounded if canary reports present]
-  mttr_p50:                {N hours}       [grounded if canary incidents present]
-  Note: each metric is annotated [grounded] when backed by gstack landing/canary
-  reports, [proxy] when estimated from internal signals only.
+  deployment_frequency:    {N/week}        [proxy — count of .gstack/deploy-reports/*.md files, nothing more]
+  change_failure_rate:     {N%}            [proxy — canary reports mentioning a regression / deploys]
+  Note: lead_time and MTTR are NOT reported — the markdown reports carry no plan-id or
+  incident-duration field we can read (deleted v3.10.0 rather than shown as structural zeros).
 
 ### Recommendations
 1. [Most impactful recommendation] — run `/skill-name`

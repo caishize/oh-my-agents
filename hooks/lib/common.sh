@@ -22,6 +22,9 @@
 #   find_build_root <path> — walk up to the nearest build manifest (monorepo package dir)
 #   resolve_metrics_dir <root> <source> — SETS METRICS_DIR; creates only under env|git roots
 #   harness_root        — project root for SKILL.md snippets (no hook stdin); echoes "." last
+#   gstack_detect       — ONE gstack + gbrain detection (GSTACK_PATH, SLUG, GSTACK_PROJECTS, GBRAIN_*)
+#   emit_advisory <event> <text> — advisory hook output on the channel that reaches the model
+#   append_history_record <dir> <file.jsonl> <json> — validated, locked append (verify/reviews history)
 
 # --- Input ---
 
@@ -367,49 +370,198 @@ detect_gstack() {
 # ONE-CALL gstack detection for skills and hooks (the single detection implementation —
 # SKILL.md files source this via ${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh and call it
 # instead of restating their own probe snippets).
-# Sets: GSTACK_PATH, SLUG (and PROJECT_SLUG), GSTACK_PROJECTS, GSTACK_ANALYTICS.
+# Sets: GSTACK_PATH, SLUG (and PROJECT_SLUG), GSTACK_PROJECTS, GSTACK_ANALYTICS, plus the
+# gbrain_detect() set (GBRAIN_WT, GBRAIN_LEARNINGS, GBRAIN_CLI, GBRAIN_REMOTE, GSTACK_TIMELINE…).
 # Returns 0 when gstack is present, 1 when absent (graceful degrade — never an error).
 gstack_detect() {
     detect_gstack || true
     resolve_project_slug
     SLUG="$PROJECT_SLUG"
     resolve_gstack_paths
+    gbrain_detect || true
     [ -n "$GSTACK_PATH" ]
 }
 
-# Resolve project slug for gstack artifact paths
-# Tries gstack-slug binary first, falls back to basename of git root
+# gstack state root — the same order gstack's own bin/gstack-paths uses (GSTACK_HOME first,
+# then ~/.gstack). An install that sets GSTACK_HOME keeps every artifact there; probing
+# ~/.gstack on such a machine is the unreachable-directory failure with a different cause.
+gstack_home() {
+    echo "${GSTACK_HOME:-$HOME/.gstack}"
+}
+
+# Resolve project slug for gstack artifact paths — gstack's slug is `owner-repo` from the
+# origin remote, NOT the directory basename. Precedence mirrors bin/gstack-slug:
+#   0. $GSTACK_PROJECT_SLUG (gstack's documented escape hatch)
+#   1. bin/gstack-slug — it prints TWO lines, `SLUG=…` and `BRANCH=…` (its header documents
+#      `eval "$(gstack-slug)"`); take the SLUG= line only. Never eval a foreign binary's
+#      output, never capture raw stdout (that put a newline and `BRANCH=` into every path).
+#   2. gstack's own slug cache (`<gstack_home>/slug-cache/`, one file per cwd, encoding
+#      unverified — a miss costs nothing; never the primary)
+#   3. `owner-repo` derived from the origin URL; bare basename only when there is no origin
 # Sets: PROJECT_SLUG
 resolve_project_slug() {
-    PROJECT_SLUG=""
-    if [ -n "${GSTACK_PATH:-}" ] && [ -x "$GSTACK_PATH/bin/gstack-slug" ]; then
-        PROJECT_SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null || echo "")
+    PROJECT_SLUG="${GSTACK_PROJECT_SLUG:-}"
+    if [ -z "$PROJECT_SLUG" ] && [ -n "${GSTACK_PATH:-}" ] && [ -x "$GSTACK_PATH/bin/gstack-slug" ]; then
+        PROJECT_SLUG=$("$GSTACK_PATH/bin/gstack-slug" 2>/dev/null | sed -n 's/^SLUG=//p' | head -1)
+    fi
+    if [ -z "$PROJECT_SLUG" ]; then
+        local cache_dir cache_file
+        cache_dir="$(gstack_home)/slug-cache"
+        cache_file="$cache_dir/$(pwd -P 2>/dev/null | tr '/' '_')"
+        [ -f "$cache_file" ] && PROJECT_SLUG=$(head -c 200 "$cache_file" 2>/dev/null | tr -cd 'a-zA-Z0-9._-')
+    fi
+    if [ -z "$PROJECT_SLUG" ]; then
+        local origin
+        origin=$(git -C "$(harness_root)" remote get-url origin 2>/dev/null || echo "")
+        if [ -n "$origin" ]; then
+            # git@host:owner/repo.git | https://host/owner/repo.git → owner-repo
+            PROJECT_SLUG=$(printf '%s' "$origin" | sed -E 's#\.git/?$##; s#^.*[:/]([^/]+)/([^/]+)$#\1-\2#' | tr -cd 'a-zA-Z0-9._-')
+        fi
     fi
     if [ -z "$PROJECT_SLUG" ]; then
         PROJECT_SLUG=$(basename "$(git -C "$(harness_root)" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
     fi
+    PROJECT_SLUG="${PROJECT_SLUG:-unknown}"
 }
 
-# Resolve gstack artifact paths, reading from integration.json if available, else defaults
+# Resolve gstack artifact paths, reading from integration.json if available, else defaults.
+# integration.json bridges carry a `{SLUG}` placeholder and a `~/.gstack` prefix — both are
+# substituted here (slug from resolve_project_slug, prefix from gstack_home) so one manifest
+# serves every install. A baked literal slug is a bug (tests/test-skills.sh greps for it).
 # Requires: PROJECT_SLUG to be set
 # Sets: GSTACK_PROJECTS, GSTACK_ANALYTICS
 resolve_gstack_paths() {
-    local integration_json
+    local integration_json ghome
     integration_json="$(harness_root)/.claude/integration.json"
+    ghome="$(gstack_home)"
     GSTACK_PROJECTS=""
     GSTACK_ANALYTICS=""
 
     # Try integration.json first
     if [ -f "$integration_json" ] && command -v jq >/dev/null 2>&1; then
-        GSTACK_PROJECTS=$(jq -r '.bridges.design_docs // ""' "$integration_json" 2>/dev/null | sed "s|{SLUG}|${PROJECT_SLUG:-unknown}|g; s|~|$HOME|g")
+        GSTACK_PROJECTS=$(jq -r '.bridges.design_docs // ""' "$integration_json" 2>/dev/null | sed "s|{SLUG}|${PROJECT_SLUG:-unknown}|g; s|^~/\.gstack|$ghome|; s|^~|$HOME|")
         # design_docs is a FILE glob — consumers need the project DIRECTORY
         case "$GSTACK_PROJECTS" in *\**) GSTACK_PROJECTS=$(dirname "$GSTACK_PROJECTS") ;; esac
-        GSTACK_ANALYTICS=$(jq -r '.bridges.analytics // ""' "$integration_json" 2>/dev/null | sed "s|~|$HOME|g")
+        GSTACK_ANALYTICS=$(jq -r '.bridges.gstack_analytics // ""' "$integration_json" 2>/dev/null | sed "s|^~/\.gstack|$ghome|; s|^~|$HOME|")
     fi
 
     # Fall back to defaults
-    [ -z "$GSTACK_PROJECTS" ] && GSTACK_PROJECTS="$HOME/.gstack/projects/${PROJECT_SLUG:-unknown}"
-    [ -z "$GSTACK_ANALYTICS" ] && GSTACK_ANALYTICS="$HOME/.gstack/analytics"
+    [ -z "$GSTACK_PROJECTS" ] && GSTACK_PROJECTS="$ghome/projects/${PROJECT_SLUG:-unknown}"
+    [ -z "$GSTACK_ANALYTICS" ] && GSTACK_ANALYTICS="$ghome/analytics"
+}
+
+# gbrain (gstack memory) detection — ONE implementation, called from gstack_detect().
+# gstack's memory worktree is `~/.gstack-brain-worktree` (env GSTACK_BRAIN_WORKTREE); the
+# `gstack-artifacts-worktree` name this plugin probed through v3.9 has ZERO hits in gstack
+# v1.79 source — the v3.6.0 sunset dropped the surviving side. Learnings live in ONE file,
+# `<projects>/<slug>/learnings.jsonl`; the hyphen-wrapped glob probed through v3.9 was ours, never
+# gstack's. Presence = CLI, OR worktree, OR brain-remote (a remote DISTINCT from the
+# artifacts remote — artifacts-only never implies "gbrain gone").
+# Sets: GBRAIN_WT (dir or ""), GBRAIN_LEARNINGS (glob), GBRAIN_CLI (path or ""),
+#       GBRAIN_REMOTE (present|""), GSTACK_ARTIFACTS_REMOTE (present|""), GSTACK_TIMELINE (file)
+gbrain_detect() {
+    GBRAIN_WT=""
+    local wt="${GSTACK_BRAIN_WORKTREE:-$HOME/.gstack-brain-worktree}"
+    [ -d "$wt" ] && GBRAIN_WT="$wt"
+    GBRAIN_LEARNINGS="${GSTACK_PROJECTS:-$(gstack_home)/projects/${PROJECT_SLUG:-unknown}}/*learnings*.jsonl"
+    GSTACK_TIMELINE="${GSTACK_PROJECTS:-$(gstack_home)/projects/${PROJECT_SLUG:-unknown}}/timeline.jsonl"
+    GBRAIN_CLI=$(command -v gbrain 2>/dev/null || echo "")
+    GBRAIN_REMOTE=""; [ -f "$HOME/.gstack-brain-remote.txt" ] && GBRAIN_REMOTE="present"
+    GSTACK_ARTIFACTS_REMOTE=""; [ -f "$HOME/.gstack-artifacts-remote.txt" ] && GSTACK_ARTIFACTS_REMOTE="present"
+    [ -n "$GBRAIN_WT" ] || [ -n "$GBRAIN_CLI" ] || [ -n "$GBRAIN_REMOTE" ]
+}
+
+# --- Dirty-tree predicate (docs/SIGNALS.md freshness, ADVANCE points only) ---
+# A signal stamped at HEAD says nothing about edits made since. Returns 0 when the working
+# tree has tracked changes or untracked SOURCE files. Our own state dirs (`.claude/`,
+# `.gstack/`) are excluded: on a project that does not gitignore them they would read as
+# permanent dirt, and they are never the code being shipped.
+worktree_dirty() {
+    local root="${1:-.}"
+    git -C "$root" status --porcelain 2>/dev/null | grep -vE '^.. (\.claude/|\.gstack/)' | grep -q .
+}
+
+# --- Advisory output (hooks) ---
+#
+# Claude Code reads a hook's stdout as JSON on exit 0; bare text on stdout or stderr at
+# exit 0 reaches neither the model nor a parsed envelope (stderr reaches the model ONLY on
+# exit 2). Every advisory hook emits through here so the channel is right by construction.
+# Static per-event key table — a hook cannot observe whether the host parsed its output,
+# so probing is impossible:
+#   PreToolUse | PostToolUse | SessionStart | UserPromptSubmit
+#       → hookSpecificOutput.additionalContext (model) + systemMessage (user)
+#   Stop | anything else
+#       → systemMessage is the load-bearing key (an additionalContext sibling rides along;
+#         unknown keys are ignored, and nothing may claim it as the Stop delivery channel)
+# Invariants: empty/whitespace text ⇒ ZERO bytes (success silence); text is capped at 400
+# chars with the remediation pointer kept; inside a gstack-spawned subagent
+# (GSTACK_SESSION_KIND=spawned, env inherited byte-for-byte) nothing is emitted — the
+# systemMessage reaches no human and the context is pure token cost; no `continue` key
+# (it is the default, and an explicit one invites a later flip to false); no
+# permissionDecision ever. python3/jq do the escaping; when both are absent the bare text
+# is printed so a minimal container degrades to "maybe unread", never to "absent".
+emit_advisory() {
+    local event="${1:-}" text="${2:-}"
+    [ -n "$(printf '%s' "$text" | tr -d '[:space:]')" ] || return 0
+    [ "${GSTACK_SESSION_KIND:-}" = "spawned" ] && return 0
+    if [ "${#text}" -gt 400 ]; then
+        text="$(printf '%s' "$text" | cut -c1-360)… (run /entropy-sweep for the full list)"
+    fi
+    local with_context=0
+    case "$event" in PreToolUse|PostToolUse|SessionStart|UserPromptSubmit) with_context=1 ;; esac
+    if command -v python3 >/dev/null 2>&1; then
+        EMIT_TEXT="$text" EMIT_EVENT="$event" EMIT_CTX="$with_context" python3 -c '
+import json, os
+t, ev, ctx = os.environ["EMIT_TEXT"], os.environ["EMIT_EVENT"], os.environ["EMIT_CTX"] == "1"
+out = {"systemMessage": t, "hookSpecificOutput": {"hookEventName": ev, "additionalContext": t}}
+print(json.dumps(out))' 2>/dev/null && return 0
+    fi
+    if command -v jq >/dev/null 2>&1; then
+        jq -cn --arg t "$text" --arg ev "$event" \
+            '{systemMessage:$t, hookSpecificOutput:{hookEventName:$ev, additionalContext:$t}}' 2>/dev/null && return 0
+    fi
+    printf '%s\n' "$text"
+    return 0
+}
+
+# --- History-log writer (skills) ---
+#
+# One tested append for `.claude/metrics/verify.jsonl` / `reviews.jsonl` (the Gate API's
+# history logs), replacing the prose "append the record" instructions. Accountable-writer
+# still holds: the deriving skill calls this from its OWN Bash with the record it derived.
+# The argument must parse as JSON — a corrupt line silently truncates every downstream
+# `tail`-based reader (the 3-RED termination trip, velocity, findings routing), so refusal
+# is LOUD: non-zero exit and a message on stderr. Same flock discipline as session-metrics.
+# Usage: append_history_record <metrics_dir> <basename.jsonl> <json-string>
+append_history_record() {
+    local dir="${1:-}" base="${2:-}" json="${3:-}"
+    if [ -z "$dir" ] || [ -z "$base" ] || [ -z "$json" ]; then
+        echo "append_history_record: dir, basename and json are all required" >&2
+        return 1
+    fi
+    local ok=1
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s' "$json" | python3 -c 'import json,sys; json.loads(sys.stdin.read())' 2>/dev/null && ok=0
+    elif command -v jq >/dev/null 2>&1; then
+        printf '%s' "$json" | jq -e . >/dev/null 2>&1 && ok=0
+    else
+        echo "append_history_record: neither python3 nor jq available to validate JSON" >&2
+        return 1
+    fi
+    if [ "$ok" -ne 0 ]; then
+        echo "append_history_record: refusing to append — argument is not valid JSON" >&2
+        return 1
+    fi
+    mkdir -p "$dir" 2>/dev/null || { echo "append_history_record: cannot create $dir" >&2; return 1; }
+    local file="${dir%/}/$base" line
+    line=$(printf '%s' "$json" | tr -d '\n')
+    if command -v flock >/dev/null 2>&1; then
+        ( flock -w 2 200 && printf '%s\n' "$line" >> "$file" ) 200>"$file.lock" 2>/dev/null \
+            || printf '%s\n' "$line" >> "$file" 2>/dev/null || { echo "append_history_record: write to $file failed" >&2; return 1; }
+    else
+        printf '%s\n' "$line" >> "$file" 2>/dev/null || { echo "append_history_record: write to $file failed" >&2; return 1; }
+    fi
+    return 0
 }
 
 # --- Layer resolution ---

@@ -43,7 +43,8 @@ Produce a brief assessment before proceeding.
 
 ## Step 2: Create Root CLAUDE.md
 
-Must be **under 100 lines** — a table of contents, not an encyclopedia. Include:
+Must be **≤ 60 lines** (rule `skill-line-cap`; evidence: ETH Zurich 2602.11988 — context files
+raise cost >20% for ~0 gain; HumanLayer <60) — a table of contents, not an encyclopedia. Include:
 - Bootstrap command
 - Commands table (build, test, lint, run, check)
 - Architecture summary with layer model
@@ -104,6 +105,8 @@ Machine-readable config. Use `templates/harness-config.json` as starting point:
 }
 ```
 **Layer keys must match actual directory names** (e.g., `"services"` not `"service"`).
+RETIRED key: `self_verify_heavy` (v3.10.0 — the heavy self-verify path was deleted). If an
+existing harness.json carries it, REPORT it as retired; never silently ignore a config key.
 
 ## Step 6: Create Bootstrap Script
 
@@ -140,6 +143,18 @@ Never overwrite existing test files.
 Ensure build, test, lint, run, check commands exist and work. Create using the project's
 build system if missing. Annotate non-functional commands in CLAUDE.md.
 
+**gstack verify-gate export (only here — after the test command is PROVEN to run):** gstack
+v1.65+ ships `bin/gstack-verify-gate`, an opt-in Stop hook that reads ONE line from the
+project's CLAUDE.md — `<!-- gstack:verify: <cmd> -->` — and blocks the turn (exit 2, failure
+text into the agent's context) when the command fails. Capability probe, never a version
+compare: `[ -x "$GSTACK_PATH/bin/gstack-verify-gate" ]`. When present AND the test command
+verified above runs AND the human confirms the exact string, emit exactly one line into the
+generated root CLAUDE.md: `<!-- gstack:verify: <verified test command> -->`. State the three
+facts from the gate's own header: no declaration ⇒ no gate; it never blocks until the user
+runs `gstack-verify-gate --trust`; any edit to the command invalidates trust. Direction is
+ours→gstack (a DERIVED EXPORT of the CLAUDE.md commands table `/verify` reads as primary);
+never emit it unconfirmed, and never emit it when Step 8 could not run the tests.
+
 ## Step 9: Report Summary
 
 ```
@@ -156,7 +171,7 @@ Next Steps: [top 3 recommendations]
 
 ## Rules
 
-- CLAUDE.md under 100 lines, nested CLAUDE.md under 50 lines
+- Root CLAUDE.md ≤ 60 lines (rule `skill-line-cap`), nested CLAUDE.md under 50 lines
 - Every command must actually work — verify by running
 - Bootstrap must work from clean checkout
 - All entry points documented and functional

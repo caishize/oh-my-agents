@@ -43,9 +43,11 @@ signals, and gstack's read-only artifacts — **NEVER** the generating session's
 scratch notes, or self-assessment. Where feasible, run behavior (tests, the plan's
 `acceptance` commands) rather than trusting narration. If this review runs in the SAME
 session that generated the change, STATE SO in the output and delegate the judging step to
-a fresh-context read-only subagent (inline Task with `disallowedTools: Write, Edit` — a
-native primitive, no new agent file). `/harness-audit` already complies by construction
-(fresh fan-out Explore agents).
+a fresh-context read-only subagent — the Agent tool with the built-in `Explore` type
+(cannot Write/Edit; a native primitive, no agent file of ours) — handing it ONLY the diff,
+the plan's acceptance criteria and the rubric, never this session's reasoning or
+self-assessment (the auto-mode classifier strips exactly that so the agent cannot talk the
+judge into a bad call). `/harness-audit` already complies by construction.
 
 ### Review 1: Say No to Slop
 
@@ -142,26 +144,18 @@ Does this change strengthen or weaken the harness?
    - Are non-obvious decisions documented with "why"?
    - Are error messages actionable (include remediation instructions)?
 
-### Review 6: Code Quality (by priority)
+### Review 6: Generic code quality — DELEGATED, not duplicated
 
-**P0 — Must Fix (blocks merge)**:
-- Logic errors, off-by-one, null reference risks
-- Security: injection, XSS, auth bypass, secrets in code
-- Data loss risks, race conditions
-- Slop that would be replicated by future agents
-
-**P1 — Should Fix**:
-- Missing error handling at system boundaries
-- Performance issues (N+1, unbounded loops)
-- Missing observability (logging, metrics, spans)
-- Weak or missing tests
-
-**P2 — Consider**:
-- Unclear naming (but don't nitpick what linters should catch)
-- Potential for future confusion
-- Opportunities for better patterns
-- Unused dependencies in package.json/requirements.txt that are never imported in
-  source code. Unused dependencies increase bundle size and supply-chain attack surface.
+Logic errors, N+1s, race conditions, weak tests and unused dependencies already have
+owners: gstack `/review` (8 specialists — testing, maintainability, security, performance,
+data migration, API contract, design, simplification) and `/cso` per Review 7's matrix,
+and, if available, native `/code-review` (invoke it as `/code-review` — never `/review`,
+whose alias collides with gstack's; it runs in THIS context, not an isolated one). This
+pass does not re-run them; it reads their output and applies the severity ladder:
+**P0** blocks merge (logic/data-loss/security/replicable slop) · **P1** should fix ·
+**P2** consider. A skipped delegation is NOT a halt and never reuses `composition-skipped`
+(pinned to `/codex` and `/cso`). With neither gstack nor `/code-review` present, Review 7's
+structural fallback checklist covers the floor.
 
 ### Review 7: gstack Composition (auto-detected, dedupe-first)
 
@@ -213,18 +207,34 @@ except Exception:
     m = re.search(r'\b(clean|issues_found)\b', raw)   # prose verdict-line form
     print(m.group(1) if m else 'verdict-unparsed')
 " 2>/dev/null || echo "verdict-unparsed")
-# Unresolved decisions: decisions.active.json is dual-read (upstream absence UNVERIFIED).
-# When absent/unreadable, the degrade is LOUD — never a silent 'na', and NEVER an
-# event-replay computation from decisions.jsonl (schema unconfirmed; shadow-logic ban).
-GSTACK_UNRESOLVED=$(python3 -c "import json; print(len(json.load(open('$GD/decisions.active.json')).get('unresolved',[])))" 2>/dev/null \
-  || echo "unresolved-count-unavailable (decisions.active.json absent; decisions.jsonl schema unconfirmed)")
-echo "gstack-verdict: status=${GSTACK_REVIEW_STATUS:-none} unresolved=${GSTACK_UNRESOLVED}"
+# CURRENCY (gstack v1.79): review records are content-addressed — gstack-review-log stamps
+# `wtree` (working-tree fingerprint from bin/gstack-wtree; untracked source counts, a
+# same-content commit does not). A record is CURRENT only when its wtree equals the live
+# one; a stale verdict is treated as ABSENT, loudly. Fallback when the binary is missing:
+# compare `commit_full`/`commit` to HEAD.
+GSTACK_VERDICT_CURRENCY="unknown"
+if [ -x "$GSTACK_PATH/bin/gstack-wtree" ]; then
+  LIVE_WTREE=$("$GSTACK_PATH/bin/gstack-wtree" 2>/dev/null || echo "")
+  REC_WTREE=$(printf '%s' "$LAST_REVIEW" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('wtree',''))" 2>/dev/null || echo "")
+  [ -n "$LIVE_WTREE" ] && { [ "$LIVE_WTREE" = "$REC_WTREE" ] && GSTACK_VERDICT_CURRENCY="current" || GSTACK_VERDICT_CURRENCY="stale"; }
+fi
+[ "$GSTACK_VERDICT_CURRENCY" = "stale" ] && GSTACK_REVIEW_STATUS="verdict-stale (wtree changed since gstack /review)"
+echo "gstack-verdict: status=${GSTACK_REVIEW_STATUS:-none} currency=${GSTACK_VERDICT_CURRENCY}"
 ```
 
+`decisions.active.json` is NOT read (v3.10.0): it is a bare JSON array and gstack documents
+it as a rebuildable cache whose reader returns `[]` when missing or corrupt, so any count
+taken from the file is a plausible-looking wrong number, and "unresolved" is not a gstack
+concept. `decisions_unresolved` is DEPRECATED-optional in `gstack_context` (never produced;
+consumers must tolerate its absence). If a rule ever needs active decisions, the supported
+surface is `bin/gstack-decision-search --json` — pending the unmade read-only-CLI policy.
+
 If a value is found, set `gstack_context` (Review 8) to e.g.
-`{"present":true,"review_status":"issues_found","decisions_unresolved":2,"source":"gstack-review-log"}`
+`{"present":true,"review_status":"issues_found","currency":"current","source":"gstack-review-log"}`
 and surface gstack's verdict next to ours in the report. **Advisory only** — it never
 mechanically rewrites our decision; it can only trigger the divergence halt in Review 8.
+A `verdict-stale` or `verdict-unparsed` status never triggers the halt — it is reported as
+absent, with the reason.
 
 **If gstack is not installed**: apply this lightweight structural checklist as fallback:
 - Security: SQL injection, XSS, command injection, hardcoded secrets
@@ -232,8 +242,9 @@ mechanically rewrites our decision; it can only trigger the divergence halt in R
 - Breaking changes: API signature changes without migration
 - Resource leaks: unclosed handles, unbounded growth
 
-Log review results to `.claude/metrics/reviews.jsonl`. Reference (don't copy) any
-gstack report paths via `gstack_reports: [...]` field in the JSONL entry.
+Log review results to `.claude/metrics/reviews.jsonl` (the HISTORY record — Review 8
+defines its shape). Reference (don't copy) any gstack report paths via
+`gstack_reports: [...]` field in the JSONL entry.
 
 ### Review 8: Decision Signal (mandatory; flow-efficiency lever)
 
@@ -275,12 +286,23 @@ derived from OUR four pillars; gstack's verdict is advisory (full rule: docs/SIG
 - Never aggregate, never rewrite our decision mechanically, never write gstack paths.
 
 ```bash
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"
+ROOT=$(harness_root)   # never a bare .claude/ path
 mkdir -p "$ROOT/.claude/signals"
 COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
 # Compute fields above, then write JSON (include "commit": "$COMMIT"). Use python3 / jq /
 # printf to ensure valid escaping; do NOT use unquoted heredocs with literal placeholders.
+# HISTORY record = the signal object + `findings[]` (below), through the ONE tested writer:
+append_history_record "$ROOT/.claude/metrics" reviews.jsonl "$HISTORY_JSON"
 ```
+
+**`findings[]` — the typed shape a `REQUEST_CHANGES` hands to the next Generator turn**
+(history record only, NEVER in the ≤500-byte signal; docs/SIGNALS.md § history logs):
+`{"fingerprint":"<file>:<line>:<dimension>","severity":"P0|P1|P2","tag":"[HARNESS]|…",
+"fix":"<≤80 chars>"}` — capped at the 10 highest-severity items, ≤4 KB. `dimension` is
+our four-pillar vocabulary (`slop|arch|docs|observ|contract|reconcile`, the same
+`/harness-audit` returns), never gstack's `CRITICAL|INFORMATIONAL`. `/lifecycle` routes
+`REQUEST_CHANGES` on this list instead of a count.
 
 The verbose markdown report stays in `reviews.jsonl` and the agent's stdout. Per
 Osmani's "success silence, failure verbosity": when `decision=APPROVE`, downstream
@@ -343,26 +365,18 @@ stdout drives the human or next agent turn.
 
 ## Rules
 
-- **Say No to Slop** — this is the #1 priority, above even bugs
-- **Safety is P0** — secrets and auth issues are as urgent as slop
-- "If it's technically correct but you wouldn't accept it from a human, reject it"
-- Be specific — exact file:line, concrete fix suggestions
-- Be concise — high-signal, not verbose
-- One pass — catch everything in a single review
-- Don't nitpick style that linters should enforce
-- Flag when a new lint rule should be created via `/encode-mistake --proactive`
-- Remember: bad patterns in the codebase multiply via every future agent PR
+- **Say No to Slop** (#1, above even bugs); **safety is P0**; "if you wouldn't accept it
+  from a human, reject it" — bad patterns multiply via every future agent PR
+- Be specific (file:line + concrete fix), concise, one pass; don't nitpick what linters
+  enforce — flag a missing rule via `/encode-mistake --proactive` instead
 - "Waiting is expensive, correction is cheap" — don't block trivial changes
-- Auto-detect gstack for composition; `--no-gstack` / `--no-codex` / `--no-cso` to opt out
-- **Composition over duplication**: delegate slop-deep to `/codex`, security-deep to `/cso`,
-  UX to `/design-review`; never re-run what gstack just ran
-- Deduplicate cross-system findings; ≥2 systems flagging the same issue → severity +1, tag `[BOTH+]`
-- Tag every finding: `[HARNESS]` / `[STRUCTURAL]` / `[CROSS-MODEL]` / `[SECURITY]` / `[UX]` / `[BOTH+]`
-- Log results for both `/harness-dashboard` and gstack's `/ship` consumption
-- Reference gstack report paths in JSONL — never copy contents
-- **Always emit the decision signal** — `.claude/signals/review-latest.json` with
-  `schema_version`, `decision`, and (when `NEEDS_HUMAN`) `needs_human_kind`. It is the Gate
-  API per docs/SIGNALS.md; consumers default-deny a missing/unknown-version signal
-- **Success silence, failure verbosity** (Osmani 2026): on `APPROVE`, the verbose
-  per-pillar checklist may collapse to one line each; on `REQUEST_CHANGES` or
-  `NEEDS_HUMAN`, keep full verbosity to drive the next turn
+- **Composition over duplication**: auto-detect gstack; delegate slop-deep to `/codex`,
+  security-deep to `/cso`, UX to `/design-review`, generic quality to `/review` /
+  `/code-review`; never re-run what they just ran (`--no-gstack` / `--no-codex` / `--no-cso`)
+- Tag every finding (`[HARNESS]` … `[BOTH+]`); ≥2 systems on one issue → severity +1
+- Log to `reviews.jsonl` for `/harness-dashboard` + `/lifecycle`; reference gstack report
+  paths, never copy contents; the pre-`/ship` read is our-side convention (SIGNALS.md)
+- **Always emit the decision signal** (`review-latest.json`: `schema_version`, `decision`,
+  `needs_human_kind` when `NEEDS_HUMAN`) — consumers default-deny anything else
+- **Success silence, failure verbosity**: on `APPROVE` collapse each pillar to one line;
+  on `REQUEST_CHANGES` / `NEEDS_HUMAN` keep full verbosity — it drives the next turn

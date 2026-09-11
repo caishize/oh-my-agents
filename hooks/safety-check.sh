@@ -68,7 +68,7 @@ add_violation() {
     local file="$2"
     local pattern="${3:-}"
     local fix="$4"
-    local ref="${5:-docs/CONVENTIONS.md#secrets-management}"
+    local ref="${5:-docs/CONVENTIONS.md#cross-cutting-concerns (secrets via env/secret manager)}"
     VIOLATIONS="${VIOLATIONS}Security risk: ${risk_type}\n"
     VIOLATIONS="${VIOLATIONS}  File: ${file}\n"
     if [ -n "$pattern" ]; then

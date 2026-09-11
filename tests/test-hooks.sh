@@ -397,9 +397,9 @@ run_test "plan-validation: silent + exit 0 on non-plan file" \
     '{"tool_name":"Write","tool_input":{"file_path":"src/foo.ts","content":"const x=1"}}' \
     0
 
-run_test "plan-validation: exit 0 on well-specified in_progress task" \
+run_test "plan-validation: exit 0 on well-specified in-progress task" \
     "plan-validation-check.sh" \
-    '{"tool_name":"Write","tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in_progress\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
+    '{"tool_name":"Write","tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in-progress\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
     0
 
 run_test "plan-validation: exit 0 (never blocks) on under-specified task" \
@@ -412,15 +412,17 @@ run_test "plan-validation: exit 0 on invalid/mid-edit JSON" \
     '{"tool_name":"Edit","tool_input":{"file_path":"docs/exec-plans/active/p.json","new_string":"{not valid json"}}' \
     0
 
-# Custom assertion: advisory message MUST appear for an under-specified in_progress task,
-# and MUST NOT appear for a well-specified one (run_test only checks stderr on exit 2).
+# Custom assertion: advisory message MUST appear for an under-specified in-progress task,
+# and MUST NOT appear for a well-specified one. Since v3.10.0 the advisory is a JSON
+# envelope on STDOUT (emit_advisory) — stderr at exit 0 reaches neither the model nor a
+# parsed envelope — so this reads stdout and requires the additionalContext key.
 assert_advisory() {
     local name="$1" input="$2" should_warn="$3"
     TOTAL=$((TOTAL + 1))
     local out
-    out=$(printf '%s' "$input" | bash "$HOOKS_DIR/plan-validation-check.sh" 2>&1 >/dev/null || true)
+    out=$(printf '%s' "$input" | bash "$HOOKS_DIR/plan-validation-check.sh" 2>/dev/null || true)
     local has_warn="no"
-    echo "$out" | grep -q "Plan handoff checklist" && has_warn="yes"
+    echo "$out" | grep -q "Plan handoff checklist" && echo "$out" | grep -q '"additionalContext"' && has_warn="yes"
     if [ "$has_warn" = "$should_warn" ]; then
         PASS=$((PASS + 1)); echo "PASS: $name"
     else
@@ -709,6 +711,118 @@ assert_true "hooks: \$CLAUDE_PROJECT_DIR is consulted" \
 # =============================================
 # Summary
 # =============================================
+
+# =============================================
+# v3.10.0 — advisory channel, SessionStart, termination sensor, dirty tree, enum GUIDE,
+# hook latency budget (docs/TEAM-DISCUSSION-2026-09-04.md)
+# =============================================
+
+echo ""
+echo "--- v3.10.0: emit_advisory channel ---"
+
+COMMON_SH="$HOOKS_DIR/lib/common.sh"
+
+# Advisory hooks emit ONE JSON envelope on stdout (the channel that reaches the model),
+# never permissionDecision, and ZERO bytes when there is nothing to say.
+ADV_OUT=$(printf '%s' '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in-progress\"}]}"}}' \
+    | bash "$HOOKS_DIR/plan-validation-check.sh" 2>/dev/null || true)
+assert_true "advisory: plan-validation stdout is a JSON envelope with additionalContext" \
+    bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"hookSpecificOutput\"][\"additionalContext\"]; assert \"permissionDecision\" not in d[\"hookSpecificOutput\"]'" _ "$ADV_OUT"
+assert_true "advisory: plan-validation names the remediation (plan handoff checklist)" \
+    bash -c "printf '%s' \"\$1\" | grep -q 'Plan handoff checklist'" _ "$ADV_OUT"
+
+CLEAN_OUT=$(printf '%s' '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"status\":\"active\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"pending\"}]}"}}' \
+    | bash "$HOOKS_DIR/plan-validation-check.sh" 2>/dev/null || true)
+assert_true "advisory: success silence — clean plan emits zero bytes" test -z "$CLEAN_OUT"
+
+assert_true "advisory: 400-char cap on the injected text keeps the remediation pointer" \
+    bash -c "source '$COMMON_SH'; emit_advisory Stop \"\$(head -c 2000 /dev/zero | tr '\\0' 'x')\" | python3 -c 'import json,sys; c=json.load(sys.stdin)[\"hookSpecificOutput\"][\"additionalContext\"]; assert len(c) <= 420 and \"entropy-sweep\" in c'"
+assert_true "advisory: spawned gstack subagent (GSTACK_SESSION_KIND=spawned) emits nothing" \
+    bash -c "source '$COMMON_SH'; [ -z \"\$(GSTACK_SESSION_KIND=spawned emit_advisory Stop 'x')\" ]"
+assert_true "advisory: blank text emits nothing" \
+    bash -c "source '$COMMON_SH'; [ -z \"\$(emit_advisory Stop '   ')\" ]"
+assert_true "advisory: no advisory hook emits permissionDecision" \
+    bash -c "! grep -l 'permissionDecision' '$HOOKS_DIR'/plan-validation-check.sh '$HOOKS_DIR'/self-verify-check.sh '$HOOKS_DIR'/doc-drift-check.sh >/dev/null 2>&1"
+
+# --- status-enum GUIDE (plan-validation, template enum is the SSOT for spelling) ---
+assert_output "plan-validation: enum GUIDE flags in_progress (did you mean in-progress)" \
+    "plan-validation-check.sh" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"status\":\"active\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in_progress\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
+    "did you mean 'in-progress'" "yes"
+assert_output "plan-validation: enum GUIDE silent on template spelling" \
+    "plan-validation-check.sh" \
+    '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"status\":\"active\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in-progress\",\"acceptance\":\"ok\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
+    "not in template enum" "no"
+
+echo "--- v3.10.0: doc-drift SessionStart / termination / dirty tree ---"
+
+if command -v jq >/dev/null 2>&1; then
+    DD_TMP=$(mktemp -d)
+    (cd "$DD_TMP" && git init -q . && GIT_Q commit -q --allow-empty -m init)
+    mkdir -p "$DD_TMP/.claude/signals" "$DD_TMP/.claude/metrics" "$DD_TMP/docs/exec-plans/active"
+    DD_SHA=$(git -C "$DD_TMP" rev-parse HEAD)
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$DD_SHA" > "$DD_TMP/.claude/signals/verify-latest.json"
+    printf '{"id":"plan-s","status":"active","tasks":[]}' > "$DD_TMP/docs/exec-plans/active/plan-s.json"
+
+    SS_OUT=$(printf '%s' "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$DD_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true)
+    assert_true "doc-drift SessionStart: JSON envelope with gate state + active plan in additionalContext" \
+        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"hookSpecificOutput\"][\"additionalContext\"]; assert \"next: /harness-review\" in c and \"plan-s\" in c and d[\"hookSpecificOutput\"][\"hookEventName\"]==\"SessionStart\"'" _ "$SS_OUT"
+
+    rm -f "$DD_TMP/.claude/signals/verify-latest.json" "$DD_TMP/docs/exec-plans/active/plan-s.json"
+    SS_CLEAN=$(printf '%s' "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$DD_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true)
+    assert_true "doc-drift SessionStart: zero bytes when no signal and no plan" test -z "$SS_CLEAN"
+
+    # termination sensor: 3 consecutive RED with identical reason ⇒ escalation, not another /verify
+    printf '%s\n' '{"decision":"RED","reason":"3 tests failed"}' '{"decision":"RED","reason":"3 tests failed"}' '{"decision":"RED","reason":"3 tests failed"}' > "$DD_TMP/.claude/metrics/verify.jsonl"
+    assert_output "doc-drift Stop: 3 RED same reason trips the termination sensor" \
+        "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
+        "not converging" "yes"
+    printf '%s\n' '{"decision":"RED","reason":"a"}' '{"decision":"RED","reason":"b"}' '{"decision":"RED","reason":"a"}' > "$DD_TMP/.claude/metrics/verify.jsonl"
+    assert_output "doc-drift Stop: 3 RED different reasons does NOT trip" \
+        "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
+        "not converging" "no"
+    run_test "doc-drift Stop: termination sensor never blocks (exit 0)" \
+        "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" 0
+    rm -f "$DD_TMP/.claude/metrics/verify.jsonl"
+
+    # dirty tree at the APPROVE advance point (our own .claude/ state never counts as dirt)
+    printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$DD_SHA" > "$DD_TMP/.claude/signals/review-latest.json"
+    assert_output "doc-drift Stop: APPROVE on a clean tree (only .claude/ untracked) nudges /ship" \
+        "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
+        "next: gstack /ship" "yes"
+    printf 'x=1\n' > "$DD_TMP/new-source.py"
+    assert_output "doc-drift Stop: APPROVE with an untracked source file WARNs instead" \
+        "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
+        "uncommitted changes since the verdict" "yes"
+    assert_true "worktree_dirty: ignores .claude/ and .gstack/, sees source" \
+        bash -c "source '$COMMON_SH'; rm -f '$DD_TMP/new-source.py'; ! worktree_dirty '$DD_TMP' && printf 'y\n' > '$DD_TMP/z.txt' && worktree_dirty '$DD_TMP'"
+
+    # the v3.9 handoff writer is gone: a Stop with changed files writes nothing
+    (cd "$DD_TMP" && git add z.txt && GIT_Q commit -q -m two && printf 'z\n' >> z.txt)
+    printf '%s' "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" >/dev/null 2>&1 || true
+    assert_true "doc-drift: writes no handoff-<branch>.json (deleted v3.10.0)" \
+        bash -c "! ls '$DD_TMP'/.claude/metrics/handoff-* >/dev/null 2>&1"
+    rm -rf "$DD_TMP"
+else
+    echo "SKIP: v3.10.0 doc-drift tests (jq not installed; hook degrades silently)"
+fi
+
+echo "--- v3.10.0: hook latency budget (rule hook-latency-budget) ---"
+# Every hooks.json timeout ≤ its event's ceiling: PreToolUse 10000, PostToolUse 5000,
+# Stop 8000, SessionStart 3000 (ms). Reads a static file; cannot degrade.
+assert_true "hooks.json: every timeout within its event ceiling" python3 -c '
+import json
+h=json.load(open("'"$HOOKS_DIR"'/hooks.json"))["hooks"]
+cap={"PreToolUse":10000,"PostToolUse":5000,"Stop":8000,"SessionStart":3000}
+bad=[(ev,x["command"],x["timeout"]) for ev,es in h.items() for e in es for x in e["hooks"] if x.get("timeout",0)>cap.get(ev,0)]
+assert not bad, bad'
+assert_true "hooks.json: exactly 7 hook scripts (no new hook surface)" \
+    bash -c "[ \$(ls '$HOOKS_DIR'/*.sh | wc -l | tr -d ' ') -eq 7 ]"
+assert_true "hooks.json: doc-drift-check bound to SessionStart" \
+    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/hooks.json\"))[\"hooks\"]; assert any(x[\"command\"].endswith(\"doc-drift-check.sh\") for e in h[\"SessionStart\"] for x in e[\"hooks\"])'"
+assert_true "self-verify: heavy path (self_verify_heavy / tsc / cargo) deleted" \
+    bash -c "! grep -qE 'HEAVY_VERIFY|timeout 15 cargo|npx --no-install tsc' '$HOOKS_DIR/self-verify-check.sh'"
+
 
 echo ""
 echo "=== Results ==="

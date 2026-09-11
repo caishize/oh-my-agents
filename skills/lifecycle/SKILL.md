@@ -2,7 +2,7 @@
 name: lifecycle
 description: "Full development lifecycle ROUTER (not an executor) — detects state, reads decision signals, and NAMES the next phase + exact remediation skill across Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Never invokes delivery skills or advances a phase; worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
 user-invocable: true
-argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux] [--with-codex] [--with-cso]"
+argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux|--no-ux] [--with-codex] [--with-cso]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -119,6 +119,10 @@ symmetric to the review gate:
 - **stale signal (freshness predicate, docs/SIGNALS.md)** — `commit` present but ≠ current
   `HEAD` (or `branch` mismatch) → route as if the signal were absent, with a WARN naming
   the mismatch. A stale `GREEN` never advances the projection.
+- **dirty tree at an ADVANCE point (v3.10.0)** — under `--auto`, a fresh signal over a
+  working tree with uncommitted changes (`worktree_dirty "$ROOT"` from common.sh; our own
+  `.claude/`/`.gstack/` never count) routes as stale with reason `uncommitted changes since
+  verdict`. Mid-session dirt is a WARN, never a halt.
 
 ### `review` — Composition-aware; reads decision signal
 
@@ -147,9 +151,12 @@ echo "review-decision: $DECISION"
 **Routing rules (the agent reading this router must obey):**
 
 - `APPROVE` → the projected next step is `ship` (gstack `/ship`). Report it; do not invoke it.
-  (Stale `APPROVE` — `commit` ≠ `HEAD` — routes as absent, with a WARN; freshness predicate.)
-- `REQUEST_CHANGES` → **end the projection**; surface `.claude/metrics/reviews.jsonl`
-  P0/P1 findings; the next step is back to `execute` (after the user confirms).
+  (Stale `APPROVE` — `commit` ≠ `HEAD`, or a dirty tree under `--auto` — routes as absent,
+  with a WARN; freshness predicate.)
+- `REQUEST_CHANGES` → **end the projection**; surface the typed `findings[]` of the last
+  `.claude/metrics/reviews.jsonl` record (`fingerprint` · `severity` · `fix`, ≤10 items —
+  docs/SIGNALS.md § history logs) as the work list for the next `execute` turn (after the
+  user confirms). A count is not a work item; a missing `findings[]` is reported as such.
 - `NEEDS_HUMAN` → branch on `needs_human_kind` (set by `/harness-review`; see docs/SIGNALS.md):
   - `composition-skipped` → **auto-recoverable**: the next step is to re-run the skipped
     composition (`/codex` or `/cso`), NOT a human halt. Report it and continue the projection.
@@ -178,10 +185,8 @@ Build the unencoded-candidate queue from gstack's DURABLE observation artifacts 
 globs — never gstack CLIs beyond `gbrain doctor`; that policy call is unmade):
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
-ls "${GBRAIN_WT:-$HOME/.gstack-artifacts-worktree}"/learnings-*.jsonl \
-   "$GSTACK_PROJECTS"/*-learnings-*.jsonl \
-   "$GSTACK_PROJECTS"/decisions.jsonl 2>/dev/null
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true   # sets GBRAIN_WT, GBRAIN_LEARNINGS
+ls $GBRAIN_LEARNINGS "$GSTACK_PROJECTS"/decisions.jsonl 2>/dev/null
 ```
 
 Parse `decisions.jsonl` SCHEMA-TOLERANTLY (its event schema is unverified upstream):
@@ -245,3 +250,7 @@ so the developer (or the next agent invocation) doesn't have to search:
 - **The `NEXT:` tail line is router OUTPUT, not a signal** — zero persistence, always
   `advisory:true`; emitting it is NAMING, never invoking. (Its cached-file predecessor
   `lifecycle-next.json` was retired v3.9.0: zero consumers in a full cycle.)
+  **Consume-or-cut (BINDING, 2026-09-04 council):** by the 2026-Q4 council this line must
+  have ≥1 in-repo or documented-live consumer (a Dynamic Workflow `agent(…,{schema})`
+  capture or an Agent Team lead that parses it) or it is retired — the profile that
+  retired `lifecycle-next.json` and `session-observer`.

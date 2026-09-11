@@ -30,6 +30,12 @@ Read `CLAUDE.md` for entry point commands:
 - `lint` command — lint with auto-fix
 - `check` command — combined (prefer this if it exists)
 
+The CLAUDE.md commands table is the PRIMARY source. Fallback only: a
+`<!-- gstack:verify: <cmd> -->` line (the marker gstack's `bin/gstack-verify-gate` Stop
+hook reads; `/harness-init` exports it FROM the verified test command, never the reverse).
+When the fallback is used, say so in the signal `reason` (`test cmd from gstack:verify
+marker`) — a foreign, unversioned comment never silently becomes our gate's input.
+
 Read `.claude/harness.json` for:
 - `file_size_limit` — line limit for architecture checks
 - `layer_dirs` — directory-to-layer mappings
@@ -95,7 +101,8 @@ If no test file exists, perform a direct scan of recently modified files:
 
 ### Step 3: Enforce Plan Acceptance Criteria (sprint contract — GATING, not reporting)
 
-For each task in the plan with status `in_progress` or `done`:
+For each task in the plan with status `in-progress` or `done` (template spelling; the
+hook's GUIDE reports `in_progress` as drift):
 - Read the task's `acceptance` (a runnable command or named test — the plan schema
   forbids prose)
 - RUN it (or map it to a check result already produced in Step 2)
@@ -147,14 +154,23 @@ The full schema lives in **docs/SIGNALS.md — do not restate it**. Verify-speci
 blocking item (e.g. `3 tests failed`, `acceptance unconfirmed: task-3`).
 
 **History log** — append the same record (plus failing-test names) as one line to
-`.claude/metrics/verify.jsonl`. This is the history that recurring-failure detection
-(Step 4) and `/harness-dashboard` velocity metrics (first-pass-GREEN rate,
-verify→review time) read — both already assume this writer exists.
+`.claude/metrics/verify.jsonl` through the ONE tested writer (accountable-writer holds:
+this skill derived the record and calls it from its own Bash):
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"
+append_history_record "$ROOT/.claude/metrics" verify.jsonl "$RECORD_JSON"   # validates JSON, flock; LOUD on failure
+```
+
+Consumers: recurring-failure detection (Step 4), `/harness-dashboard` velocity
+(first-pass-GREEN, re-verify count), and the Stop hook's termination sensor (three
+consecutive RED with the same `reason` ⇒ it names `/investigate` / `/encode-mistake`
+instead of another `/verify`) — so `reason` must be the SAME string for the same failure.
 
 **gstack readiness (advisory, only if gstack present)**: surface prior-review and QA
-presence — and, if gstack v1.57.5+ ships a decision layer, whether
-`~/.gstack/projects/<slug>/decisions.active.json` has unresolved decisions — in the report
-*text* for `/ship` context. Read-only. Never block on it and never fold it into the
+presence (the last `<branch>-reviews.jsonl` status, its `wtree` currency) in the report
+*text* for `/ship` context. `decisions.active.json` is a rebuildable cache — presence only,
+never a count. Read-only. Never block on it and never fold it into the
 decision signal: verify owns the build/test/lint/arch decision; the review-domain
 reconciliation of gstack's verdict belongs to `/harness-review` (docs/SIGNALS.md).
 

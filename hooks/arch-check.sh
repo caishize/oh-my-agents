@@ -80,7 +80,7 @@ while IFS= read -r import_path; do
         VIOLATIONS="${VIOLATIONS}  File: ${FILE_PATH}\n"
         VIOLATIONS="${VIOLATIONS}  Import: ${import_path}\n"
         VIOLATIONS="${VIOLATIONS}  Fix: Move shared logic to the types or config layer, or use a service interface.\n"
-        VIOLATIONS="${VIOLATIONS}  Ref: docs/ARCHITECTURE.md#dependency-layers\n\n"
+        VIOLATIONS="${VIOLATIONS}  Ref: docs/ARCHITECTURE.md (layer model + dependency rules)\n\n"
     fi
 done <<< "$ALL_IMPORTS"
 

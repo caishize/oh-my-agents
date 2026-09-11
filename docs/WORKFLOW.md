@@ -88,10 +88,12 @@ Resume across sessions: `/spec-to-task --continue <plan-id>`
 
 Implement tasks from the execution plan. During development:
 
-**oh-my-agents hooks (automatic; canonical list: `hooks/hooks.json`, 7 hooks)**:
-blocking (`arch-check`, `safety-check`, `bash-safety-check`) · advisory
-(`plan-validation-check` GUIDE + completion nudge, `self-verify-check`,
-`doc-drift-check` + gate-state nudge) · recording (`session-metrics`)
+**oh-my-agents hooks (automatic; canonical list: `hooks/hooks.json`, 7 scripts)**:
+blocking (`arch-check`, `safety-check`, `bash-safety-check`) · advisory, delivered as
+JSON `additionalContext`/`systemMessage` so the MODEL sees them (`plan-validation-check`
+GUIDE + status-enum + completion nudge, `self-verify-check` syntax warn, `doc-drift-check`
+on Stop: drift + gate-state nudge + 3-RED termination sensor, and on SessionStart: gate
+state + active plan injected at session open) · recording (`session-metrics`)
 
 **gstack hooks (if guard mode active)**:
 - `check-freeze.sh` **blocks** edits outside freeze boundary
@@ -139,8 +141,9 @@ When gstack is detected, `/harness-review` automatically:
 - Runs both review passes
 - Deduplicates findings (same file + line → merge)
 - Cross-validates: issues found by both systems get escalated severity
-- Tags each finding with source: `[HARNESS]`, `[STRUCTURAL]`, or `[BOTH]`
-- Logs to both `.claude/metrics/reviews.jsonl` and gstack's review system
+- Tags each finding with source: `[HARNESS]`, `[STRUCTURAL]`, `[CROSS-MODEL]`, `[SECURITY]`, `[UX]`, or `[BOTH+]`
+- Logs to `.claude/metrics/reviews.jsonl` (typed `findings[]`); references gstack report
+  paths, never writes gstack (rule `read-only-bridge`)
 
 Without gstack, `/harness-review` runs the four-pillar harness review only.
 
@@ -155,9 +158,10 @@ Without gstack, `/harness-review` runs the four-pillar harness review only.
 **Ship gate — our-side CONVENTION (not a verified gstack contract)**: before invoking
 `/ship`, the human (or their project harness config) runs the pre-ship check from
 [docs/SIGNALS.md](SIGNALS.md#pre-ship-check--our-side-convention-not-a-verified-gstack-contract):
-`verify-latest.json` GREEN + `review-latest.json` APPROVE + both `commit` == HEAD.
-`gstack-sync --contract-check` probes whether gstack itself references our signals and
-reports `VERIFIED | ASSERTED` — do not assume it does.
+`verify-latest.json` GREEN + `review-latest.json` APPROVE + both `commit` == HEAD + a clean
+working tree (`worktree_dirty`). Verified against gstack v1.79 source: `/ship` reads none of
+our signals (`ASSERTED`); the one bilateral surface is gstack's `bin/gstack-verify-gate`
+reading the `<!-- gstack:verify: cmd -->` line `/harness-init` exports into CLAUDE.md.
 
 **Next**: `/land-and-deploy` or `/retro`
 
@@ -185,9 +189,9 @@ Two complementary retrospective views:
 
 **Unified metrics** (via `/harness-dashboard` gstack integration section):
 - Dual review rate (what % of reviews used both systems)
-- Investigate→encode rate (root causes converted to permanent rules)
-- Lifecycle phase coverage (which phases were used/skipped)
-- Eureka moments (logged insights from gstack sessions)
+- First-pass GREEN rate, re-verify count per plan, gate-block rate (leading indicators)
+- Lifecycle phase coverage from gstack's always-on `timeline.jsonl`
+- TASTE rules encoded (honest registry count) + unencoded gbrain candidates
 
 Run weekly or at sprint boundaries. Together they provide a complete engineering health picture.
 
@@ -247,8 +251,10 @@ diagram, not two.
 ### Weekly health check
 ```
 /entropy-sweep → /retro → /harness-dashboard
-/gstack-sync --metrics         # Cross-system metrics report
 ```
+Scheduling is the user's choice, not the plugin's: `/loop 7d /entropy-sweep` in-session,
+or a cloud Routine where available. There is no plugin scheduler. (`/gstack-sync --metrics`
+and `integrated-report.json` were deleted in v3.10.0 — nobody read the file.)
 
 ### Integration status
 ```

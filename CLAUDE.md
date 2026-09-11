@@ -1,69 +1,59 @@
 # Oh-My-Agents — Harness Engineering Plugin for Claude Code
 
-**v3.9.1** — Mechanical quality constraints + entropy management for AI-driven dev.
+**v3.10.0** — Mechanical quality constraints + entropy management for AI-driven dev.
 **Composition-based** integration with [gstack](https://github.com/garrytan/gstack.git)
-(v1.46+ floor, v1.62.0.0 current); we own *architecture / entropy / observability* and **never
-orchestrate delivery**. Coordination ceded to native **Agent Teams** + **Dynamic Workflows**;
-our durable anchor is the read-only audit + the versioned decision-signal **Gate API**
-([docs/SIGNALS.md](docs/SIGNALS.md)) every executor gates on.
+(v1.46+ floor, v1.79.0.0 current, source-verified 2026-09-04); we own *architecture /
+entropy / observability* and **never orchestrate delivery**. Coordination is native
+(Agent Teams + Dynamic Workflows); our durable anchor is the read-only audit + the
+versioned decision-signal **Gate API** ([docs/SIGNALS.md](docs/SIGNALS.md)).
 
 ## Differentiation anchor
 
 | oh-my-agents owns | gstack owns | Don't reinvent |
 |---|---|---|
 | hooks, arch-guard, TASTE rules, entropy-sweep | ideate / plan / ship / deploy / canary / retro | Managed Agents / Agents SDK runtime |
-| verify + review **decision signals**, legibility scoring | `/codex` `/cso` `/design-review` `/investigate` `/qa` | gstack lifecycle orchestration |
-| two-layer model: observation → mechanical enforcement | observation layer (GBrain memory ingest) | auto-generated rules (ETH Zurich 2026) |
+| verify + review **decision signals**, legibility scoring | `/codex` `/cso` `/design-review` `/investigate` `/qa` `/review` | native `/code-review` `/security-review` (delegate to them) |
+| two-layer model: observation → mechanical enforcement | observation layer (GBrain memory) | auto-generated rules (ETH Zurich 2026) |
 
 ## Surface
 
-11 user-invocable skills (full details in [docs/WORKFLOW.md](docs/WORKFLOW.md)):
-`harness-init`, `legibility-score`, `spec-to-task`, `verify`, `encode-mistake`,
-`arch-guard`, `entropy-sweep`, `harness-review`, `harness-dashboard`, `gstack-sync`,
-`lifecycle`. 1 read-only background agent in `agents/` (`session-observer`). 7 enforcement
-hooks (`arch-check`, `safety-check`, `plan-validation-check`, `bash-safety-check`,
-`self-verify-check`, `session-metrics`, `doc-drift-check`).
+11 user-invocable skills (details: [docs/WORKFLOW.md](docs/WORKFLOW.md)): `harness-init`,
+`legibility-score`, `spec-to-task`, `verify`, `encode-mistake`, `arch-guard`,
+`entropy-sweep`, `harness-review`, `harness-dashboard`, `gstack-sync`, `lifecycle`.
+7 hooks (canonical: `hooks/hooks.json`; advisory ones emit JSON `additionalContext` so the
+MODEL sees them; `doc-drift-check` also runs on SessionStart to inject gate state).
+0 agents (session-observer retired v3.10.0). 1 project-local workflow (`harness-audit`).
 
 ## Workflow (TL;DR)
 
 - One-time: `/harness-init --quick` + `/gstack-sync --setup`
-- Daily: `/lifecycle next` (router-only; NAMES the next gstack/harness skill + reads its
-  decision signal — never invokes it)
+- Daily: `/lifecycle next` (router-only; NAMES the next skill + reads its signal — never invokes)
 - Mistake → guardrail: `/investigate` (gstack) → `/encode-mistake --from-gbrain` (here)
-- Weekly: `/entropy-sweep` → `/harness-dashboard` → `/gstack-sync --metrics`
+- Weekly: `/entropy-sweep` → `/harness-dashboard` (schedule with `/loop`; no plugin scheduler)
 
-Full lifecycle: [docs/WORKFLOW.md](docs/WORKFLOW.md).
-Bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md).
-Architecture (incl. Anthropic 3-agent mapping): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Bridge manifest: [docs/INTEGRATION.md](docs/INTEGRATION.md) · Architecture:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Decision record:
+[docs/TEAM-DISCUSSION-2026-09-04.md](docs/TEAM-DISCUSSION-2026-09-04.md).
 
-## gstack integration — what's wired (v1.46+ floor, v1.62.0.0 current)
+## gstack integration — what's wired (v1.79, verified against source)
 
-- **Legacy sunset (v3.6.0)**: the v1.27 *worktree* rename is past floor → probe
-  `gstack-artifacts-worktree`. gbrain memory still detected via CLI/`gbrain doctor`/brain-remote
-  (a remote DISTINCT from artifacts — never infer "gbrain gone" from artifacts-only).
-- **`/spec` (gstack v1.47) → `/spec-to-task`**: clean intent→spec→layer-aware-plan handoff.
-- **`/encode-mistake --from-gbrain {learning|eureka|retro|all}`** — observation → TASTE rule, human-gated.
-- **Decision-signal Gate API** ([docs/SIGNALS.md](docs/SIGNALS.md)): `/verify` + `/harness-review`
-  write versioned, **commit-stamped** signals (stale ⇒ default-deny) → `/lifecycle` routes
-  (auto-recovers `composition-skipped`); the pre-`/ship` gate is an our-side convention
-  (`VERIFIED | ASSERTED` per probe). `/harness-review` **reconciles** gstack's v1.57.5+ verdict
-  layer read-only — agree→pass, diverge→`NEEDS_HUMAN:judgment-slop`; never aggregates, never
-  writes gstack. `.claude/gstack-rendered/` is a gstack-owned enclave (never scanned/flagged).
-- **Sensors**: `/landing-report` → DORA proxy in `/harness-dashboard`; Confusion Protocol → legibility.
-- **Worktree-aware** — `.gstack-worktrees/` + `~/conductor/workspaces/` honored; never cross-fire.
+- **Identity**: slug = `owner-repo` (gstack-slug `SLUG=` line / origin URL); `$GSTACK_HOME`
+  honored; `{SLUG}`-templated bridges. gbrain = `~/.gstack-brain-worktree` + one
+  `learnings.jsonl` (the `artifacts-worktree` name never existed — CI-grepped out).
+- **Gate API**: `/verify` + `/harness-review` write commit-stamped signals; freshness =
+  `commit == HEAD` AND clean tree at ADVANCE points; stale ⇒ default-deny. `/ship` reads
+  none of it (VERIFIED) — the pre-ship check is our convention; the bilateral surface is
+  gstack's verify-gate reading the `<!-- gstack:verify: cmd -->` line `/harness-init` exports.
+- **Reconciliation**: gstack's `<branch>-reviews.jsonl` verdict, currency by `wtree`;
+  agree→pass, diverge→`NEEDS_HUMAN:judgment-slop`; never aggregates, never writes gstack.
+- **Sensors**: always-on `timeline.jsonl` (lifecycle coverage), `.gstack/*-reports/*.md`;
+  `GSTACK_SESSION_KIND=spawned` silences our nudges; `.claude/gstack-rendered/` is theirs.
 
-## Anti-bloat (hard rules)
+## Anti-bloat (hard rules — cite by kebab-case NAME, never by number)
 
-1. No new skills for integration; modify existing only.
-2. SKILL.md ≤ 400 lines; root CLAUDE.md ≤ ~60 lines (Osmani 2026).
-3. Glob over exact path; single-path probes (dual-value only transiently across a rename, then sunset).
-4. Read-only across all gstack paths.
-5. No orchestration of delivery — `/lifecycle` NAMES the next skill, never invokes it.
-6. No auto-generated rules — human-gated TASTE encoding only.
-7. Workflows ≤ 1, read-only (Explore agents), audit-only, **returns** a decision signal
-   (accountable invoker persists it — never a relay write). Bright line: artifact ends in a
-   **SIGNAL** (ours) or a **DEPLOYED ARTIFACT** (gstack's). Shipped: `.claude/workflows/harness-audit.js`.
-
-Full constraints + rationale: [Anti-Bloat Constraints](docs/INTEGRATION.md#anti-bloat-constraints)
-(cite rules by kebab-case NAME, e.g. `no-orchestration`, `single-workflow` — never by number).
-Latest decision record: [docs/TEAM-DISCUSSION-2026-08-13.md](docs/TEAM-DISCUSSION-2026-08-13.md) (v3.9 harness-fusion v2).
+`no-new-skills` · `skill-line-cap` (SKILL.md ≤ 400, root CLAUDE.md ≤ 60 — CI-enforced) ·
+`glob-over-exact-path` · `read-only-bridge` · `no-orchestration` (hooks nudge, never invoke)
+· `human-gated-encoding` · `single-workflow` (read-only, RETURNS a signal; SIGNAL vs
+DEPLOYED ARTIFACT bright line) · `hook-latency-budget` · `declared-artifact` (every written
+`.claude/*` file names its reader or CI fails) · `ablate-per-model`.
+Full list + rationale: [Anti-Bloat Constraints](docs/INTEGRATION.md#anti-bloat-constraints).
