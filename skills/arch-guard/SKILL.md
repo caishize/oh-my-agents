@@ -34,26 +34,15 @@ Before scanning the codebase, check for project-specific configuration:
 
 1. **Check `.claude/harness.json`** — If this file exists, it contains project-specific
    layer definitions, provider configuration, and enforcement preferences. Use these
-   values instead of defaults. A typical `harness.json` might define:
+   values instead of defaults. The keys are exactly those of `templates/harness-config.json`
+   (what `hooks/lib/common.sh` and `arch-check.sh` read — no other spelling is honored):
    ```json
    {
-     "layers": ["types", "config", "data", "domain", "application", "ui"],
-     "layerPaths": {
-       "types": "src/types/",
-       "config": "src/config/",
-       "data": "src/data/",
-       "domain": "src/domain/",
-       "application": "src/app/",
-       "ui": "src/ui/"
-     },
-     "providers": {
-       "auth": "src/providers/auth.ts",
-       "telemetry": "src/providers/telemetry.ts",
-       "featureFlags": "src/providers/flags.ts",
-       "logger": "src/providers/logger.ts"
-     },
-     "fileSizeLimit": 300,
-     "enforcementLevel": "strict"
+     "layers": ["types", "config", "repo", "service", "runtime", "ui"],
+     "layer_dirs": { "types": ["**/types/**"], "repo": ["**/repo/**"], "service": ["**/services/**"], "ui": ["**/ui/**"] },
+     "providers_path": "src/providers/index.ts",
+     "file_size_limit": 300,
+     "sibling_layers": ["service:runtime"]
    }
    ```
 2. If no `harness.json` exists, use defaults and infer from the codebase.

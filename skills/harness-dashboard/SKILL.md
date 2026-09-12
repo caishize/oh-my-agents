@@ -1,6 +1,6 @@
 ---
 name: harness-dashboard
-description: "Harness health overview and metric analysis — session metrics, enforcement activity, plan progress, layer balance, trends. Supports deep-dive queries (layer-balance, violations, trends, export). Aliases: 仪表盘, 看板, 运行状态, 指标查询, 度量分析"
+description: "Harness health overview and metric analysis — per-edit layer balance, plan progress, verify/review velocity, entropy and legibility trends, gstack lifecycle coverage. Supports deep-dive queries (layer-balance, trends, velocity, export); every row names a file source. Aliases: 仪表盘, 看板, 运行状态, 指标查询, 度量分析"
 user-invocable: true
 argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|trends|velocity|export]"
 allowed-tools: Read, Glob, Grep, Bash

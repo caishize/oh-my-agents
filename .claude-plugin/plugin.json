@@ -29,7 +29,10 @@
     "gate-api",
     "dynamic-workflows",
     "agent-teams",
-    "no-orchestration"
+    "no-orchestration",
+    "gate-ladder",
+    "signal-fresh",
+    "typed-handoff"
   ],
   "skills": "./skills/"
 }

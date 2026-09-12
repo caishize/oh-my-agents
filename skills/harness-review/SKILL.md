@@ -1,6 +1,6 @@
 ---
 name: harness-review
-description: "Four-pillar code review with composition-based gstack integration. Owns architecture/layer/entropy review; delegates deep slop & security to gstack /codex and /cso when available. Auto-deduplicates findings across [HARNESS]/[STRUCTURAL]/[CROSS-MODEL]/[SECURITY]/[UX]/[BOTH+] tags. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
+description: "Four-pillar code review by a SEPARATE built-in Explore judge; the decision (APPROVE/REQUEST_CHANGES/NEEDS_HUMAN) is computed from its typed findings[] and written as the review decision signal. Composes gstack: delegates deep slop & security to /codex and /cso, reads gstack's verdict and typed findings read-only; dedups across [HARNESS]/[STRUCTURAL]/[CROSS-MODEL]/[SECURITY]/[UX]/[BOTH+] tags. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
 user-invocable: true
 argument-hint: "[PR-number or file-path] [--plan <plan-id>] [--no-gstack] [--no-codex] [--no-cso] [--ux]"
 allowed-tools: Read, Glob, Grep, Bash

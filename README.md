@@ -53,12 +53,12 @@ git clone https://github.com/caishize/oh-my-agents.git ~/.claude/skills/oh-my-ag
 | `/harness-init` | All | Initialize harness: CLAUDE.md, docs/, bootstrap, config |
 | `/legibility-score` | All | 10-metric Agent Legibility Score (0-30) |
 | `/spec-to-task` | Documentation | Convert specs to layer-aware execution plans |
-| `/verify` | Architecture | Build + test + lint + arch check with structured results |
+| `/verify` | Architecture | Build + test + lint + arch check → decision signal + typed `failures[]`; confirms `done` for tasks whose acceptance ran green |
 | `/encode-mistake` | Entropy | Mistakes or taste → permanent guardrails (TASTE-NNN) |
 | `/arch-guard` | Architecture | Set up layer enforcement + Providers pattern |
 | `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
-| `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex` (cross-model), `/cso` (security), `/design-review` — dedup + severity escalation |
-| `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + `--query` for deep-dive analysis |
+| `/harness-review` | Entropy | Four-pillar review by a separate `Explore` judge, decision computed from typed `findings[]`; composes gstack `/codex` (cross-model), `/cso` (security), `/design-review` — dedup + severity escalation |
+| `/harness-dashboard` | Observability | Layer balance, velocity, entropy/legibility trends, DORA-proxy + `--query` deep-dives (every row names a file source) |
 | `/gstack-sync` | Integration | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
 | `/lifecycle` | Integration | Lifecycle **router** — detects state, reads decision signals, NAMES the next phase + remediation skill (never invokes); worktree-aware |
 
@@ -200,7 +200,7 @@ legacy sunset** — dual-value only transiently across a future rename):
 - **GBrain memory** → `/encode-mistake --from-gbrain [learning|eureka|retro|all]` — uses
   `gbrain` CLI when present, else `~/.gstack-brain-worktree/` (env `GSTACK_BRAIN_WORKTREE`),
   else `projects/<slug>/learnings.jsonl` — one detection (`gbrain_detect()`); the
-  `gstack-artifacts-worktree` name probed through v3.9 has zero hits in gstack v1.79 and is
+  `gstack-artifacts-worktree` name probed through v3.9 has zero hits in gstack v1.79–v1.84.1 and is
   CI-grepped out. Always **human-gated** (ETH Zurich 2026: auto-generated rules hurt).
 - **gstack `timeline.jsonl` (always-on) + `.gstack/{deploy,canary}-reports/*.md` →
   `/harness-dashboard`** — lifecycle coverage and DORA `[proxy]` rows from data that exists
@@ -291,8 +291,11 @@ tests/                             # Plugin self-tests
 ## References
 
 - [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/)
+- [Anthropic: Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps) — the Planner / Generator / Evaluator loop and "delete what the model obsoleted"
 - [gstack](https://github.com/garrytan/gstack) — complementary workflow plugin
 - [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
+- [ETH Zurich, arXiv 2602.11988](https://arxiv.org/abs/2602.11988) — LLM-generated context files: +20–23 % cost, ≤0 gain (why CLAUDE.md stays ≤60 lines and task-specific)
+- [Claude Code docs: hooks](https://code.claude.com/docs/en/hooks) · [plugins](https://code.claude.com/docs/en/plugins-reference) · [workflows](https://code.claude.com/docs/en/workflows)
 
 ## License
 

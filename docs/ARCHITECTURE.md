@@ -210,7 +210,7 @@ This plugin leverages specific Claude Code capabilities:
 | `SessionStart` hooks | doc-drift-check.sh | Gate ladder + active plan injected at session open, resume, compact and fork |
 | Built-in `Explore` subagent | /harness-review blind judge, harness-audit.js | Read-only, fresh-context Evaluator with no agent file of ours |
 | `$ARGUMENTS` | All skills | Pass user arguments to skill content |
-| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, the pre-ship convention check, Dynamic Workflow stages, Agent Teams (gstack `/ship` reads none of it — VERIFIED v1.79) |
+| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by the gate ladder (SessionStart/Stop), `/lifecycle`, the pre-ship APPROVE rung, a user-opt-in `TaskCompleted` gate, Dynamic Workflow stages, Agent Teams (gstack `/ship` reads none of it — VERIFIED v1.84.1) |
 | Dynamic Workflows (plugin-root `workflows/`) | `harness-audit.js` ⇒ `/oh-my-agents:harness-audit` (1 shipped; rule `single-workflow`) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it); distributed by the platform on install |
 
 ## Design Decisions
@@ -268,7 +268,7 @@ remediation instructions."
 
 CLAUDE.md is the table of contents (~60 lines); docs/ contains the full details.
 OpenAI found that one massive instruction file failed — context is scarce and crowds
-out actual task details. **Note:** gstack v1.46–1.79 converged onto on-demand content
+out actual task details. **Note:** gstack v1.46–1.84 converged onto on-demand content
 loading (25–49% token cut; "carved skills" = skeleton + on-demand `sections/`), so
 progressive disclosure is now table stakes both platforms ship — we keep the practice but
 no longer claim it as a moat. The moat is the repo-local edit-time mechanical enforcement
