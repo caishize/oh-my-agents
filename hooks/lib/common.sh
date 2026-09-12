@@ -23,7 +23,8 @@
 #   resolve_metrics_dir <root> <source> — SETS METRICS_DIR; creates only under env|git roots
 #   harness_root        — project root for SKILL.md snippets (no hook stdin); echoes "." last
 #   gstack_detect       — ONE gstack + gbrain detection (GSTACK_PATH, SLUG, GSTACK_PROJECTS, GBRAIN_*)
-#   emit_advisory <event> <text> — advisory hook output on the channel that reaches the model
+#   emit_advisory <event> <text> — advisory hook output on the right channel per event
+#   signal_fresh <root> <signal.json> [<decision>] [--advance] — the Gate API freshness predicate
 #   append_history_record <dir> <file.jsonl> <json> — validated, locked append (verify/reviews history)
 
 # --- Input ---
@@ -486,13 +487,16 @@ worktree_dirty() {
 # Claude Code reads a hook's stdout as JSON on exit 0; bare text on stdout or stderr at
 # exit 0 reaches neither the model nor a parsed envelope (stderr reaches the model ONLY on
 # exit 2). Every advisory hook emits through here so the channel is right by construction.
-# Static per-event key table — a hook cannot observe whether the host parsed its output,
-# so probing is impossible:
+# Static per-event key table (hooks reference, "Decision control" + "Stop decision control"):
 #   PreToolUse | PostToolUse | SessionStart | UserPromptSubmit
 #       → hookSpecificOutput.additionalContext (model) + systemMessage (user)
 #   Stop | anything else
-#       → systemMessage is the load-bearing key (an additionalContext sibling rides along;
-#         unknown keys are ignored, and nothing may claim it as the Stop delivery channel)
+#       → systemMessage ONLY. At Stop, `additionalContext` is "non-error feedback that
+#         CONTINUES the conversation" under the stop_hook_active / 8-continuation loop
+#         protections — i.e. a forced extra model turn. A hook that NAMES the next skill
+#         (rule no-orchestration) must never emit it there (v3.11.0; through v3.10 every Stop
+#         nudge re-fired the turn up to the platform cap). The model channel is SessionStart,
+#         which also fires on resume / compact / fork.
 # Invariants: empty/whitespace text ⇒ ZERO bytes (success silence); text is capped at 400
 # chars with the remediation pointer kept; inside a gstack-spawned subagent
 # (GSTACK_SESSION_KIND=spawned, env inherited byte-for-byte) nothing is emitted — the
@@ -513,15 +517,73 @@ emit_advisory() {
         EMIT_TEXT="$text" EMIT_EVENT="$event" EMIT_CTX="$with_context" python3 -c '
 import json, os
 t, ev, ctx = os.environ["EMIT_TEXT"], os.environ["EMIT_EVENT"], os.environ["EMIT_CTX"] == "1"
-out = {"systemMessage": t, "hookSpecificOutput": {"hookEventName": ev, "additionalContext": t}}
+out = {"systemMessage": t}
+if ctx:
+    out["hookSpecificOutput"] = {"hookEventName": ev, "additionalContext": t}
 print(json.dumps(out))' 2>/dev/null && return 0
     fi
     if command -v jq >/dev/null 2>&1; then
-        jq -cn --arg t "$text" --arg ev "$event" \
-            '{systemMessage:$t, hookSpecificOutput:{hookEventName:$ev, additionalContext:$t}}' 2>/dev/null && return 0
+        if [ "$with_context" = 1 ]; then
+            jq -cn --arg t "$text" --arg ev "$event" \
+                '{systemMessage:$t, hookSpecificOutput:{hookEventName:$ev, additionalContext:$t}}' 2>/dev/null && return 0
+        else
+            jq -cn --arg t "$text" '{systemMessage:$t}' 2>/dev/null && return 0
+        fi
     fi
     printf '%s\n' "$text"
     return 0
+}
+
+# --- Freshness predicate (docs/SIGNALS.md) — ONE implementation for every consumer ---
+#
+# signal_fresh <root> <verify-latest.json|review-latest.json> [<expected-decision>] [--advance]
+# Returns 0 and prints nothing when the signal exists, parses, carries a known
+# schema_version, has <expected-decision> when one is given, and is FRESH:
+#   commit == HEAD  (and, with --advance — the pre-ship / projection / persist points —
+#                    a clean working tree per worktree_dirty), or
+#   commit != HEAD but the signal's optional `wtree` equals the live working-tree content
+#   fingerprint from gstack's bin/gstack-wtree (a history rewrite, or committing exactly
+#   what was verified). That probe runs LAZILY — only on this path, never per turn — under
+#   `timeout 2`; absent gstack ⇒ the commit path is the permanent answer.
+# Otherwise prints ONE reason token — absent | nojq | malformed | schema | decision:<x> |
+# stale:commit | stale:dirty | stale:wtree — and returns 1 (default-deny for automated
+# consumers; humans read the token as a WARN).
+signal_fresh() {
+    local root="${1:-.}" base="${2:-}" want="" advance=0 a
+    shift 2 2>/dev/null || true
+    for a in "$@"; do case "$a" in --advance) advance=1 ;; *) want="$a" ;; esac; done
+    local f="${root%/}/.claude/signals/$base"
+    [ -f "$f" ] || { echo absent; return 1; }
+    command -v jq >/dev/null 2>&1 || { echo nojq; return 1; }
+    local parsed
+    parsed=$(jq -r '[(.schema_version|tostring), (.decision // ""), (.commit // ""), (.wtree // "")] | @tsv' "$f" 2>/dev/null) \
+        || { echo malformed; return 1; }
+    local sv dec commit wtree
+    IFS=$'\t' read -r sv dec commit wtree <<< "$parsed"
+    [ "$sv" = "1" ] || { echo schema; return 1; }
+    if [ -n "$want" ] && [ "$dec" != "$want" ]; then echo "decision:${dec:-none}"; return 1; fi
+    local head
+    head=$(git -C "$root" rev-parse HEAD 2>/dev/null || echo "")
+    if [ -n "$commit" ] && [ "$commit" = "$head" ]; then
+        if [ "$advance" = 1 ] && worktree_dirty "$root"; then echo stale:dirty; return 1; fi
+        return 0
+    fi
+    if [ -n "$wtree" ]; then
+        [ -n "${GSTACK_PATH:-}" ] || detect_gstack || true
+        if [ -n "${GSTACK_PATH:-}" ] && [ -x "$GSTACK_PATH/bin/gstack-wtree" ]; then
+            local live
+            if command -v timeout >/dev/null 2>&1; then
+                live=$(cd "$root" && timeout 2 "$GSTACK_PATH/bin/gstack-wtree" 2>/dev/null || echo "")
+            else
+                live=$(cd "$root" && "$GSTACK_PATH/bin/gstack-wtree" 2>/dev/null || echo "")
+            fi
+            # A matching fingerprint covers untracked source too, so no dirty clause applies.
+            [ -n "$live" ] && [ "$live" = "$wtree" ] && return 0
+            echo stale:wtree; return 1
+        fi
+    fi
+    echo stale:commit
+    return 1
 }
 
 # --- History-log writer (skills) ---

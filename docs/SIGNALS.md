@@ -18,8 +18,9 @@ So they are promoted to a versioned **Gate API** consumed by:
 - **`/lifecycle`** (routes / projects the next phase on the decision)
 - **Dynamic Workflow** stages (a stage ends by writing a signal; the next stage gates on it)
 - **native Agent Teams** (the team-lead reads the signal as the Evaluator verdict)
-- **the Stop-time gate-state nudge** (`doc-drift-check.sh` — names the next gate skill
-  off a FRESH signal only)
+- **the gate ladder** (`doc-drift-check.sh` — SessionStart: the model's context on
+  startup / resume / compact / fork; Stop: the human, `systemMessage` only) — names the next
+  gate skill and the first typed items off a FRESH signal only (§ Gate ladder below)
 
 > **The bright line (council canon, 2026-06-06):** a stage's terminal artifact is a
 > **SIGNAL** (ours) or a **DEPLOYED ARTIFACT** (gstack's). We own signals; we never
@@ -60,31 +61,25 @@ So they are promoted to a versioned **Gate API** consumed by:
    ⇒ default-deny (contract rule above) ⇒ any automated chain halts safely. Mid-run death never needs
    special handling downstream.
 
-### Freshness predicate (v3.9.0)
+### Freshness predicate — `signal_fresh` (ONE implementation, hooks/lib/common.sh)
 
-Both signals carry an optional `commit` field: the `git rev-parse HEAD` sha at the moment
-the verdict was derived. The predicate:
-
-- Any **AUTOMATED** consumer (hook, workflow stage, Agent Team lead, `/lifecycle` routing)
-  MUST treat a signal whose `commit` differs from the current `HEAD` (or whose `branch`
-  differs from the current branch) as **default-deny** — route as if the signal were
-  absent, and name the mismatch.
-- A **HUMAN** consumer sees a WARN and decides; humans may knowingly act on a stale signal.
-- A signal without `commit` (pre-v3.9.0 producer) is treated by automated consumers as
-  stale-unknown: WARN + re-run recommendation, never silent advance.
-- **Dirty-tree clause (v3.10.0, ADVANCE points only).** `commit == HEAD` says nothing about
-  edits made since. At the three ADVANCE points — the pre-ship check below, `/lifecycle
-  --auto`'s projection, and the audit-persist recipe (which stamps HEAD onto a returned
-  verdict) — an AUTOMATED consumer also requires a clean working tree: `worktree_dirty
-  "$ROOT"` (common.sh; untracked SOURCE counts, our own `.claude/`/`.gstack/` never do) ⇒
-  route as stale with reason `uncommitted changes since verdict`. The Stop hook applies it
-  to the `APPROVE` branch only (the hand-off to the irreversible step); mid-session dirt
-  is a WARN, never a halt. Consumer-side by design: no producer field, no schema change —
-  a `dirty` boolean stamped at derivation time would be stale on the next keystroke.
-
-This is what makes push-style stage nudges (plan-complete → `/verify`; Stop-time
-gate-state → `/harness-review` / gstack `/ship`) safe: a nudge is only ever emitted off a
-FRESH signal.
+`signal_fresh <root> <signal> [<decision>] [--advance]` is the only freshness check; every
+consumer (the gate ladder, `/lifecycle`, the pre-ship rung, the persist recipe) calls it by
+name instead of restating it. Fresh ⇔ the file exists, parses, `schema_version` is known, the
+decision matches when asked, and: **`commit == HEAD`** (with `--advance` — the three ADVANCE
+points: the pre-ship rung, `/lifecycle --auto`'s projection, the audit persist — also a clean
+tree per `worktree_dirty`; our own `.claude/`/`.gstack/` never count), OR `commit != HEAD` but
+the signal's optional **`wtree`** equals gstack's live working-tree content fingerprint
+(`bin/gstack-wtree`, probed lazily under `timeout 2`, never per turn): a history rewrite, or
+committing exactly what was verified, no longer forces a re-verify + re-review. Producers
+stamp `wtree` ONLY when that binary is executable AND both ledger dirs are gitignored (`git
+check-ignore -q` per path — the fingerprint stages untracked files); the commit path is the
+permanent gstack-absent path, never sunset. On failure the predicate prints one reason token
+— `absent | nojq | malformed | schema | decision:<x> | stale:commit | stale:dirty |
+stale:wtree` — and AUTOMATED consumers default-deny (route as if absent, naming the token); a
+HUMAN reads it as a WARN and may knowingly act. A pre-v3.9 signal without `commit` reads
+`stale:commit`. Mid-session dirt (no `--advance`) is a WARN, never a halt. No producer-side
+`dirty` field, no schema change — `wtree` is optional, `schema_version` stays `1`.
 
 ### No-averaging fence (deliberate; do not "improve")
 
@@ -190,55 +185,66 @@ hands to the next Generator turn:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `findings[]` | array ≤10, ≤4 KB | `{fingerprint: "<file>:<line>:<dimension>", severity: P0\|P1\|P2, tag: [HARNESS]\|…, fix: "<≤80 chars>"}` — highest severity first |
+| `findings[]` (reviews.jsonl) | array ≤10, ≤4 KB | `{fingerprint: "<file>:<line>:<dimension>", severity: P0\|P1\|P2, tag: [HARNESS]\|…, fix: "<≤80 chars>", needs_human?: arch-ambiguity\|judgment-slop}` — highest severity first; `needs_human` is set by the separate judge and COMPUTES `decision=NEEDS_HUMAN` |
 | `dimension` | enum | `slop\|arch\|docs\|observ\|contract\|reconcile` — our four-pillar vocabulary (the same `/harness-audit` returns); never gstack's `CRITICAL\|INFORMATIONAL` |
+| `failures[]` (verify.jsonl) | array ≤10, ≤4 KB | `{check: lint\|build\|test\|arch, id: "<test name \| file:line>", task_id: "<plan tasks[].id>"\|null, message: "<≤80 chars>"}` — the RED twin of `findings[]`; `reason` == `failures[0].message` verbatim |
 
-Consumers: `/lifecycle` (`REQUEST_CHANGES` routing — a count is not a work item),
-`/harness-dashboard` velocity, the Stop hook's termination sensor (`verify.jsonl`: three
-consecutive `RED` with the same `reason` ⇒ the loop is not converging; it names
-`/investigate` / `/encode-mistake`, never another `/verify` — so producers keep `reason`
-stable for the same failure).
+Consumers: the gate ladder (RED rung: first ≤3 `failures[].id`; REQUEST_CHANGES rung: first
+≤3 `findings[].fingerprint`), `/lifecycle` (`REQUEST_CHANGES` routing — a count is not a
+work item; `recover` retries `failures[].task_id`), `/verify`'s recurring-failure jq over
+`failures[].id`, `/harness-dashboard` velocity, and the Stop termination sensor
+(`verify.jsonl`: three consecutive `RED` with the same `reason` ⇒ the loop is not
+converging; it names `/investigate` / `/encode-mistake`, never another `/verify` — so
+producers keep `reason` stable for the same failure).
 
-## Related: the `NEXT:` tail line — router OUTPUT, not a signal
+## Gate ladder — ONE mapping, two renderings (`hooks/doc-drift-check.sh`)
 
-`/lifecycle next` (and `--auto`) always ends its output with one machine-parseable line —
-`NEXT: {"phase":…,"skill":…,"args":[…],"gates":[…],"advisory":true}` — parsed by whoever
-invoked the router (the shape Dynamic Workflows' structured-output capture consumes).
-It is invocation OUTPUT with zero persistence, not one of the two decision signals; it
-never gates anything, and emitting it is naming, never invoking (rule no-orchestration).
-Its predecessor — the cached `.claude/signals/lifecycle-next.json` file (`--emit-next`) —
-was retired in v3.9.0 after a full cycle with zero consumers: native executors read
-invocation output, not files that can be read stale.
+Rendered at `SessionStart` (startup / resume / compact / fork) into the MODEL's context and
+at `Stop` for the HUMAN (`systemMessage` only — at Stop an `additionalContext` key would
+CONTINUE the turn under the platform's 8-continuation cap; a hook that NAMES the next skill
+never does that, and a re-entry turn — `stop_hook_active` — gets zero bytes). Rungs, first
+match wins, each riding a FRESH signal (`signal_fresh`): stale WARN → `composition-skipped`
+(re-run the composition) → **APPROVE = the pre-ship check** (`signal_fresh verify-latest.json
+GREEN --advance && signal_fresh review-latest.json APPROVE --advance` ⇒ `SHIP GATE: pass —
+next: gstack /ship`; APPROVE without a GREEN at HEAD names `/verify`, never `/ship`; a dirty
+tree WARNs) → REQUEST_CHANGES (first ≤3 `findings[].fingerprint` — fix, then `/verify`) →
+hard NEEDS_HUMAN (`arch-ambiguity` / `judgment-slop` / kind absent — no automated step) →
+RED (first ≤3 `failures[].id`) → YELLOW (its `reason`) → GREEN with no newer review
+(`/harness-review`) → an active plan with in-progress tasks and no verify at HEAD
+(`/verify --plan <id>` — the execute→verify push that needs no model-written JSON). Stop
+additionally carries doc drift and the termination sensor; the gate line is assembled first
+so the 400-char cap never trims the hand-off.
 
-## Pre-ship check — our-side convention (not a verified gstack contract)
+## Native consumers
 
-No evidence confirms gstack `/ship` reads these signals (see INTEGRATION.md — the
-contract-check probe reports `VERIFIED | ASSERTED`). The gate is therefore OUR side's
-convention: the accountable human (or their project harness config) runs this before
-invoking `/ship`:
+- **User-opt-in `TaskCompleted` gate** — in the USER's `settings.json` (commit-only, inline
+  jq: a user hook is not plugin-launched, so nothing of ours is sourced and no install path
+  is hard-coded): `ls docs/exec-plans/active/*.json >/dev/null 2>&1 || exit 0; HEAD=$(git rev-parse HEAD); jq -e --arg head "$HEAD" 'select(.decision=="GREEN" and .commit==$head)' .claude/signals/verify-latest.json >/dev/null || { echo "verify-latest RED/stale — run /verify --plan <id>" >&2; exit 2; }`
+  Default-deny is the point: with an active plan and no GREEN at HEAD, every task close is
+  refused (stderr fed back to the model) until `/verify` runs.
+- **A Dynamic Workflow stage** is `agent('run /verify --plan X and report', {schema})` and
+  gates on the signal FILE; an Agent Team lead reads the same file.
+- The `NEXT:` JSON tail line of `/lifecycle next` was retired v3.11.0 — zero consumers in two
+  cycles; executors read the signal files, or declare a schema on their own `agent()` call.
 
-```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"; ROOT=$(harness_root)   # rule project-root
-HEAD_SHA=$(git -C "$ROOT" rev-parse HEAD)
-! worktree_dirty "$ROOT" \
-&& jq -e --arg head "$HEAD_SHA" \
-  'select(.decision=="GREEN" and (.commit // $head)==$head)' "$ROOT/.claude/signals/verify-latest.json" >/dev/null \
-&& jq -e --arg head "$HEAD_SHA" \
-  'select(.decision=="APPROVE" and (.commit // $head)==$head)' "$ROOT/.claude/signals/review-latest.json" >/dev/null \
-&& echo "SHIP GATE: pass" || echo "SHIP GATE: blocked (dirty tree / stale / missing / blocking signal)"
-```
+## Pre-ship check — the ladder's APPROVE rung (our-side convention)
 
-Verified against gstack v1.79 source (2026-09-04): `/ship` reads nothing under
-`.claude/signals` — ASSERTED is the confirmed state, not a probe miss. The one bilateral
-surface is gstack's own `bin/gstack-verify-gate` (Stop hook, opt-in, `--trust`-gated,
-fail-open) reading `<!-- gstack:verify: <cmd> -->` from the PROJECT's CLAUDE.md —
-`/harness-init` EXPORTS that line from the confirmed test command (ours→gstack); `/verify`
-reads the commands table as primary and the marker only as a named fallback.
+No evidence confirms gstack `/ship` reads these signals (verified again against gstack
+v1.84.1 source, 2026-09-11: zero references outside gstack's own tests — ASSERTED is the
+confirmed state, not a probe miss). The gate is OUR side's convention, rendered by the gate
+ladder's APPROVE rung — `signal_fresh verify-latest.json GREEN --advance && signal_fresh
+review-latest.json APPROVE --advance` ⇒ `SHIP GATE: pass`. One mapping, one predicate, no
+parallel snippet to paste. The one bilateral surface is gstack's own `bin/gstack-verify-gate`
+(Stop hook, opt-in, `--trust`-gated, fail-open, 3 bounded re-entries) reading
+`<!-- gstack:verify: <cmd> -->` from the PROJECT's CLAUDE.md — `/harness-init` EXPORTS that
+line from the confirmed test command (ours→gstack); `/verify` reads the commands table as
+primary and the marker only as a named fallback.
 
 ## Persisting a `/harness-audit` result — the ONLY sanctioned recipe
 
-The workflow RETURNS `{signal, confirmed, refuted, stats}` (accountable-writer, contract
-rule above); no relay agent may write it. The accountable invoking human reviews the
+The workflow (`/oh-my-agents:harness-audit`, shipped from the plugin root `workflows/`)
+RETURNS `{signal, confirmed, refuted, stats}` (accountable-writer, contract rule above); no
+relay agent may write it. The accountable invoking human reviews the
 returned object, then persists it with ONE command that stamps `timestamp` + `commit`
 (without the commit stamp the persisted signal is stale-by-definition), refuses a dirty
 tree (the stamp would mint a maximally-fresh verdict over code that was never audited),
@@ -255,6 +261,7 @@ root = sys.argv[2]
 sig = ret["signal"]; sig.pop("_persistence", None)
 sig["timestamp"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 sig["commit"] = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+# optional: sig["wtree"] = <bin/gstack-wtree output> — same rule as /verify (executable AND ledger dirs gitignored)
 sig["reason"] = ("source:harness-audit " + sig.get("reason", ""))[:120]
 open(root + "/.claude/signals/review-latest.json", "w").write(json.dumps(sig))
 order = {"P0": 0, "P1": 1, "P2": 2}
@@ -275,4 +282,6 @@ print(json.dumps(dict(sig, findings=findings)))
 
 Anchors: [docs/TEAM-DISCUSSION-2026-06-06.md](TEAM-DISCUSSION-2026-06-06.md) (Gate API),
 [docs/TEAM-DISCUSSION-2026-09-04.md](TEAM-DISCUSSION-2026-09-04.md) (dirty-tree clause, history-log
-schema, termination sensor, currency).
+schema, termination sensor, currency), [docs/TEAM-DISCUSSION-2026-09-11.md](TEAM-DISCUSSION-2026-09-11.md)
+(`signal_fresh` + `wtree`, the gate ladder as the pre-ship check, `failures[]`, computed
+review decision, native consumers).

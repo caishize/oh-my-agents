@@ -9,7 +9,7 @@ Together they form a complete AI engineering stack. Neither plugin modifies the 
 files or state — integration happens through structured artifact consumption and shared
 metric namespaces.
 
-## Complementary Strengths (v1.46+ floor, v1.79.0.0 current)
+## Complementary Strengths (v1.46+ floor, v1.84.1.0 current)
 
 > **Anchor docs**:
 > [TEAM-DISCUSSION-2026-04.md](TEAM-DISCUSSION-2026-04.md) (composition v1),
@@ -21,12 +21,15 @@ metric namespaces.
 > native Dynamic Workflows + signals → versioned Gate API + legacy sunset),
 > [TEAM-DISCUSSION-2026-06-25.md](TEAM-DISCUSSION-2026-06-25.md) (v3.8 verdict reconciliation),
 > [TEAM-DISCUSSION-2026-08-13.md](TEAM-DISCUSSION-2026-08-13.md) (v3.9 push nudges + freshness), and
-> **[TEAM-DISCUSSION-2026-09-04.md](TEAM-DISCUSSION-2026-09-04.md) (v3.10 harness-fusion v3:
-> source-verified gstack v1.79 resync, advisory channel, SessionStart gate state, Q4 cut)**.
+> [TEAM-DISCUSSION-2026-09-04.md](TEAM-DISCUSSION-2026-09-04.md) (v3.10 harness-fusion v3:
+> source-verified gstack v1.79 resync, advisory channel, SessionStart gate state, Q4 cut), and
+> **[TEAM-DISCUSSION-2026-09-11.md](TEAM-DISCUSSION-2026-09-11.md) (v3.11 harness-fusion v4:
+> hook timeouts are seconds, Stop never continues, the workflow ships from the plugin root,
+> CI runs, one freshness predicate with gstack `wtree`, the gate ladder as the pre-ship
+> check, typed `failures[]`, computed review decision, /spec archive bridge, six retirements)**.
 > Quarterly contract review is nudged mechanically on every `/gstack-sync --status`
 > (`CONTRACT-CHECK OVERDUE` when the recorded quarter is behind the clock) — gstack ships
-> ~daily (v1.62 → v1.79 between 2026-08-13 and 2026-09-01; five of our reads had silently
-> drifted onto shapes that do not exist).
+> ~daily (v1.79 → v1.84.1 in the nine days after 2026-09-01).
 
 ## Differentiation Anchor (where oh-my-agents is irreplaceable)
 
@@ -118,14 +121,15 @@ See `.claude/integration.json` for the canonical list.
 
 | Source | Artifact | Location | Consumer |
 |--------|----------|----------|----------|
+| /spec | Spec ARCHIVE (always written, local) | `~/.gstack/projects/$SLUG/specs/*.md` (`spec_branch` / `spec_issue_url` frontmatter) | /spec-to-task (auto, selected by branch — the rule /ship uses for `Closes #N`) |
 | /office-hours | Design doc | `~/.gstack/projects/$SLUG/*-design-*.md` | /spec-to-task (auto) |
 | /plan-eng-review | Test plan | `~/.gstack/projects/$SLUG/*-test-plan-*.md` | /spec-to-task (auto) |
 | /autoplan | Consensus tables | In plan file | /spec-to-task (extracted) |
 | /spec-to-task | Exec plan JSON | `docs/exec-plans/active/*.json` | /verify --plan |
 | /verify | Results JSONL | `.claude/metrics/verify.jsonl` | /harness-dashboard |
-| /verify | **Readiness signal** | `.claude/signals/verify-latest.json` | pre-`/ship` convention check (SIGNALS.md; gstack-side read VERIFIED-no at v1.79 ⇒ `ASSERTED`) |
-| /harness-review | Findings JSONL (+ typed `findings[]`) | `.claude/metrics/reviews.jsonl` | /lifecycle (`REQUEST_CHANGES` work list), /harness-dashboard |
-| /verify | History log | `.claude/metrics/verify.jsonl` | /harness-dashboard velocity, Stop-hook termination sensor (3 RED same reason) |
+| /verify | **Readiness signal** | `.claude/signals/verify-latest.json` | gate ladder (SessionStart/Stop), /lifecycle, the pre-ship APPROVE rung, user-opt-in `TaskCompleted` gate (SIGNALS.md § Native consumers; gstack-side read VERIFIED-no at v1.84.1 ⇒ `ASSERTED`) |
+| /harness-review | Findings JSONL (+ typed `findings[]`) | `.claude/metrics/reviews.jsonl` | gate ladder REQUEST_CHANGES rung (first ≤3 fingerprints), /lifecycle work list, /harness-dashboard |
+| /verify | History log (+ typed `failures[]`) | `.claude/metrics/verify.jsonl` | gate ladder RED rung (first ≤3 ids), /lifecycle recover (`task_id`), /verify recurring-failure jq, /harness-dashboard velocity, Stop termination sensor (3 RED same reason) |
 | /harness-init | **gstack verify marker** (DERIVED EXPORT ours→gstack) | `CLAUDE.md` `<!-- gstack:verify: cmd -->` | gstack `bin/gstack-verify-gate`; /verify reads the commands table as primary |
 | gstack-skill-start/-end | Usage timeline (always-on) | `~/.gstack/projects/$SLUG/timeline.jsonl` | /harness-dashboard, /gstack-sync |
 | /review | Review log | `~/.gstack/projects/$SLUG/*-reviews.jsonl` | /ship, /harness-review (dedup) |
@@ -138,7 +142,7 @@ See `.claude/integration.json` for the canonical list.
 | conductor (v0.16+) | Multi-session state | `conductor.json` | /verify, hooks (worktree-aware) |
 | worktrees | Parallel sprint dirs | `.gstack-worktrees/` | /verify, hooks (scope guard) |
 | /investigate | Root cause | Session context | /encode-mistake |
-| session-metrics.sh | Tool usage | `.claude/metrics/session-*.jsonl` (project root; one ledger) | /harness-dashboard, /retro |
+| session-metrics.sh | Per-edit LAYER (`{ts,tool,file,layer}`, Edit\|Write only) | `.claude/metrics/session-*.jsonl` (project root; one ledger) | /harness-dashboard layer-balance (tool-level telemetry is native OTel's) |
 | /encode-mistake | Encode provenance ledger (write-only by design) | `.claude/metrics/investigations.jsonl` | `--from-investigation` only |
 | Confusion Protocol (v0.18+) | Uncertainty signals | `.claude/metrics/confusion.jsonl` | RESERVED/INACTIVE — no producer observed; upstream probed at contract check; hard-delete if probe confirms sunset |
 | gstack analytics | Skill usage | `~/.gstack/analytics/skill-usage.jsonl` | none — telemetry-gated (default off); `timeline.jsonl` is the source |
@@ -208,11 +212,15 @@ Or manually:
 
 Both hook systems run independently and check different dimensions:
 
-Canonical hook list: `hooks/hooks.json` (7 hooks). Coexistence summary — gstack's
-`check-freeze.sh`/`check-careful.sh` check different dimensions than our
+Canonical hook list: `hooks/hooks.json` (6 scripts, 7 registrations). Coexistence summary —
+gstack's `check-freeze.sh`/`check-careful.sh` check different dimensions than our
 `arch-check`/`safety-check`/`plan-validation-check`/`bash-safety-check` (PreToolUse),
-`self-verify-check`/`session-metrics` (PostToolUse), and `doc-drift-check` (Stop; also
-emits the gate-state nudge). No conflicts: different checks, both systems coexist.
+`session-metrics` (PostToolUse Edit|Write), and `doc-drift-check` (SessionStart: the gate
+ladder into the model's context; Stop: the same ladder for the human via `systemMessage`
+only — never `additionalContext`, which at Stop continues the turn — plus drift + the
+termination sensor; zero bytes on a `stop_hook_active` re-entry, which belongs to gstack's
+verify-gate). gstack registers its own Stop hooks (timeline-stop, opt-in verify-gate);
+same-event hooks run in parallel, so latency is max(), not sum(). No conflicts.
 
 ## Key Integration Loops
 
@@ -306,6 +314,8 @@ not identity; a "rule N" citation anywhere is drift).*
     **Corrected v3.10.0:** the v3.6.0 sunset dropped the WRONG side — gstack's memory
     worktree is `~/.gstack-brain-worktree`; `gstack-artifacts-worktree` never existed at
     v1.79. Single-path probes only, via `gbrain_detect()`; the dead name is CI-grepped.
+    **FIRED v3.11.0:** the `in_progress` plan-reader tolerance (ACTIVE = `in-progress` +
+    `done` only; the enum GUIDE keeps a misspelling loud at authoring time).
 12. **`milestone-floor`** — `min_supported` bumps at major capability surfaces
     (e.g. Memory Ingest v1 = v1.26; eval-first = v1.46), not at minor releases.
 13. **`no-orchestration`** — `/lifecycle` is router + reporter, never executor.
@@ -333,7 +343,7 @@ not identity; a "rule N" citation anywhere is drift).*
 17. **`single-workflow`** — workflows ≤ 1, read-only, audit-only (NEW v3.6) — native
     Dynamic Workflows REINFORCE "never orchestrate" for the *delivery lifecycle* (a JS
     lifecycle script is now even more commoditized) and open exactly ONE narrow exception:
-    oh-my-agents MAY ship **at most one** saved `.claude/workflows/*.js` that fans out its
+    oh-my-agents MAY ship **at most one** plugin-root `workflows/*.js` that fans out its
     OWN read-only audit skills (entropy-sweep / harness-review / legibility) at repo scale
     and **terminates in a decision signal**. It may NEVER advance a delivery phase, mutate
     source, commit, open a PR, or call a gstack lifecycle skill (`/ship`, `/land-and-deploy`,
@@ -353,23 +363,28 @@ not identity; a "rule N" citation anywhere is drift).*
       accountable invoker (a human, or `/harness-review`) persists the returned signal. This is
       the empirical answer to the prior "can a workflow agent write the signal?" open question:
       it can do FS, but it MUST NOT write a verdict it didn't earn.
-    - **Status: ONE shipped — `.claude/workflows/harness-audit.js` (v3.7.0).** A read-only,
-      fan-out, four-pillar governance audit. The A/B spike cleared the evidence gate: vs a
+    - **Status: ONE shipped — `workflows/harness-audit.js` (v3.7.0; moved to the plugin
+      root in v3.11.0).** A read-only, fan-out, four-pillar governance audit. The A/B spike cleared the evidence gate: vs a
       single sequential pass it found **ZERO-overlap, additive** findings (3× recall) and
       adversarial verification filtered ~17% false positives. Use it for governance/release
       audits; use single-pass `/harness-review` for PR/hotfix validation.
     - **Corollary:** `/lifecycle` is NEVER reimplemented as a workflow.
-    - **Distribution:** `harness-audit.js` is THIS repository's project-local workflow;
-      plugin-level workflow distribution is an UNVERIFIED watch item — never a per-project
-      copy (an un-upgradeable fork of the one governed workflow).
+    - **Distribution (VERIFIED v3.11.0):** plugins ship workflows from the plugin-root
+      `workflows/` directory — the platform's default, no manifest field needed (the field
+      only REPLACES the default) — as `/oh-my-agents:harness-audit` on every install. A
+      plugin's `.claude/` is never scanned, so the pre-v3.11 location reached nobody; CI
+      asserts `.claude/workflows/` stays absent (a copy could never become workflow #2).
 
-18. **`hook-latency-budget`** — every `hooks/hooks.json` timeout ≤ its event's ceiling:
-    PreToolUse 10000 ms · PostToolUse 5000 ms · Stop 8000 ms · SessionStart 3000 ms
-    (asserted by `tests/test-hooks.sh`). gstack registers its own Stop + SessionStart hooks
-    in global `~/.claude/settings.json`, so latency stacks across plugins and a slow chain
-    gets disabled by the user (`/checkup` turns off slow hooks) — taking the blocking
-    arch/safety gates down with it. Worst case today on PostToolUse Edit|Write:
-    session-metrics 2000 + self-verify 5000 = 7 s.
+18. **`hook-latency-budget`** — hook `timeout` is in **SECONDS** (hooks reference: "Seconds
+    before canceling"; default 600). Every `hooks/hooks.json` timeout ≤ its event's ceiling —
+    PreToolUse 10 s · PostToolUse 5 s · Stop 8 s · SessionStart 3 s — and ≤ 60 (the unit
+    tripwire; through v3.10 the values were milliseconds, i.e. 10000 = 2.8 h, and nothing was
+    enforced). Same-event hooks run in PARALLEL, so per-event latency is max(), not sum();
+    stacking is across events per turn, beside gstack's own Stop hooks (timeline-stop is
+    self-bound at 2 s; the opt-in verify-gate runs the test command). A PreToolUse command
+    hook that reaches its timeout lets the tool call CONTINUE — the gates fail OPEN — so the
+    three blocking gates carry no `git`/`find` and must finish a 100 KB input in < 2 s
+    (both CI-asserted). A slow chain is what `/checkup` turns off, taking the gates with it.
 19. **`declared-artifact`** — every `.claude/metrics/*` / `.claude/signals/*` basename a
     hook or skill writes must appear in this file's bridge table or in
     `.claude/integration.json` `bridges` (or in the test's `WRITE_ONLY_BY_DESIGN` list with a
@@ -380,7 +395,17 @@ not identity; a "rule N" citation anywhere is drift).*
     compensates for; at each major model bump, remove ONE component at a time and measure
     (Anthropic: "every component in a harness encodes an assumption about what the model
     can't do … those assumptions go stale"). Deletions this rule has fired: context-reset
-    shift-handoff (session-observer, v3.10.0), heavy self-verify (v3.10.0).
+    shift-handoff (session-observer, v3.10.0), heavy self-verify (v3.10.0),
+    **self-verify-check (v3.11.0, Fable 5.1)** — compensated for syntax errors surviving an
+    Edit on .py/.js/.jsx; its passive sensor produced zero data in two cycles and every
+    TypeScript/Go/Rust target had already run the ablation in production. Re-add trigger:
+    syntax-class first-pass RED rising in `verify.jsonl` `failures[]` (`check` ∈ lint|build,
+    `id` matching SyntaxError|Unexpected token) over the next quarter; a re-add PR ships an
+    `evals/` case and a `claude plugin eval --ablation with-without` delta in the same PR.
+    Evidence instruments (never dependencies): `/skill-doctor` (per-skill token cost and
+    invocation frequency — the skill-retirement gauge) and `claude plugin eval`
+    (hook/behaviour ablation). The three blocking gates fail OPEN at their ceiling, which is
+    why they stay free of I/O (see `hook-latency-budget`).
 
 ## Foundational Principles
 

@@ -2,7 +2,7 @@
 name: harness-dashboard
 description: "Harness health overview and metric analysis — session metrics, enforcement activity, plan progress, layer balance, trends. Supports deep-dive queries (layer-balance, violations, trends, export). Aliases: 仪表盘, 看板, 运行状态, 指标查询, 度量分析"
 user-invocable: true
-argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|violations|trends|velocity|export]"
+argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|trends|velocity|export]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
@@ -16,7 +16,7 @@ Parse `$ARGUMENTS` for:
 - `--days N` — Time range in days (default: 7)
 - `--plan {plan-id}` — Show detailed view of a specific execution plan
 - `--json` — Output raw JSON instead of formatted text
-- `--query {type}` — Deep-dive query: `layer-balance`, `violations`, `trends`, `velocity`, `export`
+- `--query {type}` — Deep-dive query: `layer-balance`, `trends`, `velocity`, `export`
   - `velocity` — cross-session DORA lens from `.claude/metrics/verify.jsonl` + `reviews.jsonl`:
     first-pass-GREEN rate per plan, verify→review p50, and a recurring-failure heatmap
     (test/error patterns that failed across 2+ sessions) to target `/encode-mistake`.
@@ -30,8 +30,9 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
 ### Step 1: Gather Data
 
 1. **Session metrics** — Read `.claude/metrics/session-*.jsonl` files for the requested
-   date range. Each line is a JSON object with session data (timestamp, duration,
-   tool calls, files modified, layer touched, violations, etc.).
+   date range. Each line is exactly `{ts, tool, file, layer}` — one Edit/Write, classified by
+   architecture layer (the one datum native telemetry has no concept of). Tool-level
+   telemetry (durations, accept/reject counts) is native OpenTelemetry's, not this ledger's.
 
 2. **Execution plans** — Read `docs/exec-plans/active/` for in-progress plans and
    `docs/exec-plans/completed/` for recently finished ones. Each plan is a markdown
@@ -57,7 +58,8 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
 
    # Usage: projects/<slug>/timeline.jsonl is ALWAYS written by gstack-skill-start/-end
    # ({skill,event:started|completed,branch,outcome,duration_s,ts}); skill-usage.jsonl is
-   # telemetry-gated (default off) and is NOT read. Lifecycle coverage comes from here.
+   # telemetry-gated (default off) and is NOT read. Lifecycle coverage comes from here. Our
+   # OWN skills' cost/frequency is the platform's job: run /skill-doctor, never count here.
    [ -f "$GSTACK_TIMELINE" ] && \
      echo "Timeline entries: $(wc -l < "$GSTACK_TIMELINE") — skills completed (7d): $(grep -h '"completed"' "$GSTACK_TIMELINE" | grep -oE '"skill":"[^"]+"' | sort | uniq -c | sort -rn | head -8)"
 
@@ -79,9 +81,6 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    [ -n "$GBRAIN_WT" ] && echo "GBrain worktree:  $GBRAIN_WT"
    echo "Learnings: $(cat $GBRAIN_LEARNINGS 2>/dev/null | wc -l) — unencoded (no taste_id, proposable to /encode-mistake): $(grep -hv '"taste_id"' $GBRAIN_LEARNINGS 2>/dev/null | wc -l)"
    [ -n "$GBRAIN_CLI" ] && echo "gbrain CLI: present"
-
-   [ -f "$GSTACK_ANALYTICS/eureka.jsonl" ] && \
-     echo "Eureka moments: $(wc -l < "$GSTACK_ANALYTICS/eureka.jsonl")"
    ```
 
 7. **Unified review logs** — Read `.claude/metrics/reviews.jsonl` for combined review data.
@@ -91,22 +90,14 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
 Compute these from the raw data:
 
 **Session Activity**:
-- Total sessions in range
-- Average session duration (minutes)
-- Total tool calls across sessions
-- Total files modified
+- Ledger days in range (one `session-<date>.jsonl` per day)
+- Total files modified (distinct `file` values)
 
 **Layer Activity** — distribution of edits across architecture layers:
 - Count file modifications per layer (types, config, repo, service, runtime, ui, docs, test)
 - Show as horizontal bar chart using block characters
 - Flag if any layer has 0 activity (possible blind spot)
 - Flag if one layer has >50% of all activity (possible imbalance)
-
-**Enforcement** — from violation records in metrics:
-- Architecture check violations (total, resolved count)
-- Safety check blocks
-- Doc drift warnings
-- Hook execution failures
 
 **Velocity** — delivery-quality leading indicators (drives continuous improvement; full
 table in [DEEP-DIVE.md](DEEP-DIVE.md#query-velocity)):
@@ -115,8 +106,6 @@ table in [DEEP-DIVE.md](DEEP-DIVE.md#query-velocity)):
 - First-pass verify success rate (% of verify runs that return GREEN on first try)
 - **Re-verify count per plan_id** (RED→…→GREEN attempts; rework before review — DORA's
   "shift AI feedback to the author phase") — from verify.jsonl
-- **Gate-block rate** — `blocked_by` events per 100 edits from session-*.jsonl; prints the
-  LOUD degrade `hook_results present in N of M samples` and suppresses the row at N=0
 - Lifecycle coverage — which gstack phases ran, from the always-on `timeline.jsonl`
 - Week-over-week trend arrows: ↑ improving, → stable, ↓ declining; 4-week sparkline when available
 - Panel-wide: print `n=<sample>` and `insufficient data` below 3 samples — never a confident 0
@@ -147,7 +136,6 @@ Generate the top 3 actionable recommendations based on the data:
 - If a layer has >50% activity -> note potential imbalance, check architecture
 - If stale plans exist -> recommend reviewing or closing them
 - If no metrics exist -> recommend activating the session-metrics hook
-- If enforcement violations are trending up -> recommend `/arch-guard` review
 - If doc drift warnings > 3 -> recommend `/entropy-sweep docs` scope
 - If nested CLAUDE.md coverage < 50% -> recommend `/harness-init` for modules
 - If gstack installed but no dual reviews -> recommend `/harness-review` for next PR
@@ -200,7 +188,7 @@ Otherwise, output the standard dashboard:
 ## Harness Dashboard — [start date] to [end date]
 
 ### Session Activity
-Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
+Ledger days: N | Files modified: N
 
 ### Layer Activity
   types:    ██░░░░░░░░  12%  (N edits)
@@ -211,12 +199,6 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
   ui:       ████░░░░░░  20%  (N edits)
   docs:     █░░░░░░░░░   2%  (N edits)
   test:     ░░░░░░░░░░   0%  (N edits)  <-- blind spot
-
-### Enforcement
-  arch-check violations: N (N resolved)
-  safety-check blocks: N
-  doc-drift warnings: N
-  hook failures: N
 
 ### Active Execution Plans
 | Plan | Progress | Status | Last Updated |
@@ -229,7 +211,6 @@ Sessions: N | Avg duration: Xmin | Total tool calls: N | Files modified: N
   Verify→review:     {N}min avg
   First-pass GREEN:  {N}% (↑↓→ vs last week)
   Re-verify/plan:    {N} avg (RED attempts before GREEN)
-  Gate-block rate:   {N} per 100 edits   (hook_results present in {n} of {m} samples; hidden at 0)
   Cycle time:        {N}h avg (plan start → verify pass)
 
 ### Harness Health
@@ -288,4 +269,6 @@ New projects will not have metrics yet. Handle gracefully:
 - Bar charts use 10-character width: filled blocks + empty blocks = 10
 - Round percentages to whole numbers
 - Sort plans by last-updated date (most recent first)
-- Use `--query` flag for deep-dive analysis (layer-balance, violations, trends, export)
+- Use `--query` flag for deep-dive analysis (layer-balance, trends, velocity, export)
+- Rows survive only while they name a file source that exists (the sensor for a field the
+  platform never sends, and every row it fed, were deleted v3.11.0 on that rule)

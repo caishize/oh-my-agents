@@ -83,22 +83,11 @@ skill** (see Gate Failure Routing). It never advances delivery itself.
 never invokes a delivery skill, mutates source, or advances a phase. The day it does, that
 logic moves to gstack — anti-bloat rule `no-orchestration` + the SIGNAL-not-ARTIFACT bright line.**
 
-#### `NEXT:` tail line (machine-parseable router OUTPUT — zero persistence)
+`next` ends with the human-readable `next: /skill args (gates: …)` line. (The machine
+`NEXT:` JSON tail line was retired v3.11.0 — zero consumers in two cycles; executors read
+the signal files, or declare a schema on their own `agent(…, {schema})` call.)
 
-`next` and `--auto` ALWAYS end their output with one final line:
-
-```
-NEXT: {"phase":"review","skill":"/harness-review","args":["--plan","plan-…"],"gates":["verify-latest decision=GREEN"],"advisory":true}
-```
-
-Same schema as the retired `lifecycle-next.json`, but as invocation OUTPUT — the shape a
-Dynamic Workflow's structured-output capture (or an Agent Team lead) actually consumes;
-nothing is written to disk, so nothing can be read stale. `advisory:true` is mandatory:
-this is still NAMING, never invoking (rule no-orchestration); the invoker chooses to act.
-
-### `ideate` — Requires gstack → `/office-hours`
-### `plan` — Requires gstack → `/autoplan` or individual review passes
-### `decompose` — Bridge design doc to `/spec-to-task`
+### `ideate` / `plan` → gstack `/office-hours` / `/autoplan`; `decompose` → `/spec-to-task`
 
 Find most recent design doc from `~/.gstack/projects/{SLUG}/`, extract feature
 description, technical decisions, scope. Recommend `/spec-to-task` with that context.
@@ -116,13 +105,10 @@ symmetric to the review gate:
 - `YELLOW` → ask the user (can mean contract-unmet: an `acceptance` command unconfirmed).
 - signal missing / malformed JSON / **unknown `schema_version`** → **default-deny**: treat as
   "re-run `/verify`"; do NOT advance under `--auto` (symmetric to the review gate; docs/SIGNALS.md).
-- **stale signal (freshness predicate, docs/SIGNALS.md)** — `commit` present but ≠ current
-  `HEAD` (or `branch` mismatch) → route as if the signal were absent, with a WARN naming
-  the mismatch. A stale `GREEN` never advances the projection.
-- **dirty tree at an ADVANCE point (v3.10.0)** — under `--auto`, a fresh signal over a
-  working tree with uncommitted changes (`worktree_dirty "$ROOT"` from common.sh; our own
-  `.claude/`/`.gstack/` never count) routes as stale with reason `uncommitted changes since
-  verdict`. Mid-session dirt is a WARN, never a halt.
+- **stale / dirty (the ONE freshness predicate: `signal_fresh` in hooks/lib/common.sh;
+  docs/SIGNALS.md)** — `stale:commit` / `stale:wtree` routes as if the signal were absent,
+  with a WARN naming the token; under `--auto` the ADVANCE read adds `--advance`, so a dirty
+  tree is `stale:dirty`. A stale `GREEN` never advances. Mid-session dirt is a WARN, never a halt.
 
 ### `review` — Composition-aware; reads decision signal
 
@@ -151,8 +137,7 @@ echo "review-decision: $DECISION"
 **Routing rules (the agent reading this router must obey):**
 
 - `APPROVE` → the projected next step is `ship` (gstack `/ship`). Report it; do not invoke it.
-  (Stale `APPROVE` — `commit` ≠ `HEAD`, or a dirty tree under `--auto` — routes as absent,
-  with a WARN; freshness predicate.)
+  (A failing `signal_fresh review-latest.json APPROVE --advance` routes as absent, with a WARN.)
 - `REQUEST_CHANGES` → **end the projection**; surface the typed `findings[]` of the last
   `.claude/metrics/reviews.jsonl` record (`fingerprint` · `severity` · `fix`, ≤10 items —
   docs/SIGNALS.md § history logs) as the work list for the next `execute` turn (after the
@@ -167,17 +152,17 @@ echo "review-decision: $DECISION"
 
 ### `ship` — Requires gstack → `/ship` (or guide manual PR)
 
-Before naming `/ship`, run the OUR-SIDE pre-ship convention check from docs/SIGNALS.md
-(verify GREEN + review APPROVE + both `commit` == HEAD). Whether gstack itself reads our
-signals is `VERIFIED | ASSERTED` per `gstack-sync --contract-check` — never assumed.
+The pre-ship check IS the gate ladder's APPROVE rung (`hooks/doc-drift-check.sh`):
+`signal_fresh verify-latest.json GREEN --advance && signal_fresh review-latest.json APPROVE
+--advance` ⇒ `SHIP GATE: pass`. Name `/ship` only on that line. gstack `/ship` adds
+`Closes #N` itself from the `/spec` archive (`projects/<slug>/specs/*.md`, `spec_branch`
+frontmatter); whether gstack reads OUR signals stays `VERIFIED | ASSERTED` — never assumed.
 
-### `deploy` — Requires gstack → `/land-and-deploy`
+### `deploy` / `retro` → gstack `/land-and-deploy`; `/retro` + `/harness-dashboard`
 
 ### `canary` — Requires gstack → `/canary` (post-deploy monitoring window)
 
 If absent in gstack version → skip with notice; not a gate failure.
-
-### `retro` — Invoke `/harness-dashboard`, suggest gstack `/retro`
 
 ### `improve` — Guide through feedback encoding
 
@@ -202,7 +187,9 @@ compute the genuinely-unencoded set; suggest `/encode-mistake --from-gbrain` for
 ### `recover` — Diagnose failed state (always safe)
 
 Check for: orphaned VERSION bumps, uncommitted changes, failed verify signal,
-stalled plans (7+ days), worktree drift. Recommend recovery actions; never destructive.
+stalled plans (7+ days), worktree drift. On a RED verify the retry target is
+`failures[].task_id` from the last `verify.jsonl` line (docs/SIGNALS.md), falling back to
+`reason`. Recommend recovery actions; never destructive.
 
 ## Gate Failure Routing (flow-efficiency table)
 
@@ -245,12 +232,5 @@ so the developer (or the next agent invocation) doesn't have to search:
   *implementing* a phase (e.g. drafting a CHANGELOG), that logic belongs in gstack
 - **Review decision signal is mandatory**: `next` will not auto-advance past `review`
   without `.claude/signals/review-latest.json`; missing signal ⇒ `NEEDS_HUMAN`
-- **Freshness predicate applies to every routing read** (docs/SIGNALS.md): a signal whose
-  `commit` ≠ current `HEAD` routes as if absent, with a WARN naming the mismatch
-- **The `NEXT:` tail line is router OUTPUT, not a signal** — zero persistence, always
-  `advisory:true`; emitting it is NAMING, never invoking. (Its cached-file predecessor
-  `lifecycle-next.json` was retired v3.9.0: zero consumers in a full cycle.)
-  **Consume-or-cut (BINDING, 2026-09-04 council):** by the 2026-Q4 council this line must
-  have ≥1 in-repo or documented-live consumer (a Dynamic Workflow `agent(…,{schema})`
-  capture or an Agent Team lead that parses it) or it is retired — the profile that
-  retired `lifecycle-next.json` and `session-observer`.
+- **Freshness predicate applies to every routing read** — `signal_fresh` (docs/SIGNALS.md):
+  a non-fresh signal routes as if absent, with a WARN naming the reason token

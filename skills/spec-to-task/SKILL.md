@@ -42,16 +42,19 @@ managed execution plan.
    JSON. Probe for any of them (glob — gstack reorganizes; absence = graceful degrade):
    ```bash
    source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
-   if [ -d "$GSTACK_PROJECTS" ]; then
-     echo "=== gstack /spec artifacts ===";  ls -lt "$GSTACK_PROJECTS/"*-spec-*.md   2>/dev/null | head -5
-     echo "=== gstack Design Docs ===";       ls -lt "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | head -5
-     echo "=== gstack Test Plans ===";        ls -lt "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | head -5
-   fi
+   BRANCH=$(git branch --show-current 2>/dev/null)
+   # /spec ALWAYS archives the sanitized spec locally: projects/<slug>/specs/<ts>-<pid>-<title>.md with
+   # frontmatter spec_issue_number / spec_issue_url / spec_branch — select by branch, the rule /ship uses.
+   SPEC=$(grep -l "^spec_branch: $BRANCH$" "$GSTACK_PROJECTS"/specs/*.md 2>/dev/null | xargs -r ls -t | head -1)
+   [ -z "$SPEC" ] && SPEC=$(ls -t "$GSTACK_PROJECTS"/specs/*.md 2>/dev/null | head -1) && [ -n "$SPEC" ] && echo "NOTE: no /spec archive for branch $BRANCH — newest archive used: $SPEC"
+   echo "=== gstack /spec archive ==="; [ -n "$SPEC" ] && sed -n '1,12p' "$SPEC"
+   echo "=== gstack Design Docs ===";  ls -lt "$GSTACK_PROJECTS/"*-design-*.md 2>/dev/null | head -5
+   echo "=== gstack Test Plans ===";   ls -lt "$GSTACK_PROJECTS/"*-test-plan-*.md 2>/dev/null | head -5
    ```
-   > **Path note:** gstack `/spec` may file its output as a GitHub issue rather than a
-   > stable `*-spec-*.md` file — confirm the artifact location against `<gstack_root>/llms.txt`
-   > and the live `~/.gstack/projects/$SLUG/` before relying on the glob; never hard-parse.
-   If any upstream artifact exists, read the most recent and extract:
+   A `/spec` archive IS the spec: the body below its frontmatter; `spec_source` = its
+   `spec_issue_url` (else the archive path); the matching `decisions.jsonl` `scope:"issue"`
+   rationale fills the Decisions table when present (optional, tolerant). `gh issue view` is
+   only an explicit fallback when no archive exists. Then read the newest artifact and extract:
    - Feature description and scope (from the spec / design doc)
    - Technical decisions (especially from Eng Review sections)
    - Test requirements (from Test Plan artifacts)
@@ -92,8 +95,9 @@ Then stop — do not create a new plan.
 Load the specified plan, show current status, identify the next actionable task(s),
 and resume from where the previous session left off. Update the `updated` timestamp.
 
-**If active plans exist and no flags specified:**
-Show existing active plans and ask:
+**If active plans exist and no flags specified:** when `$ARGUMENTS` is non-empty (a spec
+was given) default to creating a new plan and print the active plans as a one-line notice;
+only when `$ARGUMENTS` is empty show them and ask:
 > "Found existing active plan(s). Would you like to:
 > 1. Continue an existing plan (specify which)
 > 2. Create a new plan for this spec

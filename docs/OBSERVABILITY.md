@@ -29,3 +29,12 @@ View with `/harness-dashboard` or `/harness-dashboard --query`.
 - API endpoint test: `curl localhost:PORT/health`
 - Visual verification: Use Playwright MCP for screenshots
 - Log verification: `tail -f logs/app.log | grep ERROR`
+
+## Native telemetry vs the harness ledger (decided 2026-09-11)
+
+Tool-level telemetry — tool names, durations, accept/reject decisions, tokens, cost — is
+native OpenTelemetry's (`CLAUDE_CODE_ENABLE_TELEMETRY=1`), exported to a collector the
+repository cannot read. `.claude/metrics/session-*.jsonl` carries only the per-edit
+architecture LAYER classification native has no concept of (`{ts,tool,file,layer}`, Edit|Write
+only); `verify.jsonl` / `reviews.jsonl` carry the typed decision history (`failures[]` /
+`findings[]`). Nothing here duplicates a native metric.

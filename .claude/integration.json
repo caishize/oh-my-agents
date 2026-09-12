@@ -1,28 +1,28 @@
 {
-  "version": "1.7",
+  "version": "1.8",
   "harness": {
     "plugin": "oh-my-agents",
-    "version": "3.10.0",
+    "version": "3.11.0",
     "root": "."
   },
   "gstack": {
     "detection": "runtime — gstack_detect() in hooks/lib/common.sh (skill dirs; gstack ships no plugin.json). Never a hardcoded path.",
-    "version": "1.79.0.0",
+    "version": "1.84.1.0",
     "version_match": "loose",
     "min_supported": "1.46.0.0",
-    "last_verified": "2026-09-04",
-    "verified_how": "source clone of garrytan/gstack HEAD 0d1bd56 (v1.79.0.0, 2026-09-01) — see docs/TEAM-DISCUSSION-2026-09-04.md",
-    "milestone_pin": "eval-first floor + on-demand content loading (v1.46), /spec intent→spec 5-phase (v1.47), shared redaction engine (v1.53), carved skills (v1.56/1.57), event-sourced DECISION layer (v1.57.5 decisions.jsonl + decisions.active.json = bare array, rebuildable cache), gstack-review-log content-addressed records with wtree/commit_full/tree/dirty (currency = wtree), gen-skill-docs writes .claude/gstack-rendered/ (v1.57.9), plan-mode detection signal GSTACK_PLAN_MODE (v1.62 — not a file), verify-gate Stop hook reading `<!-- gstack:verify: cmd -->` from the PROJECT CLAUDE.md (v1.65; opt-in, --trust gated, fail-open), settings.json hook identity table that never claims foreign hooks (v1.68.1), skill runtime scripts + always-on projects/<slug>/timeline.jsonl (v1.71), /review 8 lenses + reuse ladder + agents-digest host tier (v1.75), GSTACK_SESSION_KIND=spawned marker (v1.76+). VERIFIED-no at v1.79: /ship reads nothing under .claude/signals; .gstack/landing-reports/ never existed; ~/.gstack-artifacts-worktree has zero hits (current: ~/.gstack-brain-worktree); /find-decisions does not exist; skill-usage.jsonl is telemetry-gated (default off). GitHub Releases page is EMPTY — drift channel is raw VERSION/CHANGELOG or a source clone."
+    "last_verified": "2026-09-11",
+    "verified_how": "source clone of garrytan/gstack HEAD 71f6048 (v1.84.1.0, 2026-09-09) — see docs/TEAM-DISCUSSION-2026-09-11.md",
+    "milestone_pin": "eval-first floor + on-demand content loading (v1.46), /spec intent→spec 5-phase (v1.47), shared redaction engine (v1.53), carved skills (v1.56/1.57), event-sourced DECISION layer (v1.57.5 decisions.jsonl + decisions.active.json = bare array, rebuildable cache), gstack-review-log content-addressed records with wtree/commit_full/tree/dirty (currency = wtree), gen-skill-docs writes .claude/gstack-rendered/ (v1.57.9), plan-mode detection signal GSTACK_PLAN_MODE (v1.62 — not a file), verify-gate Stop hook reading `<!-- gstack:verify: cmd -->` from the PROJECT CLAUDE.md (v1.65; opt-in, --trust gated, fail-open), settings.json hook identity table that never claims foreign hooks (v1.68.1), skill runtime scripts + always-on projects/<slug>/timeline.jsonl (v1.71), /review 8 lenses + reuse ladder + agents-digest host tier (v1.75), GSTACK_SESSION_KIND=spawned marker (v1.76+), gstack-evidence verification ledger (<branch>-evidence.jsonl, freshness bound to wtree — v1.84), /spec archives every spec locally to projects/<slug>/specs/<ts>-<pid>-<title>.md with spec_issue_number/spec_issue_url/spec_branch frontmatter (selected by spec_branch, the rule /ship uses), 61-rule deterministic design detector before the LLM pass (v1.84.0), Codex default GPT-6 Astra / Claude outside voices Fable 5.1 (v1.84.1). VERIFIED-no at v1.84.1 (re-checked): /ship reads nothing under .claude/signals; .gstack/landing-reports/ never existed; ~/.gstack-artifacts-worktree has zero hits (current: ~/.gstack-brain-worktree); /find-decisions does not exist; skill-usage.jsonl is telemetry-gated (default off). GitHub Releases page is EMPTY — drift channel is raw VERSION/CHANGELOG or a source clone."
   },
   "project": {
     "slug": "{SLUG}",
     "_slug_note": "never bake a literal slug; {SLUG} is substituted at read time by resolve_gstack_paths() from resolve_project_slug() (owner-repo, gstack-slug SLUG= line, slug-cache, origin URL)"
   },
-  "_bridge_doc": "Paths probe gstack's CURRENT (v1.79) surface only; `~/.gstack` is replaced by $GSTACK_HOME when set (gstack_home()), `{SLUG}` by the resolved project slug. Consumers glob; absence is graceful degrade. A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets them on rule legacy-sunset. This file is also the TEMPLATE `/gstack-sync --setup` copies into a project that lacks one.",
+  "_bridge_doc": "Paths probe gstack's CURRENT (v1.84.1) surface only; `~/.gstack` is replaced by $GSTACK_HOME when set (gstack_home()), `{SLUG}` by the resolved project slug. Consumers glob; absence is graceful degrade. A future gstack rename re-introduces dual-value bridges TEMPORARILY, then sunsets them on rule legacy-sunset. This file is also the TEMPLATE `/gstack-sync --setup` copies into a project that lacks one.",
   "bridges": {
     "design_docs": "~/.gstack/projects/{SLUG}/*-design-*.md",
     "test_plans": "~/.gstack/projects/{SLUG}/*-test-plan-*.md",
-    "spec_artifacts": "~/.gstack/projects/{SLUG}/*-spec-*.md",
+    "spec_artifacts": "~/.gstack/projects/{SLUG}/specs/*.md [gstack /spec ARCHIVE — always written, local; frontmatter spec_issue_number/spec_issue_url/spec_branch; consumer /spec-to-task selects by spec_branch == current branch, the same rule /ship uses for Closes #N; the old top-level *-spec-*.md glob never had a producer]",
     "review_logs": "~/.gstack/projects/{SLUG}/*-reviews.jsonl",
     "qa_outcomes": "~/.gstack/projects/{SLUG}/*-test-outcome-*.md",
     "codex_reports": "~/.gstack/projects/{SLUG}/*-codex-*.md",
@@ -53,15 +53,15 @@
     "gstack_review_status_log": "~/.gstack/projects/{SLUG}/*-reviews.jsonl",
     "gstack_health_history": "~/.gstack/projects/{SLUG}/health-history.jsonl",
     "exec_plans": "docs/exec-plans/active/*.json",
-    "verify_metrics": ".claude/metrics/verify.jsonl",
-    "verify_signal": ".claude/signals/verify-latest.json",
+    "verify_metrics": ".claude/metrics/verify.jsonl [history + typed failures[] — consumers: gate ladder RED rung, /lifecycle recover, /verify recurring-failure jq, /harness-dashboard velocity, Stop termination sensor]",
+    "verify_signal": ".claude/signals/verify-latest.json [consumers: gate ladder (SessionStart/Stop), /lifecycle, pre-ship APPROVE rung, user-opt-in TaskCompleted gate (docs/SIGNALS.md § Native consumers)]",
     "review_metrics": ".claude/metrics/reviews.jsonl",
     "review_signal": ".claude/signals/review-latest.json",
     "legibility_metrics": ".claude/metrics/legibility.jsonl",
     "legibility_latest": ".claude/metrics/legibility-latest.json",
     "entropy_metrics": ".claude/metrics/entropy.jsonl",
     "entropy_latest": ".claude/metrics/entropy-latest.json",
-    "session_metrics": ".claude/metrics/session-*.jsonl",
+    "session_metrics": ".claude/metrics/session-*.jsonl [{ts,tool,file,layer} per Edit|Write — the per-edit LAYER only; tool-level telemetry is native OTel's]",
     "confusion_metrics": ".claude/metrics/confusion.jsonl [RESERVED/INACTIVE — no producer observed; upstream Confusion Protocol status probed at contract check; hard-delete at next quarterly check if probe confirms sunset]",
     "gstack_skill_usage": "~/.gstack/analytics/skill-usage.jsonl [telemetry-gated, default OFF — not a dashboard source; use gstack_timeline]",
     "gstack_eureka": "~/.gstack/analytics/eureka.jsonl",
@@ -71,7 +71,7 @@
     "review_history_findings": ".claude/metrics/reviews.jsonl findings[] [typed REQUEST_CHANGES work list — consumer /lifecycle, /harness-dashboard]"
   },
   "composition": {
-    "_command_binding_note": "Slash-command names below are gstack's CURRENT surface; gstack ships ~daily and renames commands (e.g. /ux-audit → /design-review at the v1.x line). These are capability bindings, not pins: gstack-sync --contract-check reconciles them against gstack's authoritative llms.txt when present. Treat a missing command as graceful-degrade, never a hard failure.",
+    "_command_binding_note": "Slash-command names below are gstack's CURRENT surface; gstack ships ~daily and renames commands (e.g. /ux-audit → /design-review at the v1.x line). These are capability bindings, not pins: gstack-sync --contract-check reconciles them against gstack's authoritative llms.txt when present. Treat a missing command as graceful-degrade, never a hard failure. Both `gstack_owns` and `ignored` are ALLOW-LISTS: an unlisted gstack skill is neither composed nor nudged by this plugin (gstack 1.84 ships 54; most are out of scope by design).",
     "intent_to_spec": "gstack:/spec (v1.47; vague intent → executable spec in 5 phases, codex quality gate. UPSTREAM of harness /spec-to-task — which does spec → layer-aware exec-plan JSON. Clean handoff, not duplication.)",
     "slop_deep_check": "gstack:/codex",
     "security_audit": "gstack:/cso",
@@ -95,8 +95,9 @@
       "verify-decision-signal",
       "review-decision-signal",
       "gate-api(docs/SIGNALS.md)",
-      "gate-state-injection(SessionStart)",
-      "verify-loop-termination-sensor(Stop)"
+      "gate-ladder(SessionStart=model, Stop=human; APPROVE rung = pre-ship check)",
+      "verify-loop-termination-sensor(Stop)",
+      "signal_fresh(freshness predicate, optional wtree)"
     ],
     "gstack_owns": [
       "/office-hours",
@@ -118,7 +119,13 @@
       "/context-save",
       "/context-restore",
       "/setup-gbrain",
-      "/sync-gbrain"
+      "/sync-gbrain",
+      "/guard",
+      "/plan-ceo-review",
+      "/plan-design-review",
+      "/plan-devex-review",
+      "/qa-only",
+      "/document-release"
     ],
     "ignored": [
       "/claude",
@@ -126,7 +133,7 @@
       "/scrape",
       "/skillify",
       "/pair-agent",
-      "/connect-chrome",
+      "/open-gstack-browser",
       "/setup-deploy",
       "/make-pdf"
     ],
@@ -176,23 +183,27 @@
     ],
     "ship_gate_status": "ASSERTED — VERIFIED at gstack v1.79 source: /ship reads nothing under .claude/signals. The pre-ship check is our-side convention (docs/SIGNALS.md). The bilateral surface is gstack's verify-gate reading our CLAUDE.md marker (see bridges.gstack_verify_marker).",
     "gate_api_doc": "docs/SIGNALS.md",
-    "workflows_policy": "anti-bloat rule single-workflow: workflows <=1, read-only (Explore agents), audit-only, RETURNS a decision signal (accountable invoker persists it — never a relay write); never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. ONE shipped (v3.7.0; project-local — plugin-level workflow distribution is an UNVERIFIED watch item, never a per-project copy): .claude/workflows/harness-audit.js — A/B spike cleared the evidence gate (3x recall vs sequential, zero overlap; ~17% false positives filtered by adversarial verify).",
+    "workflows_policy": "anti-bloat rule single-workflow: workflows <=1, read-only (Explore agents), audit-only, RETURNS a decision signal (accountable invoker persists it — never a relay write); never advances a delivery phase, mutates source, commits, opens a PR, or calls a gstack lifecycle skill. ONE shipped — workflows/harness-audit.js at the PLUGIN ROOT (the platform's default workflows/ directory; no manifest field needed, the field only replaces the default) ⇒ `/oh-my-agents:harness-audit` on every install (moved from the unshipped .claude/workflows/ in v3.11.0; CI asserts that directory stays absent). A/B spike cleared the evidence gate (3x recall vs sequential, zero overlap; ~17% false positives filtered by adversarial verify).",
     "principles_anchor": "docs/TEAM-DISCUSSION-2026-09-04.md",
     "contract_check_receipt": "the recorded review_contract_quarter IS the receipt: /gstack-sync --status nudges CONTRACT-CHECK OVERDUE when it is behind the clock; bumped by a human after --contract-check, never auto-written",
     "read_only_gstack_cli_policy": "OPEN (2026-08-13 Q4, premise drifted): sanctioned read-only invocations today = `gbrain doctor`, `gbrain search`, `bin/gstack-slug`, `bin/gstack-wtree`. Anything else (e.g. gstack-decision-search --json) requires recording here first.",
     "hook_latency_budget": {
-      "PreToolUse_ms": 10000,
-      "PostToolUse_ms": 5000,
-      "Stop_ms": 8000,
-      "SessionStart_ms": 3000,
-      "_rule": "anti-bloat rule hook-latency-budget: every hooks.json timeout ≤ its event ceiling (tests/test-hooks.sh asserts); gstack registers its own Stop/SessionStart hooks in global settings.json, so latency stacks across plugins and slow chains get disabled"
+      "PreToolUse_s": 10,
+      "PostToolUse_s": 5,
+      "Stop_s": 8,
+      "SessionStart_s": 3,
+      "_rule": "anti-bloat rule hook-latency-budget: hooks.json `timeout` is in SECONDS (hooks reference: 'Seconds before canceling'; default 600) — through v3.10 the values were written as milliseconds (10000 = 2.8 h) and no ceiling was enforced. Every timeout ≤ its event ceiling and ≤ 60 (unit tripwire; tests/test-hooks.sh). Same-event hooks run in PARALLEL, so per-event latency is max() not sum(); stacking is across events per turn, beside gstack's own Stop hooks (timeline-stop 2 s self-bound; opt-in verify-gate runs the test command). A PreToolUse command hook that reaches its timeout lets the tool call CONTINUE (fails OPEN) — the three blocking gates carry no git/find and finish a 100 KB input in < 2 s (CI-timed)."
     },
     "watch_list": [
-      "plugin.json `workflows` field (UNVERIFIED) — adopt when `claude plugin validate --strict` accepts it",
-      "Stop-hook additionalContext delivery (UNVERIFIED; systemMessage is load-bearing at Stop)",
-      "/skill-doctor availability (org-gated) — the evidence source for retiring skills",
-      "gstack verify-gate marker rename (parser accepts two forms already)",
-      "session-metrics.sh vs native OTel field overlap (2026-08-13 Q9, still unmeasured)"
-    ]
+      "gstack verify-gate marker rename (parser accepts two forms already; no rename at 1.84.1)",
+      "gstack /ship Step 5 becoming ledger-first (<branch>-evidence.jsonl) — only then would reading that ledger from /verify save a test run (L4-10 watch line)",
+      "claude plugin validate --strict on an unauthenticated CI runner — the CI job installs the CLI and runs it; confirm on the first run",
+      "skill-listing budget (1% of context, shared with gstack's 54 skills) — measure once with /skill-doctor in a gstack-equipped session and record the table",
+      "gstack reviews.jsonl `findings` shape across 1.84.x — /harness-review reads `.findings // []` tolerantly; verify the [BOTH+] cross-tag against one real record"
+    ],
+    "transient_dual_value_sunsets": "in_progress plan-reader tolerance: FIRED v3.11.0 (ACTIVE = {in-progress, done}; the enum GUIDE keeps the miss loud)",
+    "stop_channel": "DECIDED 2026-09-11: at Stop, hookSpecificOutput.additionalContext CONTINUES the turn (8-cap) — forbidden at Stop by construction (emit_advisory emits systemMessage only there; doc-drift-check exits silently on stop_hook_active). The model channel is SessionStart (fires on startup/resume/compact/fork). Re-binding to UserPromptSubmit REJECTED (re-injects every turn; collides with gstack's Memorable hook).",
+    "session_metrics_vs_otel": "DECIDED 2026-09-11: native OTel exports tool_result/tool_decision/code_edit_tool.decision to a COLLECTOR the repo cannot read and carries no path/layer attribute; session-*.jsonl stays for the per-edit layer only ({ts,tool,file,layer}); hook_results is not a documented PostToolUse input — the sensor and the Bash-leg registration were deleted.",
+    "ablation_instruments": "/skill-doctor (per-skill token cost, invocation frequency, unused skills; Claude Code ≥ v2.1.252; available in every org, only Remote Control / feature-flag-off sessions lack it) for skills; `claude plugin eval --ablation with-without` for hooks/behaviour — evidence sources for rule ablate-per-model, never dependencies or parallel counters of our own"
   }
 }

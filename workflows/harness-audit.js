@@ -1,6 +1,7 @@
 // harness-audit — the ONE sanctioned oh-my-agents Dynamic Workflow (anti-bloat rule `single-workflow`).
-// This is THIS repository's project-local workflow (.claude/workflows/); it is not distributed
-// as a plugin asset until plugin-level workflow distribution is confirmed (watch item).
+// Distributed from the plugin root (`workflows/` — the platform's default directory, no manifest
+// field needed) as `/oh-my-agents:harness-audit` on every install; a dev session loads it via
+// `claude --plugin-dir .`. Never re-create `.claude/workflows/` (CI asserts its absence).
 //
 // WHAT: a read-only, fan-out, four-pillar governance audit. Many Explore agents audit the
 // repo in parallel, each finding is adversarially verified (skeptic tries to REFUTE it),

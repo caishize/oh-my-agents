@@ -2,6 +2,7 @@
 name: gstack-sync
 description: "Detect gstack installation, configure read-only artifact bridges, report integration health with a mechanical contract-drift nudge. The integration hub for oh-my-agents + gstack combined workflows (never writes gstack paths). Aliases: gstack同步, 插件同步, gstack集成"
 user-invocable: true
+disable-model-invocation: true
 argument-hint: "[--status] [--setup] [--contract-check]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
@@ -60,40 +61,19 @@ ARTIFACTS_REMOTE="$GSTACK_ARTIFACTS_REMOTE"   # sync/distribution remote
 BRAIN_REMOTE="$GBRAIN_REMOTE"                 # DISTINCT remote — gbrain memory; never infer "gbrain absent" from artifacts-only
 GBRAIN_DOCTOR=$( { command -v gbrain >/dev/null 2>&1 && gbrain doctor >/dev/null 2>&1; } && echo "ok" || echo "")  # v1.26+ MCP/health
 
-# gstack decision/verdict layer (v1.57.5+): event-sourced decisions + active snapshot + review verdict.
-# Read-only — feeds /harness-review reconciliation (docs/SIGNALS.md), never written here.
+# gstack decision/verdict layer (v1.57.5+): PRESENCE probes for the contract check only. The
+# verdict itself is read in exactly ONE place — /harness-review's reconciliation (docs/SIGNALS.md).
 DECISIONS_LOG=$([ -f "$PROJ_DIR/decisions.jsonl" ] && echo 1 || echo 0)              # v1.57.5+
 DECISIONS_ACTIVE=$([ -f "$PROJ_DIR/decisions.active.json" ] && echo 1 || echo 0)     # v1.57.5+
-REVIEW_VERDICT=$(ls -t $PROJ_DIR/*-reviews.jsonl 2>/dev/null | head -1 | xargs -I{} tail -1 {} 2>/dev/null \
-  | python3 -c "import sys,json; raw=sys.stdin.read().strip(); print(json.loads(raw).get('status','verdict-unparsed') if raw else '')" 2>/dev/null || echo "verdict-unparsed")  # gstack-review-log; LOUD degrade, never silent ""
 HEALTH_HISTORY=$([ -f "$PROJ_DIR/health-history.jsonl" ] && echo 1 || echo 0)        # v1.x /health
-
-# Core artifacts (legacy, pre-v1)
-CAP_DESIGN=$(ls $PROJ_DIR/*-design-*.md 2>/dev/null | wc -l)
-CAP_TEST_PLAN=$(ls $PROJ_DIR/*-test-plan-*.md 2>/dev/null | wc -l)
-CAP_REVIEW=$(ls $PROJ_DIR/*-reviews.jsonl 2>/dev/null | wc -l)
-CAP_QA=$(ls $PROJ_DIR/*-test-outcome-*.md 2>/dev/null | wc -l)
-CAP_CODEX=$(ls $PROJ_DIR/*-codex-*.md 2>/dev/null | wc -l)
-CAP_CSO=$(ls $PROJ_DIR/*-cso-*.md 2>/dev/null | wc -l)
-CAP_DESIGN_REVIEW=$(ls $PROJ_DIR/*-design-review-*.md 2>/dev/null | wc -l)  # was /ux-audit pre-v1.x
-CAP_CANARY=$(ls "$ROOT"/.gstack/canary-reports/*.md 2>/dev/null | wc -l)   # gstack writes {date}-canary.md (never .json); rooted, never cwd-relative
-CAP_DEPLOY=$(ls "$ROOT"/.gstack/deploy-reports/*.md 2>/dev/null | wc -l)   # {date}-pr{n}-deploy.md
+SPEC_ARCHIVE=$(grep -l "^spec_branch: $(git branch --show-current 2>/dev/null)$" "$PROJ_DIR"/specs/*.md 2>/dev/null | head -1)  # /spec archive for this branch
+CAP_TIMELINE=$([ -f "$GSTACK_TIMELINE" ] && echo present || echo absent)             # always-on usage log
 CAP_CONDUCTOR=$([ -f "conductor.json" ] && echo 1 || echo 0)
 CAP_WORKTREES=$([ -d ".gstack-worktrees" ] && ls -1 .gstack-worktrees | wc -l || echo 0)
-CAP_SKILL_USAGE=$([ -f "$ANALYTICS_DIR/skill-usage.jsonl" ] && echo 1 || echo 0)
-CAP_EUREKA=$([ -f "$ANALYTICS_DIR/eureka.jsonl" ] && echo 1 || echo 0)
-
-# Post-v0.18 additions (v1.x era). `.gstack/landing-reports/` NEVER existed (verified v1.79) — no probe.
-CAP_LANDING_PROJ=$(ls $PROJ_DIR/*-landing-*.md 2>/dev/null | wc -l)              # v1.11+
-CAP_TIMELINE=$([ -f "$GSTACK_TIMELINE" ] && wc -l < "$GSTACK_TIMELINE" || echo 0) # ALWAYS-ON usage log (skill-usage.jsonl is telemetry-gated, default off)
-CAP_GBRAIN_WT=$([ -n "$GBRAIN_WT" ] && echo 1 || echo 0)                         # ~/.gstack-brain-worktree
-CAP_GBRAIN_LEARNINGS=$(cat $GBRAIN_LEARNINGS 2>/dev/null | wc -l)                # projects/<slug>/learnings.jsonl entries
-CAP_GBRAIN_TIMELINE=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/timeline-*.jsonl 2>/dev/null | wc -l || echo 0)
-CAP_GBRAIN_REVIEWS=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/review-*.jsonl 2>/dev/null | wc -l || echo 0)
-CAP_GBRAIN_PROFILE=$([ -n "$GBRAIN_WT" ] && ls $GBRAIN_WT/developer-profile-*.json 2>/dev/null | wc -l || echo 0)
+CAP_CONDUCTOR_WS=$([ -d "$HOME/conductor/workspaces" ] && echo 1 || echo 0)         # presence only — never write
 CAP_GBRAIN_POLICY=$([ -f "$GSTACK_HOME_DIR/gbrain-repo-policy.json" ] && echo 1 || echo 0)  # v1.12+
-# Conductor workspaces (v1.11+); presence only — never write
-CAP_CONDUCTOR_WS=$([ -d "$HOME/conductor/workspaces" ] && echo 1 || echo 0)
+# Artifact COUNTS (designs, reviews, QA, codex, cso, deploy/canary reports, learnings…) live in
+# /harness-dashboard — ONE reader; this skill reports detection, versions, drift and resolved paths.
 ```
 
 **llms.txt preference (v1.28+)**: when `$LLMS_TXT` is non-empty, prefer it over
@@ -128,23 +108,14 @@ Output this structure (Markdown):
 **Project slug**: {slug}
 **Worktree context**: {single | N parallel worktrees detected}
 
-### Artifact bridges (presence)
-- design docs: {count}            - test plans: {count}
-- review logs: {count}            - QA outcomes: {count}
-- codex reports: {count}          - cso reports: {count}
-- design-review reports: {count}  - canary reports: {count}
-- deploy reports: {count}         - landing reports (project): {count}
-- timeline entries: {count}       (gstack always-on usage log — lifecycle coverage source)
-- conductor.json: {present}       - .gstack-worktrees/: {N parallel}
+### Artifact bridges (resolved paths + presence; counts: /harness-dashboard)
+- project dir: {$GSTACK_PROJECTS}        - /spec archive (this branch): {path | "—"}
+- timeline.jsonl: {present|absent}       (always-on usage log — lifecycle coverage source)
+- conductor.json: {present}              - .gstack-worktrees/: {N parallel}
 - conductor workspaces (v1.11+): {present|absent}
 
-### GBrain (v1.12+ memory subsystem, read-only; v1.26+ ingest; v1.27 rename — legacy sunset v3.6.0)
-- worktree present       : {none | present (gstack-artifacts)}
+### GBrain (v1.12+ memory subsystem, read-only; v1.26+ ingest)
 - worktree path          : {resolved $GBRAIN_WT or "—"}
-- learnings entries      : {N from projects/<slug>/learnings.jsonl}
-- timeline entries       : {N}
-- review log entries     : {N}
-- developer profile      : {present|absent}
 - repo policy (schema v2): {present|absent}              (~/.gstack/gbrain-repo-policy.json)
 - gbrain CLI             : {path | "not on PATH"}        (v1.26+ memory ingest)
 - memory-ingest binary   : {path | "absent"}             (v1.26+)
@@ -156,7 +127,6 @@ Output this structure (Markdown):
 ### Decision/verdict layer (gstack v1.57.5+, read-only — feeds /harness-review reconciliation)
 - decisions.jsonl        : {present|absent}              (event-sourced decision memory)
 - decisions.active.json  : {present|absent}              (presence only — a rebuildable cache, never counted)
-- review verdict         : {clean | issues_found | verdict-unparsed | "—"}  (gstack-review-log status; currency by `wtree` in /harness-review)
 - health-history.jsonl   : {present|absent}
 - reconciliation         : {our review-latest.json + gstack verdict → agree=pass / diverge=NEEDS_HUMAN:judgment-slop}
 
@@ -170,12 +140,6 @@ Output this structure (Markdown):
 - Architecture / layers   → harness arch-guard + hooks
 - Entropy / TASTE rules   → harness entropy-sweep + encode-mistake
 - Mechanical enforcement  → harness (TASTE rules in docs/LINTING.md)
-
-### Recent activity (7d)
-- gstack skill usage : top 5 from skill-usage.jsonl
-- harness hooks fired: top 5 from session-*.jsonl
-- violations blocked : count
-- learnings unencoded: count of learnings entries with no matching TASTE-NNN
 
 ### Ship gate (our-side convention — honest labeling)
 - gate_status: {VERIFIED | ASSERTED}   ← from the --contract-check probe; ASSERTED means

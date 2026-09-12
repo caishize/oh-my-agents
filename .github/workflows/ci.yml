@@ -1,0 +1,56 @@
+# oh-my-agents — plugin self-tests (the constitution, mechanically enforced)
+#
+# Until v3.11.0 every "CI-enforced" claim in CLAUDE.md / docs/INTEGRATION.md described
+# tests nobody ran automatically: this repository had no .github/ directory at all.
+# Two jobs, no secrets:
+#   tests     — tests/test-hooks.sh + tests/test-skills.sh (bash + jq + python3 + node)
+#   validate  — `claude plugin validate --strict` on the manifest. The ONE expected warning
+#               ("root: CLAUDE.md at the plugin root is not loaded as project context") is
+#               allow-listed: that file is contributor context for THIS repo, never shipped
+#               to installers. Any other warning fails the job.
+
+name: plugin-tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    name: hook + skill tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain present (bash, jq, python3, node, flock)
+        run: |
+          bash --version | head -1; jq --version; python3 --version; node --version; command -v flock
+      - name: Hook tests
+        run: bash tests/test-hooks.sh
+      - name: Skill + constitution tests
+        run: bash tests/test-skills.sh
+      - name: Workflow parses
+        run: node --check workflows/harness-audit.js
+
+  validate:
+    name: claude plugin validate --strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin manifest (strict; one allow-listed warning)
+        run: |
+          out=$(claude plugin validate .claude-plugin/plugin.json --strict 2>&1 || true)
+          printf '%s\n' "$out"
+          warnings=$(printf '%s\n' "$out" | grep -c '^  > ' || true)
+          if [ "$warnings" -eq 0 ]; then exit 0; fi
+          if [ "$warnings" -eq 1 ] && printf '%s\n' "$out" | grep -q 'root: CLAUDE.md at the plugin root'; then
+            echo "only the expected root-CLAUDE.md warning — pass"; exit 0
+          fi
+          echo "unexpected validate warnings/errors"; exit 1
