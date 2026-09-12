@@ -1,9 +1,9 @@
-# oh-my-agents `v3.10.0`
+# oh-my-agents `v3.11.0`
 
 Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
 designing environments, constraints, and feedback loops that make AI coding agents
 work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.79.0.0 current — source-verified) for
+[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.84.1.0 current — source-verified) for
 full-lifecycle coverage (slop-deep, security-deep, and UX audits delegated to gstack;
 GBrain memory + the always-on `timeline.jsonl` consumed as read-only sensors; gstack's own
 content-addressed review verdicts **reconciled** read-only by `/harness-review`; architecture,
@@ -17,7 +17,7 @@ plugin doubles down on what is *irreplaceable* — repo-local mechanical constra
 delivery; gstack does that. `/lifecycle` NAMES the next skill, never invokes it. (Progressive
 disclosure is an implementation practice gstack now ships too — kept, but not the moat.)
 
-> **11 skills · 7 hooks · 0 agents · 1 audit workflow** — minimal context-window footprint; a Gate API, not an orchestrator.
+> **11 skills · 6 hooks · 0 agents · 1 audit workflow** — minimal context-window footprint; a Gate API, not an orchestrator.
 
 ## The Four Pillars
 
@@ -53,12 +53,12 @@ git clone https://github.com/caishize/oh-my-agents.git ~/.claude/skills/oh-my-ag
 | `/harness-init` | All | Initialize harness: CLAUDE.md, docs/, bootstrap, config |
 | `/legibility-score` | All | 10-metric Agent Legibility Score (0-30) |
 | `/spec-to-task` | Documentation | Convert specs to layer-aware execution plans |
-| `/verify` | Architecture | Build + test + lint + arch check with structured results |
+| `/verify` | Architecture | Build + test + lint + arch check → decision signal + typed `failures[]`; confirms `done` for tasks whose acceptance ran green |
 | `/encode-mistake` | Entropy | Mistakes or taste → permanent guardrails (TASTE-NNN) |
 | `/arch-guard` | Architecture | Set up layer enforcement + Providers pattern |
 | `/entropy-sweep` | Entropy | Scan for slop, drift, violations, dead code |
-| `/harness-review` | Entropy | Four-pillar review; composes gstack `/codex` (cross-model), `/cso` (security), `/design-review` — dedup + severity escalation |
-| `/harness-dashboard` | Observability | Metrics overview + DORA-proxy + `--query` for deep-dive analysis |
+| `/harness-review` | Entropy | Four-pillar review by a separate `Explore` judge, decision computed from typed `findings[]`; composes gstack `/codex` (cross-model), `/cso` (security), `/design-review` — dedup + severity escalation |
+| `/harness-dashboard` | Observability | Layer balance, velocity, entropy/legibility trends, DORA-proxy + `--query` deep-dives (every row names a file source) |
 | `/gstack-sync` | Integration | Detect gstack, configure bridges, lightweight drift check on every `--status`, `--contract-check` for quarterly deep audit |
 | `/lifecycle` | Integration | Lifecycle **router** — detects state, reads decision signals, NAMES the next phase + remediation skill (never invokes); worktree-aware |
 
@@ -73,22 +73,28 @@ the built-in `Explore` subagent is used — no agent file of ours to maintain.
 
 ## Hooks
 
-**Canonical list: [`hooks/hooks.json`](hooks/hooks.json)** (7 scripts). One line each:
-`arch-check` (blocks layer violations) · `safety-check` (blocks secrets) ·
+**Canonical list: [`hooks/hooks.json`](hooks/hooks.json)** (6 scripts, 7 registrations). One
+line each: `arch-check` (blocks layer violations) · `safety-check` (blocks secrets) ·
 `plan-validation-check` (exec-plan GUIDE + status-enum + plan-completion nudge) ·
-`bash-safety-check` (blocks credential leaks) · `self-verify-check` (post-edit py/js syntax
-warn; heavy tsc/cargo path deleted v3.10.0) · `session-metrics` (JSONL activity log) ·
-`doc-drift-check` (**Stop**: doc drift + gate-state nudge + 3-RED termination sensor;
-**SessionStart**: gate state + active plan injected into the model's context).
+`bash-safety-check` (blocks credential leaks) · `session-metrics` (per-edit layer ledger,
+Edit|Write) · `doc-drift-check` (**SessionStart**: the gate ladder + active plan injected
+into the model's context — also after resume/compact/fork; **Stop**: the same ladder for the
+human, doc drift, 3-RED termination sensor). `self-verify-check` was retired in v3.11.0
+(rule `ablate-per-model`, with a named re-add trigger).
 
-**Advisory channel (v3.10.0)** — advisory hooks emit ONE JSON envelope on stdout via
-`emit_advisory` (`hookSpecificOutput.additionalContext` for the model on
-PreToolUse/PostToolUse/SessionStart; `systemMessage` for the user, load-bearing at Stop).
-Through v3.9 the nudges went to stderr at exit 0, which reaches neither the model nor a
-parsed envelope. Invariants: zero bytes when there is nothing to say, ≤400 chars of injected
-text, silent inside gstack-spawned subagents (`GSTACK_SESSION_KIND=spawned`), never
-`permissionDecision`. Blocking hooks keep exit 2 + stderr. Timeouts obey rule
-`hook-latency-budget` (CI-asserted).
+**Gate ladder + channels (v3.11.0)** — ONE mapping, two renderings: stale WARN →
+composition-skipped → **APPROVE = the pre-ship check** (verify GREEN + review APPROVE at
+HEAD on a clean tree ⇒ `SHIP GATE: pass — next: gstack /ship`; APPROVE alone never names
+`/ship`) → REQUEST_CHANGES (first fixes from `findings[]`) → hard NEEDS_HUMAN → RED (first
+`failures[]`) → YELLOW → GREEN-no-review → plan changed since the last verify. Advisory hooks
+emit ONE JSON envelope via `emit_advisory`: `additionalContext` for the model on
+PreToolUse/PostToolUse/SessionStart; at **Stop only `systemMessage`** — there an
+`additionalContext` key CONTINUES the turn under the platform's 8-cap (through v3.10 every
+Stop nudge re-fired the turn), and a `stop_hook_active` re-entry gets zero bytes.
+Invariants: zero bytes when there is nothing to say, ≤400 chars, silent inside gstack-spawned
+subagents (`GSTACK_SESSION_KIND=spawned`), never `permissionDecision`. Hook `timeout` is in
+**seconds** (rule `hook-latency-budget`, CI-asserted; through v3.10 the file said 10000 —
+2.8 hours — and enforced nothing).
 
 **Addressing (v3.9.1)** — every hook resolves the project root through
 `get_project_dir()` in [`hooks/lib/common.sh`](hooks/lib/common.sh), in one fixed order:
@@ -107,7 +113,7 @@ is one no consumer looks for, and under the Gate API's default-deny rule that re
 
 | Workflow | Purpose |
 |----------|---------|
-| `/harness-audit` | Read-only four-pillar **governance audit** — fan-out `Explore` agents (cannot write) + adversarial verification; **returns** a `review-latest.json`-shaped decision (the accountable invoker persists it — never a relay write). Use for release/quarterly audits (the A/B spike found 3× the recall of a single pass, zero overlap); use `/harness-review` for PR validation. Requires native Dynamic Workflows (Claude Code v2.1.154+). **Project-local** to this repository (`.claude/workflows/`): plugin-level workflow distribution is an unverified watch item — installers copy nothing; they get it when the platform ships distribution. |
+| `/oh-my-agents:harness-audit` | Read-only four-pillar **governance audit** — fan-out `Explore` agents (cannot write) + adversarial verification; **returns** a `review-latest.json`-shaped decision (the accountable invoker persists it — never a relay write). Use for release/quarterly audits (the A/B spike found 3× the recall of a single pass, zero overlap); use `/harness-review` for PR validation. Requires native Dynamic Workflows. Shipped from the plugin root `workflows/` (the platform's default directory, no manifest field) — every install gets it, namespaced by the plugin name (v3.11.0; the pre-v3.11 `.claude/workflows/` location reached nobody). |
 
 Governed by anti-bloat rule **`single-workflow`** (≤1 workflow, read-only, audit-only, returns — never writes — the signal; SIGNAL-not-ARTIFACT bright line). See [docs/TEAM-DISCUSSION-2026-06-06.md](docs/TEAM-DISCUSSION-2026-06-06.md) (§ spike addendum) for the evidence.
 
@@ -146,6 +152,7 @@ Governed by anti-bloat rule **`single-workflow`** (≤1 workflow, read-only, aud
 /entropy-sweep                     # Codebase garbage collection
 /harness-dashboard                 # Health overview
 /harness-dashboard --query trends  # Deep-dive metric analysis
+/skill-doctor                      # Platform gauge: per-skill token cost + use (retirement evidence)
 ```
 
 ## gstack Integration
@@ -171,19 +178,29 @@ legacy sunset** — dual-value only transiently across a future rename):
   "未决态" so the flow no longer waits on a human for a recoverable skip. The
   `reviews.jsonl` history line carries typed **`findings[]`** (`fingerprint`/`severity`/`fix`)
   so a `REQUEST_CHANGES` hands the next Generator turn a work list, not a count.
-- **Freshness = commit + clean tree (v3.10)** — at the three ADVANCE points (pre-ship check,
-  `/lifecycle --auto`, audit persist) a signal is fresh only if `commit == HEAD` AND the
-  working tree has no uncommitted source (`worktree_dirty`); the Stop hook's `APPROVE`
-  nudge WARNs on a dirty tree instead of naming `/ship`.
+- **One freshness predicate — `signal_fresh` (v3.11)** — `commit == HEAD` (plus a clean tree
+  at the three ADVANCE points: the pre-ship rung, `/lifecycle --auto`, audit persist), OR
+  `commit != HEAD` but the signal's optional **`wtree`** equals gstack's live content
+  fingerprint (`bin/gstack-wtree`, probed lazily) — committing exactly what was verified no
+  longer forces a re-verify + re-review; the commit path stays the permanent gstack-absent path.
+- **Typed hand-backs** — `verify.jsonl` `failures[]` (`check`/`id`/`task_id`/`message`) is the
+  RED twin of `reviews.jsonl` `findings[]`; the gate ladder hands the first ≤3 to the next
+  turn; `/verify` confirms `done` for tasks whose command-shaped acceptance ran green;
+  `/harness-review` runs a SEPARATE `Explore` judge and COMPUTES its decision from the
+  findings (LLM judges of code agree at κ≈0.16 — separation is the lever), reading gstack's
+  typed `findings` too.
 - **Termination sensor** — three consecutive `RED` verify records with the same `reason`
   make the Stop hook name `/investigate` / `/encode-mistake` instead of another `/verify`.
+- **`/spec` archive bridge** — gstack `/spec` always archives the sanitized spec to
+  `projects/<slug>/specs/*.md` (`spec_branch` / `spec_issue_url` frontmatter);
+  `/spec-to-task` selects it by branch — the same rule gstack `/ship` uses for `Closes #N`.
 - `/harness-review` composes gstack's `/codex` (cross-model slop), `/cso` (security),
   `/design-review` (UI) — tags `[HARNESS]`/`[STRUCTURAL]`/`[CROSS-MODEL]`/`[SECURITY]`/`[UX]`/`[BOTH+]`
 - `/investigate` (gstack) → `/encode-mistake` (oh-my-agents) closes the feedback loop permanently
 - **GBrain memory** → `/encode-mistake --from-gbrain [learning|eureka|retro|all]` — uses
   `gbrain` CLI when present, else `~/.gstack-brain-worktree/` (env `GSTACK_BRAIN_WORKTREE`),
   else `projects/<slug>/learnings.jsonl` — one detection (`gbrain_detect()`); the
-  `gstack-artifacts-worktree` name probed through v3.9 has zero hits in gstack v1.79 and is
+  `gstack-artifacts-worktree` name probed through v3.9 has zero hits in gstack v1.79–v1.84.1 and is
   CI-grepped out. Always **human-gated** (ETH Zurich 2026: auto-generated rules hurt).
 - **gstack `timeline.jsonl` (always-on) + `.gstack/{deploy,canary}-reports/*.md` →
   `/harness-dashboard`** — lifecycle coverage and DORA `[proxy]` rows from data that exists
@@ -196,7 +213,7 @@ legacy sunset** — dual-value only transiently across a future rename):
 - Worktree-aware: honors both `.gstack-worktrees/` and `~/conductor/workspaces/` (v1.11+)
 - Lightweight contract drift check on every `/gstack-sync --status`, plus a mechanical
   `CONTRACT-CHECK OVERDUE` nudge when the recorded quarter is behind the clock (gstack went
-  v1.62 → v1.79 in three weeks; drift is the norm)
+  v1.79 → v1.84.1 in nine days; drift is the norm)
 - **Capability oracle (ordered succession, v3.9)** — local `VERSION` file → `llms.txt`
   glob → skill index → raw CHANGELOG fetch (network last); never hand-rolled enumeration
 - `.claude/gstack-rendered/` is a **gstack-owned enclave** (v1.57.9+) — gitignored,
@@ -225,7 +242,12 @@ dead-sensor cull + gstack v1.62 resync + evaluator blindness + sprint-contract v
 (v3.10.0 harness-fusion v3: source-verified gstack v1.79 resync + slug/GSTACK_HOME identity fix
 + advisory channel that reaches the model + SessionStart gate state + termination sensor +
 dirty-tree freshness + typed findings + Q4 cut of session-observer/handoff/--metrics +
-constitution enforced in CI).
+constitution enforced in CI), and
+[docs/TEAM-DISCUSSION-2026-09-11.md](docs/TEAM-DISCUSSION-2026-09-11.md)
+(v3.11.0 harness-fusion v4: hook timeouts are seconds + Stop never continues + the workflow
+ships from the plugin root + a real CI runner + `signal_fresh` with gstack `wtree` + the gate
+ladder as the pre-ship check + typed `failures[]` + computed review decision + `/spec` archive
+bridge + six retirements).
 
 ## Project Structure
 
@@ -240,10 +262,11 @@ skills/                            # 11 user-invocable slash commands
 │   ├── SKILL.md
 │   └── DEEP-DIVE.md              # Query format reference
 ├── <other-skills>/SKILL.md        # One dir per skill
-hooks/                             # 7 event-driven shell scripts (canonical: hooks.json)
-├── hooks.json                     # Hook event bindings (PreToolUse/PostToolUse/Stop/SessionStart)
-├── lib/common.sh                  # Shared utilities (gstack_detect, gbrain_detect, emit_advisory, append_history_record)
-.claude/workflows/harness-audit.js # 1 Dynamic Workflow (rule `single-workflow`: read-only governance audit; project-local)
+hooks/                             # 6 event-driven shell scripts, 7 registrations (canonical: hooks.json)
+├── hooks.json                     # Hook event bindings (PreToolUse/PostToolUse/Stop/SessionStart) — timeouts in seconds
+├── lib/common.sh                  # Shared utilities (gstack_detect, gbrain_detect, emit_advisory, signal_fresh, append_history_record)
+workflows/harness-audit.js         # 1 Dynamic Workflow (rule `single-workflow`) — plugin root ⇒ /oh-my-agents:harness-audit
+.github/workflows/ci.yml           # Runs tests/*.sh, node --check, claude plugin validate --strict
 docs/                              # Progressive disclosure references (SIGNALS.md = the Gate API)
 templates/                         # Config templates
 tests/                             # Plugin self-tests
@@ -268,8 +291,11 @@ tests/                             # Plugin self-tests
 ## References
 
 - [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/)
+- [Anthropic: Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps) — the Planner / Generator / Evaluator loop and "delete what the model obsoleted"
 - [gstack](https://github.com/garrytan/gstack) — complementary workflow plugin
 - [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
+- [ETH Zurich, arXiv 2602.11988](https://arxiv.org/abs/2602.11988) — LLM-generated context files: +20–23 % cost, ≤0 gain (why CLAUDE.md stays ≤60 lines and task-specific)
+- [Claude Code docs: hooks](https://code.claude.com/docs/en/hooks) · [plugins](https://code.claude.com/docs/en/plugins-reference) · [workflows](https://code.claude.com/docs/en/workflows)
 
 ## License
 

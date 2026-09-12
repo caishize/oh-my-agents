@@ -4,16 +4,27 @@
     "name": "caishize"
   },
   "metadata": {
-    "description": "Harness-engineering toolkit for Claude Code — skills, agents, and hooks implementing OpenAI's methodology for AI-native development, composed with gstack (v1.46+; reconciles its v1.57.5+ verdict layer read-only) for delivery workflow (read-only sensors; never orchestrates). Emits a versioned decision-signal Gate API for Dynamic Workflows + Agent Teams.",
-    "version": "3.10.0"
+    "description": "Harness-engineering toolkit for Claude Code — skills, hooks and one audit workflow implementing OpenAI's methodology for AI-native development, composed with gstack (v1.46+; reconciles its verdict layer read-only) for delivery workflow (read-only sensors; never orchestrates). Emits a versioned decision-signal Gate API for Dynamic Workflows + Agent Teams.",
+    "version": "3.11.0"
   },
   "plugins": [
     {
       "name": "oh-my-agents",
       "source": "./",
-      "description": "Lean harness-engineering plugin: four pillars (architecture guardrails, documentation as system of record, observability & legibility, entropy management) enforced as repo-local mechanical constraints. Composes with gstack (v1.46+ floor, v1.79 current; reconciles its content-addressed review verdicts read-only) for delivery — never orchestrates. Emits a versioned verify/review decision-signal Gate API (docs/SIGNALS.md) that Dynamic Workflows, Agent Teams, and the pre-ship convention check gate on; coordination ceded to the platform.",
-      "version": "3.10.0",
-      "keywords": ["harness-engineering", "ai-coding", "code-review", "architecture", "gstack-integration", "composition", "decision-signal", "gate-api", "dynamic-workflows", "agent-teams"],
+      "description": "Lean harness-engineering plugin: four pillars (architecture guardrails, documentation as system of record, observability & legibility, entropy management) enforced as repo-local mechanical constraints. Composes with gstack (v1.46+ floor, v1.84.1 current; reconciles its content-addressed review verdicts read-only) for delivery — never orchestrates. Emits a versioned verify/review decision-signal Gate API (docs/SIGNALS.md) rendered as a SessionStart/Stop gate ladder that Dynamic Workflows, Agent Teams and the pre-ship check gate on; ships /oh-my-agents:harness-audit.",
+      "version": "3.11.0",
+      "keywords": [
+        "harness-engineering",
+        "ai-coding",
+        "code-review",
+        "architecture",
+        "gstack-integration",
+        "composition",
+        "decision-signal",
+        "gate-api",
+        "dynamic-workflows",
+        "agent-teams"
+      ],
       "category": "productivity"
     }
   ]

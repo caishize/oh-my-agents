@@ -196,17 +196,25 @@ assert_contains "harness-review sets needs_human_kind" "$REVIEW_MD" "needs_human
 echo ""
 echo "--- Workflows (rule single-workflow) ---"
 
-WF_DIR="${SCRIPT_DIR}/../.claude/workflows"
+# v3.11.0: the workflow lives at the PLUGIN ROOT `workflows/` (the platform's default, no manifest
+# field) ⇒ /oh-my-agents:harness-audit on every install. A plugin's `.claude/workflows/` is never
+# scanned by the platform, and a copy there could never silently become workflow #2.
+WF_DIR="${SCRIPT_DIR}/../workflows"
 WF_COUNT=$(ls "$WF_DIR"/*.js 2>/dev/null | wc -l | tr -d ' ')
 TOTAL=$((TOTAL + 1))
-if [ "$WF_COUNT" -le 1 ]; then
-    PASS=$((PASS + 1)); echo "PASS: single-workflow cap: $WF_COUNT workflow(s) <= 1"
+if [ "$WF_COUNT" -le 1 ] && [ "$WF_COUNT" -ge 1 ]; then
+    PASS=$((PASS + 1)); echo "PASS: single-workflow cap: $WF_COUNT workflow(s) at the plugin root (<= 1)"
 else
-    FAIL=$((FAIL + 1)); echo "FAIL: single-workflow cap: $WF_COUNT workflows > 1"
+    FAIL=$((FAIL + 1)); echo "FAIL: single-workflow cap: $WF_COUNT workflows at workflows/ (expected exactly 1)"
 fi
+assert_true "single-workflow: no .claude/workflows/ directory (moved to the plugin root v3.11.0)" \
+    "[ ! -d '${SCRIPT_DIR}/../.claude/workflows' ]"
+assert_true "plugin.json: no workflows field (the default workflows/ dir is scanned without it)" \
+    "! grep -q '\"workflows\"' '${SCRIPT_DIR}/../.claude-plugin/plugin.json'"
 
 AUDIT_WF="${WF_DIR}/harness-audit.js"
 if [ -f "$AUDIT_WF" ]; then
+    assert_contains "single-workflow: harness-audit keeps its meta.name" "$AUDIT_WF" "name: 'harness-audit'"
     # Read-only guarantee: audit/verify agents must use the Explore agentType.
     assert_contains "single-workflow: harness-audit uses Explore agents" "$AUDIT_WF" "agentType: 'Explore'"
     # No delivery orchestration / mutation (SIGNAL-not-ARTIFACT bright line).
@@ -362,10 +370,12 @@ fi
 # Anti-regression greps: gstack shapes VERIFIED dead at v1.79 (docs/TEAM-DISCUSSION-2026-09-04.md)
 # must not reappear in code or the bridge manifest. Council minutes are history, not surface.
 echo "--- v3.10.0: dead gstack shapes (verified against v1.79 source) ---"
-DEAD_PATTERNS='\$HOME/\.gstack-artifacts-worktree|landing-reports/\*\.json|canary-reports/\*\.json|deploy-reports/\*\.json|\*-learnings-\*\.jsonl|learnings-\*\.jsonl|\.get\(.unresolved.|/find-decisions'
+# v3.11.0 additions: the top-level `*-spec-*.md` glob (gstack /spec archives to projects/<slug>/specs/),
+# and the hook_results / hook_durations / blocked_by sensor (not a PostToolUse input field).
+DEAD_PATTERNS='\$HOME/\.gstack-artifacts-worktree|landing-reports/\*\.json|canary-reports/\*\.json|deploy-reports/\*\.json|\*-learnings-\*\.jsonl|learnings-\*\.jsonl|\.get\(.unresolved.|/find-decisions|-spec-\*\.md|hook_results|hook_durations|blocked_by'
 for target in "${SCRIPT_DIR}/../skills" "${SCRIPT_DIR}/../hooks" "$INTEGRATION_JSON"; do
     TOTAL=$((TOTAL + 1))
-    HITS=$(grep -rnE "$DEAD_PATTERNS" "$target" 2>/dev/null | grep -vE 'never existed|zero hits|CI-grepped|NEVER existed|has ZERO|never probed|deleted in v3\.10|DEPRECATED' || true)
+    HITS=$(grep -rnE "$DEAD_PATTERNS" "$target" 2>/dev/null | grep -vE 'never existed|zero hits|CI-grepped|NEVER existed|has ZERO|never probed|deleted in v3\.1[01]|were deleted|never had a producer|DEPRECATED' || true)
     if [ -z "$HITS" ]; then
         PASS=$((PASS + 1)); echo "PASS: no dead gstack shape in $(basename "$target")"
     else
@@ -382,7 +392,7 @@ fi
 # Anti-bloat citations by kebab-case NAME, never number — scoped to code/tests/workflows
 echo "--- v3.10.0: rule citations by name ---"
 TOTAL=$((TOTAL + 1))
-NUMERIC=$(grep -rnE '\b[Rr]ule[- ]?1[0-9]\b|\brule17\b|Rule-17' "${SCRIPT_DIR}/../skills" "${SCRIPT_DIR}/../hooks" "${SCRIPT_DIR}/../tests" "${SCRIPT_DIR}/../.claude/workflows" 2>/dev/null | grep -v 'rule citations by name' | grep -v "NUMERIC=" || true)
+NUMERIC=$(grep -rnE '\b[Rr]ule[- ]?1[0-9]\b|\brule17\b|Rule-17' "${SCRIPT_DIR}/../skills" "${SCRIPT_DIR}/../hooks" "${SCRIPT_DIR}/../tests" "${SCRIPT_DIR}/../workflows" 2>/dev/null | grep -v 'rule citations by name' | grep -v "NUMERIC=" || true)
 if [ -z "$NUMERIC" ]; then
     PASS=$((PASS + 1)); echo "PASS: anti-bloat rules cited by kebab-case name in skills/hooks/tests/workflows"
 else
@@ -401,9 +411,13 @@ else
     PASS=$((PASS + 1)); echo "SKIP: node not installed — harness-audit.js syntax not checked (counted as pass)"
 fi
 
-# Contract text present (documented — NOT proof the line is printed; consume-or-cut binding in lifecycle)
-assert_contains "next-contract-documented: lifecycle documents the NEXT: tail line" "${SKILLS_DIR}/lifecycle/SKILL.md" 'NEXT: \{"phase"'
-assert_contains "next-contract-documented: consume-or-cut binding recorded" "${SKILLS_DIR}/lifecycle/SKILL.md" "Consume-or-cut"
+# BINDING 1 decided 2026-09-11: the NEXT: JSON tail line is RETIRED (zero consumers in two cycles).
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'NEXT: {' "${SKILLS_DIR}/lifecycle/SKILL.md" "$SIGNALS_MD"; then
+    PASS=$((PASS + 1)); echo "PASS: NEXT: tail line retired v3.11.0 (re-add only with a consumer test in the same PR)"
+else
+    FAIL=$((FAIL + 1)); echo "FAIL: NEXT: tail line re-appeared — re-add only with a consumer test in the same PR"
+fi
 assert_contains "harness-review: typed findings[] fingerprint documented" "$REVIEW_MD" "fingerprint"
 assert_contains "harness-review: decisions.active.json no longer parsed for a count" "$REVIEW_MD" "is NOT read"
 assert_contains "verify: history log via append_history_record" "$VERIFY_MD" "append_history_record"
@@ -416,6 +430,53 @@ if ! grep -q '^argument-hint:.*--metrics' "${SKILLS_DIR}/gstack-sync/SKILL.md"; 
 else
     FAIL=$((FAIL + 1)); echo "FAIL: gstack-sync argument-hint still advertises --metrics"
 fi
+# =============================================
+# v3.11.0 — council work items (docs/TEAM-DISCUSSION-2026-09-11.md)
+# =============================================
+echo "--- v3.11.0: CI runner, typed hand-backs, computed review decision, freshness, bridges ---"
+CI_YML=$(ls "${SCRIPT_DIR}"/../.github/workflows/*.yml 2>/dev/null | head -1)
+assert_true "ci: a GitHub Actions workflow runs both suites + node --check (the constitution is finally executed)" \
+    "[ -n '$CI_YML' ] && grep -q 'tests/test-hooks.sh' '$CI_YML' && grep -q 'tests/test-skills.sh' '$CI_YML' && grep -q 'node --check workflows/harness-audit.js' '$CI_YML'"
+assert_contains "verify: typed failures[] hand-back" "$VERIFY_MD" 'failures\[\]'
+assert_contains "verify: failures[].task_id names the retry target" "$VERIFY_MD" "task_id"
+assert_contains "verify: reason == failures[0].message (one key for sensor + ladder)" "$VERIFY_MD" 'failures\[0\]'
+assert_contains "SIGNALS: failures[] documented beside findings[]" "$SIGNALS_MD" 'failures\[\]'
+assert_true "verify: prose recurring-failure scan replaced by the typed jq" "! grep -q 'Scan the last 5 entries' '$VERIFY_MD'"
+assert_true "harness-review: decision COMPUTED from findings[], separate Explore judge, no stale native claims" \
+    "! grep -q 'pick one' '$REVIEW_MD' && grep -qi 'computed' '$REVIEW_MD' && ! grep -q 'runs in THIS context' '$REVIEW_MD' && ! grep -q 'run behavior' '$REVIEW_MD' && ! grep -q 'Skill tool' '$REVIEW_MD'"
+assert_contains "harness-review: reads gstack's typed findings tolerantly" "$REVIEW_MD" '\.findings // \[\]'
+assert_contains "SIGNALS: signal_fresh is the ONE freshness predicate" "$SIGNALS_MD" "signal_fresh"
+assert_contains "verify: wtree stamp gated on git check-ignore" "$VERIFY_MD" "check-ignore"
+assert_contains "harness-init: ledger dirs gitignored (signals)" "${SKILLS_DIR}/harness-init/SKILL.md" '\.claude/signals/'
+assert_contains "harness-init: ledger dirs gitignored (metrics)" "${SKILLS_DIR}/harness-init/SKILL.md" '\.claude/metrics/'
+assert_true "common.sh: no in-tree copy of gstack's write-tree fingerprint recipe" "! grep -q 'write-tree' '$COMMON_SH'"
+assert_contains "spec-to-task: reads the /spec archive by spec_branch" "${SKILLS_DIR}/spec-to-task/SKILL.md" "spec_branch"
+assert_contains "spec-to-task: specs/ archive path" "${SKILLS_DIR}/spec-to-task/SKILL.md" "specs/"
+assert_true "integration.json: gstack re-pinned 1.84.1.0, allow-list bindings, /open-gstack-browser, /guard owned" \
+    "grep -q '\"version\": \"1.84.1.0\"' '$INTEGRATION_JSON' && ! grep -q '/connect-chrome' '$INTEGRATION_JSON' && grep -q '/open-gstack-browser' '$INTEGRATION_JSON' && grep -q '\"/guard\"' '$INTEGRATION_JSON' && grep -qi 'allow-list' '$INTEGRATION_JSON'"
+assert_true "verify: confirms a deterministic pass (no blanket prohibition; CMDISH + failing_tests + ONE plan write)" \
+    "! grep -q 'Do NOT mark individual tasks done' '$VERIFY_MD' && grep -q 'CMDISH' '$VERIFY_MD' && grep -q 'failing_tests' '$VERIFY_MD' && grep -q 'ONE plan' '$VERIFY_MD'"
+assert_contains "spec-to-task: defaults to a new plan when a spec is given" "${SKILLS_DIR}/spec-to-task/SKILL.md" "ARGUMENTS.*non-empty"
+assert_true "disable-model-invocation on exactly the two one-time setup skills" \
+    "grep -q '^disable-model-invocation: true' '${SKILLS_DIR}/harness-init/SKILL.md' && grep -q '^disable-model-invocation: true' '${SKILLS_DIR}/gstack-sync/SKILL.md' && [ \$(grep -l '^disable-model-invocation: true' '${SKILLS_DIR}'/*/SKILL.md | wc -l) -eq 2 ]"
+DASH_MD="${SKILLS_DIR}/harness-dashboard/SKILL.md"; DEEP_MD="${SKILLS_DIR}/harness-dashboard/DEEP-DIVE.md"
+assert_true "dashboard: no row without a file source (Gate-block/Eureka/Enforcement/violations gone; both DORA proxies kept)" \
+    "! grep -qE 'Gate-block|Eureka|### Enforcement|query violations' '$DASH_MD' '$DEEP_MD' && grep -q 'change_failure_rate' '$DASH_MD' && grep -q 'deployment_frequency' '$DASH_MD'"
+assert_true "no skill reads Bash-leg session lines" "! grep -rq '\"tool\":\"Bash\"' '${SKILLS_DIR}'"
+assert_contains "INTEGRATION: self-verify-check retirement recorded under ablate-per-model" "$INTEGRATION_MD" "self-verify-check \\(v3\\.11\\.0"
+assert_contains "INTEGRATION: in_progress tolerance sunset FIRED v3.11.0" "$INTEGRATION_MD" "FIRED v3.11.0"
+assert_true "gstack-sync: duplicated count probes and verdict tail deleted; verify's readiness rows gone" \
+    "! grep -qE 'CAP_CODEX=|CAP_CSO=|REVIEW_VERDICT=' '${SKILLS_DIR}/gstack-sync/SKILL.md' && ! grep -q 'Benchmark baseline' '$VERIFY_MD'"
+assert_contains "WORKFLOW: /skill-doctor is the skill-retirement gauge" "${SCRIPT_DIR}/../docs/WORKFLOW.md" "/skill-doctor"
+assert_contains "INTEGRATION: claude plugin eval named as the ablation instrument" "$INTEGRATION_MD" "claude plugin eval"
+assert_true "integration.json: /skill-doctor no longer called org-gated" "! grep -q 'org-gated' '$INTEGRATION_JSON'"
+assert_true "SIGNALS: native TaskCompleted consumer recipe (≤12 lines, no hard-coded gstack path)" \
+    "grep -q 'TaskCompleted' '$SIGNALS_MD' && grep -q 'TaskCompleted' '$INTEGRATION_MD' && ! grep -q 'skills/gstack/bin' '$SIGNALS_MD' && [ \$(awk '/^## Native consumers/{f=1;next} f&&/^## /{exit} f' '$SIGNALS_MD' | wc -l) -le 12 ]"
+assert_true "harness-init: no generated overview prose (arXiv 2602.11988); confirm before writing" \
+    "! grep -q 'Architecture summary' '${SKILLS_DIR}/harness-init/SKILL.md' && ! grep -q 'Common patterns' '${SKILLS_DIR}/harness-init/SKILL.md' && ! grep -q 'Purpose (1-2 sentences)' '${SKILLS_DIR}/harness-init/SKILL.md' && grep -q '2602.11988' '${SKILLS_DIR}/harness-init/SKILL.md' && grep -qi 'confirm before writ' '${SKILLS_DIR}/harness-init/SKILL.md'"
+assert_true "hooks.json: timeouts are seconds (every value ≤ 60)" \
+    "python3 -c 'import json; h=json.load(open(\"${SCRIPT_DIR}/../hooks/hooks.json\"))[\"hooks\"]; assert all(x.get(\"timeout\",0)<=60 for es in h.values() for e in es for x in e[\"hooks\"])'"
+
 TOTAL=$((TOTAL + 1))
 if [ ! -d "${SCRIPT_DIR}/../agents" ]; then
     PASS=$((PASS + 1)); echo "PASS: no agents/ directory (session-observer retired v3.10.0, consume-or-cut)"

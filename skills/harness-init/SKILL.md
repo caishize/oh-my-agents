@@ -2,6 +2,7 @@
 name: harness-init
 description: "Initialize project as agent-ready harness — CLAUDE.md, nested CLAUDE.md per module, docs/ system of record, bootstrap script, pre-commit hooks, architecture tests. Based on OpenAI's four-pillar harness engineering. Aliases: 初始化, 项目初始化, harness初始化, AI开发环境"
 user-invocable: true
+disable-model-invocation: true
 argument-hint: "[project-path] [--quick]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
@@ -32,11 +33,11 @@ Scan the repository:
 2. Module inventory — directories with 5+ source files (candidates for nested CLAUDE.md)
 3. Existing documentation — README, CLAUDE.md, docs/, ADRs
 4. Entry points — do `build`, `test`, `lint`, `run`, `check` commands exist and work?
-5. gstack detection:
+5. gstack detection, and the ledger ignores (always — signal/metric ledgers are never source,
+   and gstack's content fingerprint would move the moment an un-ignored signal lands):
    ```bash
    source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect && echo "GSTACK: yes" || echo "GSTACK: no"
-   # If yes: ensure .gitignore covers .claude/gstack-rendered/ (gstack-owned enclave,
-   # v1.57.9+ gen-skill-docs writes rendered docs there — never track or flag it)
+   for p in .claude/signals/ .claude/metrics/ .claude/gstack-rendered/; do grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore; done
    ```
 
 Produce a brief assessment before proceeding.
@@ -47,21 +48,27 @@ Must be **≤ 60 lines** (rule `skill-line-cap`; evidence: ETH Zurich 2602.11988
 raise cost >20% for ~0 gain; HumanLayer <60) — a table of contents, not an encyclopedia. Include:
 - Bootstrap command
 - Commands table (build, test, lint, run, check)
-- Architecture summary with layer model
+- Layer model as ONE table (what arch-check enforces) + a link to docs/ARCHITECTURE.md — no prose
 - Top 5 conventions
-- Module map with file counts and nested CLAUDE.md status
+- One line listing the nested CLAUDE.md paths (no module map with file counts)
 - Workflow table (adapt based on gstack detection — full lifecycle if gstack present,
   oh-my-agents-only if not)
 - Documentation links to docs/
 
+Task-specific instructions ONLY — never a generated repository overview: LLM-written context
+prose costs +20–23 % per task for ≤0 success gain (arXiv 2602.11988).
+
 ## Step 3: Generate Nested CLAUDE.md Files
 
-For every module with **5+ source files**, create a CLAUDE.md under **50 lines**:
-- Purpose (1-2 sentences)
+For every module with **5+ source files**, create a CLAUDE.md under **50 lines** —
+task-specific instructions only (arXiv 2602.11988: overview prose is the class that costs and
+does not help):
 - Layer rules (layer name, allowed/forbidden imports)
 - Key files table
-- Module conventions
-- Common patterns (1-2 code snippets)
+- Module conventions ONLY where they cite a TASTE rule id (docs/LINTING.md)
+
+Print every proposed CLAUDE.md and **confirm before writing** (human-gated — the same gate
+`/encode-mistake` uses; this skill is human-invoked, never auto-run).
 
 ## Step 4: Create docs/ Directory
 

@@ -7,19 +7,19 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/arch-check.sh",
-            "timeout": 10000,
+            "timeout": 10,
             "statusMessage": "Checking architectural constraints..."
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/safety-check.sh",
-            "timeout": 5000,
+            "timeout": 5,
             "statusMessage": "Checking for risk patterns..."
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/plan-validation-check.sh",
-            "timeout": 5000,
+            "timeout": 5,
             "statusMessage": "Checking execution-plan handoff completeness..."
           }
         ]
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bash-safety-check.sh",
-            "timeout": 3000,
+            "timeout": 3,
             "statusMessage": "Checking bash command for credential leaks..."
           }
         ]
@@ -43,24 +43,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-metrics.sh",
-            "timeout": 2000,
-            "statusMessage": "Recording metrics..."
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/self-verify-check.sh",
-            "timeout": 5000,
-            "statusMessage": "Self-verifying edit..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-metrics.sh",
-            "timeout": 2000,
+            "timeout": 2,
             "statusMessage": "Recording metrics..."
           }
         ]
@@ -73,7 +56,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/doc-drift-check.sh",
-            "timeout": 8000,
+            "timeout": 8,
             "statusMessage": "Checking for documentation drift..."
           }
         ]
@@ -86,7 +69,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/doc-drift-check.sh",
-            "timeout": 3000,
+            "timeout": 3,
             "statusMessage": "Reading gate state..."
           }
         ]

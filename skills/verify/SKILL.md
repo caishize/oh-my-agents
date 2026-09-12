@@ -1,6 +1,6 @@
 ---
 name: verify
-description: "Post-execution verification — runs build, test, lint, and architecture checks, then writes a GREEN/YELLOW/RED decision signal (.claude/signals/verify-latest.json) that /lifecycle routes on and the pre-ship convention checks. Implements the Verify phase of Research→Plan→Execute→Verify. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
+description: "Post-execution verification — runs build, test, lint, and architecture checks, then writes a GREEN/YELLOW/RED decision signal (.claude/signals/verify-latest.json) plus typed failures[] that the gate ladder and /lifecycle route on (the ladder's APPROVE rung is the pre-ship check); confirms done for tasks whose acceptance ran green. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
 user-invocable: true
 argument-hint: "[scope: all|build|test|lint|arch] [--plan <plan-id>]"
 allowed-tools: Read, Glob, Grep, Bash
@@ -153,26 +153,35 @@ The full schema lives in **docs/SIGNALS.md — do not restate it**. Verify-speci
 `commit` = HEAD at derivation time (freshness predicate); `reason` names the first
 blocking item (e.g. `3 tests failed`, `acceptance unconfirmed: task-3`).
 
-**History log** — append the same record (plus failing-test names) as one line to
-`.claude/metrics/verify.jsonl` through the ONE tested writer (accountable-writer holds:
-this skill derived the record and calls it from its own Bash):
+**History log** — append the same record plus the typed hand-back `failures[]` as one line
+to `.claude/metrics/verify.jsonl` through the ONE tested writer (accountable-writer holds:
+this skill derived the record and calls it from its own Bash). `failures[]` (≤10, ≤4 KB,
+highest-impact first — the twin of `reviews.jsonl` `findings[]`, docs/SIGNALS.md):
+`{"check":"lint|build|test|arch","id":"<test name | file:line>","task_id":"<plan tasks[].id>|null","message":"<≤80 chars>"}`
+— `task_id` from the Step 3 acceptance mapping; `reason` MUST equal `failures[0].message`
+verbatim, so the Stop termination sensor (`tail -3` on `.reason`) and the RED gate rung
+(`failures[].id`) share one key.
 
 ```bash
 source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"
 append_history_record "$ROOT/.claude/metrics" verify.jsonl "$RECORD_JSON"   # validates JSON, flock; LOUD on failure
 ```
 
-Consumers: recurring-failure detection (Step 4), `/harness-dashboard` velocity
-(first-pass-GREEN, re-verify count), and the Stop hook's termination sensor (three
-consecutive RED with the same `reason` ⇒ it names `/investigate` / `/encode-mistake`
-instead of another `/verify`) — so `reason` must be the SAME string for the same failure.
+Consumers: the SessionStart/Stop gate ladder (RED rung: first ≤3 `failures[].id`),
+`/lifecycle recover` (`failures[].task_id` names the retry target), recurring-failure
+detection (Step 4), `/harness-dashboard` velocity, and the Stop termination sensor (three
+consecutive RED with the same `reason` ⇒ `/investigate` / `/encode-mistake`, not another
+`/verify`) — so `reason` must be the SAME string for the same failure.
 
-**gstack readiness (advisory, only if gstack present)**: surface prior-review and QA
-presence (the last `<branch>-reviews.jsonl` status, its `wtree` currency) in the report
-*text* for `/ship` context. `decisions.active.json` is a rebuildable cache — presence only,
-never a count. Read-only. Never block on it and never fold it into the
-decision signal: verify owns the build/test/lint/arch decision; the review-domain
-reconciliation of gstack's verdict belongs to `/harness-review` (docs/SIGNALS.md).
+**Optional `wtree` stamp (v3.11)**: when gstack's `bin/gstack-wtree` is executable AND both
+ledger dirs are gitignored (`git -C "$ROOT" check-ignore -q .claude/signals/verify-latest.json
+&& git -C "$ROOT" check-ignore -q .claude/metrics/verify.jsonl` — the fingerprint stages
+untracked files, so an un-ignored ledger would move it the moment the signal lands), add
+`"wtree": "$("$GSTACK_PATH/bin/gstack-wtree")"`; otherwise omit the field. `signal_fresh`
+(docs/SIGNALS.md) then accepts a signal whose `commit` moved but whose tree content did not
+(committing exactly what was verified); the commit path stays the permanent gstack-absent
+path. gstack's own verdict layer is NOT read here — `/harness-review` reconciles it (the one
+place it feeds a decision) and gstack `/ship` prints its own review/timeline preflight.
 
 ### Step 4: Report Results
 
@@ -207,35 +216,32 @@ Plan Acceptance — plan-20260319-auth-feature:
   Task 3 (repo):     ✗ test_feature_repo_persists_data FAILING
   Task 4 (service):  ? test_feature_service not yet run
 
-gstack Readiness (if available):
-  Review status:     {reviewed / not reviewed}
-  QA reports:        {N} available
-  Benchmark baseline: {exists / none}
-
 Next Steps:
   [GREEN]  All checks pass. Run /harness-review to complete the cycle.
   [RED]    Fix failing checks before review.
            Priority: lint → build → test → arch
 
-Recurring Failure Detection:
-  {Scan the last 5 entries in .claude/metrics/verify.jsonl for the same failing
-   test names or error patterns. If a test has failed 2+ times across different
-   sessions, flag it as RECURRING and auto-suggest:}
-  ⚠ RECURRING: {test_name} has failed {N} times across {N} sessions.
+Recurring Failure Detection (typed — one jq over failures[].id, never prose matching):
+  tail -5 .claude/metrics/verify.jsonl | jq -r '.failures[]?.id' | sort | uniq -c | awk '$1>=2'
+  ⚠ RECURRING: {id} has failed {N} times across sessions.
     → If root cause is unclear, run /investigate (gstack) for isolated reproduction.
-    → Then run /encode-mistake "{test_name} fails due to {pattern}" to create a permanent guardrail.
+    → Then run /encode-mistake "{id} fails due to {pattern}" to create a permanent guardrail.
   [YELLOW] Warnings present. Review before proceeding.
   [SHIP]   When ready: /ship (gstack) or create PR manually.
 ```
 
-### Step 5: Update Plan If Completing (if --plan provided)
+### Step 5: Confirm a deterministic pass into the plan (if a plan is in scope)
 
-If ALL tasks in the plan are confirmed done via acceptance criteria, update the plan:
-- Set plan `status` from `active` to `completing`
-- Update the `updated` timestamp
-
-Do NOT mark individual tasks done automatically — acceptance criteria interpretation
-requires human confirmation.
+/verify CONFIRMS tasks the model left `in-progress`: flip `in-progress` → `done` only when
+(a) `acceptance` is command-shaped (the plan hook's CMDISH shape — never prose), (b) THIS run
+executed it with exit 0, (c) every named `failing_tests[]` now passes in Step 2 output, and
+(d) no `failures[].task_id` names the task. Prose or unrunnable acceptance stays "needs
+human"; `blocked`/`skipped` and the `completing` → `completed` move remain human calls. Do
+the task flips and, when every task is done, the `active` → `completing` flip in ONE plan
+write BEFORE Step 3b writes the signal (the plan hook's completion nudge is suppressed by the
+GREEN written in the same run); print the flipped task ids in the report. The model may still
+mark `done` itself — its completion nudge and the SessionStart/Stop plan rung remain the two
+execute→verify pushes.
 
 ## Rules
 
@@ -248,8 +254,6 @@ requires human confirmation.
   recommend `/encode-mistake` to convert the pattern into a permanent guardrail
 - **Never editorialize** — report what the tools say; don't soften failures
 - **Run from project root** — ensure commands run from the directory containing CLAUDE.md
-- **gstack readiness is advisory** — emit review/QA/benchmark status for `/ship` consumption
-  but never block verify on gstack data; verify is oh-my-agents' domain
 - **Always write the decision signal** — `.claude/signals/verify-latest.json` (with
   `schema_version` + `decision` + `commit`) is mandatory, even on early exit. It is the
   Gate API per docs/SIGNALS.md; consumers default-deny a missing/stale/unknown-version

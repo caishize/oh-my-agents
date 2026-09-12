@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 #
-# Session metrics collector — PostToolUse for Edit/Write/Bash
+# Session metrics collector — PostToolUse for Edit/Write
 # Lightweight append-only JSONL logger. Must complete in <100ms.
+#
+# Records ONE datum native telemetry has no concept of: the architecture LAYER of each edit
+# ({ts,tool,file,layer} — the source of /harness-dashboard's layer-balance view). Tool-level
+# telemetry (names, durations, accept/reject) is native OpenTelemetry's, exported to a
+# collector. The v3.9 parse of a per-hook results field was deleted in v3.11.0: the field is
+# not part of the PostToolUse input contract and never arrived. The Bash-leg registration went
+# with it (it wrote {tool:"Bash",file:"",layer:""} lines nobody read).
 #
 # Input: JSON on stdin from Claude Code
 # Output: Appends one line to .claude/metrics/session-{date}.jsonl
@@ -62,30 +69,8 @@ TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 DATE_PART=$(date -u +"%Y-%m-%d")
 METRICS_FILE="${METRICS_DIR}/session-${DATE_PART}.jsonl"
 
-# --- Check for hook block events and performance (PreToolUse hooks) ---
-# Claude Code passes hook_results in the input for PostToolUse
-HOOK_BLOCKED=""
-HOOK_DURATIONS=""
-if echo "$INPUT" | grep -q '"hook_results"' 2>/dev/null; then
-    HOOK_BLOCKED=$(json_get '.hook_results[]? | select(.exit_code == 2) | .hook' \
-        'import json,sys; d=json.loads(sys.stdin.read()); results=d.get("hook_results",[]); print(",".join(h.get("hook","") for h in results if h.get("exit_code")==2))' \
-        2>/dev/null || echo "")
-    # Extract hook durations for performance monitoring
-    HOOK_DURATIONS=$(json_get '[.hook_results[]? | {hook: .hook, duration_ms: .duration_ms}] | map(select(.duration_ms != null)) | map("\(.hook):\(.duration_ms)") | join(",")' \
-        'import json,sys; d=json.loads(sys.stdin.read()); results=d.get("hook_results",[]); print(",".join(f"{h.get(\"hook\",\"\")}:{h.get(\"duration_ms\",\"\")}" for h in results if h.get("duration_ms") is not None))' \
-        2>/dev/null || echo "")
-fi
-
-# Build JSON without jq for speed
-BLOCKED_FIELD=""
-if [ -n "$HOOK_BLOCKED" ]; then
-    BLOCKED_FIELD=",\"blocked_by\":\"${HOOK_BLOCKED}\""
-fi
-DURATION_FIELD=""
-if [ -n "$HOOK_DURATIONS" ]; then
-    DURATION_FIELD=",\"hook_durations\":\"${HOOK_DURATIONS}\""
-fi
-LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"${BLOCKED_FIELD}${DURATION_FIELD}}"
+# Build JSON without jq for speed — exactly {ts,tool,file,layer}
+LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"}"
 
 # Use flock to prevent JSONL corruption from parallel Claude Code sessions (gstack Conductor)
 LOCK_FILE="${METRICS_FILE}.lock"

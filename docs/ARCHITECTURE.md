@@ -33,7 +33,7 @@ Implemented by: `/arch-guard`, `/encode-mistake --proactive`, `arch-check.sh`
 
 Making the codebase legible to agents through structured documentation.
 
-- **CLAUDE.md as table of contents** (~100 lines, progressive disclosure)
+- **CLAUDE.md as table of contents** (≤ 60 lines, progressive disclosure; task-specific instructions, never generated overview prose)
 - **docs/ as system of record** (structured, machine-readable, in-repo)
 - **Structured formats > prose** (agents comply better with JSON/YAML rules)
 - **No tacit knowledge** — if it's not in the repo, it doesn't exist
@@ -105,9 +105,9 @@ that *terminates in a signal* (anti-bloat rule `single-workflow`); never a deliv
 | Role | What oh-my-agents contributes | gstack / native counterpart | Handoff artifact |
 |------|-------------------------------|-----------------------------|------------------|
 | **Coordination** | — (deliberately none) | **native Agent Teams** (mailbox) + **Dynamic Workflows** (script); gstack Conductor | shared task list / mailbox / script vars |
-| **Planner** | `/spec-to-task` (layer-aware decomposition) | `/office-hours`, `/autoplan` | `docs/exec-plans/active/*.json` — per-task `context_files`/`failing_tests`/`constraints`/runnable `acceptance` ARE the typed handoff; on a RED verify, `/lifecycle recover` derives the retry target AT RECOVER TIME from `verify-latest.json`'s reason + the task list (no pre-declared failure maps — `planner_metadata` cut 2026-08-13, zero consumers) |
+| **Planner** | `/spec-to-task` (layer-aware decomposition; reads gstack's `/spec` archive by branch) | `/office-hours`, `/spec`, `/autoplan` | `docs/exec-plans/active/*.json` — per-task `context_files`/`failing_tests`/`constraints`/runnable `acceptance` ARE the typed handoff; on a RED verify the retry target is `verify.jsonl` `failures[].task_id` (no pre-declared failure maps — `planner_metadata` cut 2026-08-13, zero consumers) |
 | **Generator constraints** | `arch-check`, `safety-check`, `bash-safety-check` (block); `plan-validation-check` (feedforward GUIDE) — PreToolUse hooks | `/guard` (freeze/careful) | hook block + remediation message in agent context |
-| **Evaluator** | `/verify` + `/harness-review` (decision signals; `/harness-review` reads & reconciles gstack's v1.57.5+ verdict layer read-only) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json`, `.claude/signals/review-latest.json` (+ `gstack_context`) |
+| **Evaluator** | `/verify` (computational: build/test/lint/arch + plan acceptance, fail-any) + `/harness-review` (a SEPARATE built-in `Explore` judge returns typed `findings[]`; the decision is COMPUTED from them and reconciled read-only with gstack's verdict + typed findings) | `/codex`, `/cso`, `/design-review`, `/qa` | `.claude/signals/verify-latest.json` + `verify.jsonl` `failures[]`, `.claude/signals/review-latest.json` + `reviews.jsonl` `findings[]` (+ `gstack_context`); the gate ladder renders the hand-back at SessionStart (model) and Stop (human) |
 | **Memory between resets** | nested CLAUDE.md, `docs/LINTING.md` (TASTE rules) | GBrain (`learnings-log`, `timeline-log`, `eureka`) | one-direction bridge: observation → enforcement |
 | **Loop closure** | `/encode-mistake --from-gbrain` (human-gated) | `/investigate`, `/retro` | TASTE-NNN rule with `taste_id` ↔ learning-id back-reference |
 
@@ -158,19 +158,21 @@ skills/                                   # User-invocable slash commands (11 sk
                                           # (no agents/ since v3.10.0: session-observer retired —
                                           #  SessionStart gate-state injection + signals replace it;
                                           #  doc-gardening-agent retired v3.6.0)
-hooks/                                    # Event hook scripts (7 hooks + shared lib)
+workflows/
+└── harness-audit.js                      # The ONE Dynamic Workflow (rule single-workflow) — plugin root ⇒ /oh-my-agents:harness-audit
+hooks/                                    # Event hook scripts (6 hooks + shared lib)
 ├── hooks.json                            # Hook event bindings (${CLAUDE_PLUGIN_ROOT})
 ├── lib/common.sh                         # Shared utilities (JSON parsing, layer resolution,
 │                                         #  project-root addressing: get_project_dir; gstack +
-│                                         #  gbrain detection; emit_advisory; append_history_record)
+│                                         #  gbrain detection; emit_advisory; signal_fresh; append_history_record)
 ├── arch-check.sh                         # PreToolUse (Edit|Write): layer boundary check
 ├── safety-check.sh                       # PreToolUse (Edit|Write): hardcoded secrets detection
 ├── plan-validation-check.sh             # PreToolUse (Edit|Write): exec-plan handoff GUIDE (advisory)
 ├── bash-safety-check.sh                  # PreToolUse (Bash): credential leak detection
-├── self-verify-check.sh                  # PostToolUse (Edit|Write): syntax self-verification (py/js)
-├── session-metrics.sh                    # PostToolUse (Edit|Write|Bash): JSONL activity logging
-└── doc-drift-check.sh                    # Stop: drift + gate-state nudge + termination sensor;
-                                          # SessionStart: gate state injected into context
+├── session-metrics.sh                    # PostToolUse (Edit|Write): per-edit layer ledger
+└── doc-drift-check.sh                    # SessionStart: gate ladder into the model's context;
+                                          # Stop: same ladder for the human + drift + termination sensor
+                                          # (self-verify-check.sh retired v3.11.0 — rule ablate-per-model)
 docs/                                     # Template docs for target projects
 ├── ARCHITECTURE.md                       # Layer model, boundaries, decisions
 ├── CONVENTIONS.md                        # Naming, size, patterns
@@ -204,12 +206,12 @@ This plugin leverages specific Claude Code capabilities:
 | `allowed-tools` | legibility-score, harness-review, entropy-sweep | Enforce read-only behavior for review/scan skills |
 | Hook JSON output (`hookSpecificOutput.additionalContext`, `systemMessage`) | `emit_advisory` in lib/common.sh | Advisory nudges reach the MODEL (stderr at exit 0 reaches nobody) |
 | `PreToolUse` hooks | arch-check.sh | Block layer violations before Edit/Write |
-| `Stop` hooks | doc-drift-check.sh | Advisory drift + gate state + termination sensor after each turn |
-| `SessionStart` hooks | doc-drift-check.sh | Gate state + active plan injected at session open |
+| `Stop` hooks | doc-drift-check.sh | Gate ladder for the human (`systemMessage` only — `additionalContext` at Stop would continue the turn) + drift + termination sensor |
+| `SessionStart` hooks | doc-drift-check.sh | Gate ladder + active plan injected at session open, resume, compact and fork |
 | Built-in `Explore` subagent | /harness-review blind judge, harness-audit.js | Read-only, fresh-context Evaluator with no agent file of ours |
 | `$ARGUMENTS` | All skills | Pass user arguments to skill content |
-| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by `/lifecycle`, the pre-ship convention check, Dynamic Workflow stages, Agent Teams (gstack `/ship` reads none of it — VERIFIED v1.79) |
-| Dynamic Workflows (`.claude/workflows/`) | `harness-audit.js` (1 shipped; rule `single-workflow`) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it) |
+| Decision signals (`.claude/signals/`) | verify, harness-review | Versioned Gate API consumed by the gate ladder (SessionStart/Stop), `/lifecycle`, the pre-ship APPROVE rung, a user-opt-in `TaskCompleted` gate, Dynamic Workflow stages, Agent Teams (gstack `/ship` reads none of it — VERIFIED v1.84.1) |
+| Dynamic Workflows (plugin-root `workflows/`) | `harness-audit.js` ⇒ `/oh-my-agents:harness-audit` (1 shipped; rule `single-workflow`) | Native deterministic fan-out; read-only `Explore` audit that RETURNS a signal (accountable invoker persists it); distributed by the platform on install |
 
 ## Design Decisions
 
@@ -266,7 +268,7 @@ remediation instructions."
 
 CLAUDE.md is the table of contents (~60 lines); docs/ contains the full details.
 OpenAI found that one massive instruction file failed — context is scarce and crowds
-out actual task details. **Note:** gstack v1.46–1.79 converged onto on-demand content
+out actual task details. **Note:** gstack v1.46–1.84 converged onto on-demand content
 loading (25–49% token cut; "carved skills" = skeleton + on-demand `sections/`), so
 progressive disclosure is now table stakes both platforms ship — we keep the practice but
 no longer claim it as a moat. The moat is the repo-local edit-time mechanical enforcement

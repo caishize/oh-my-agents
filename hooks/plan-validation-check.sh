@@ -65,9 +65,9 @@ if not isinstance(plan, dict):
 template_file, project_dir, plan_path = sys.argv[1], sys.argv[2], sys.argv[3]
 
 # --- 1. Handoff checklist ---
-# transient-dual-value: `in_progress` (pre-v3.10 spelling) stays readable here until v3.11;
-# the template enum is `in-progress` and section 2 reports the underscore as drift.
-ACTIVE = {"in_progress", "in-progress", "done"}
+# ACTIVE uses the template enum only (`in-progress`). The `in_progress` read tolerance was
+# transient-dual-value, sunset FIRED v3.11.0: section 2 reports the underscore loudly.
+ACTIVE = {"in-progress", "done"}
 lines = []
 for t in (plan.get("tasks") or []):
     if not isinstance(t, dict):
@@ -100,10 +100,8 @@ if known:
     unknown = [k for k in plan.keys() if k not in known]
     if unknown:
         drift.append("  - top-level keys not in templates/execution-plan.json: %s" % ", ".join(sorted(unknown)))
-# Status enums (the template is the SSOT for spelling too). Tolerant on the READ above —
-# `in_progress` is accepted in ACTIVE until the transient-dual-value sunset (v3.11) — and
-# strict on the REPORT here, so a misspelling is caught while the plan is authored, not
-# when a consumer spelling it the other way silently sees zero active tasks.
+# Status enums (the template is the SSOT for spelling too): a misspelling is caught while the
+# plan is authored ("did you mean 'in-progress'?"), never silently ignored by a consumer.
 try:
     with open(template_file) as f:
         tpl = json.load(f).get("properties", {})

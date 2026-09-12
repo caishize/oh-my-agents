@@ -13,7 +13,7 @@
       "hooks": "hooks/",
       "templates": "templates/",
       "docs": "docs/",
-      "workflows": ".claude/workflows/"
+      "workflows": "workflows/"
     }
   },
   "target_layer_model": {

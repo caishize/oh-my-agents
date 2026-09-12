@@ -10,22 +10,12 @@ Analyze edit distribution across architecture layers:
 - Blind spots (layers with zero activity)
 - Coupling signals (layers that always change together)
 
-## Query: `violations`
-
-Enforcement violation history:
-- Counts by type (arch-check, safety-check, doc-drift)
-- Resolution rate per type
-- Repeat offenders (files with 2+ violations)
-- Trend direction (increasing/decreasing/stable)
-
 ## Query: `trends`
 
-Time-series across five categories (need 3+ data points):
+Time-series across three categories (need 3+ data points):
 1. **Legibility** — Score over time, CLAUDE.md coverage
-2. **Enforcement** — Violations/session, resolution rate
-3. **Throughput** — Tasks/session, plan completion time
-4. **Entropy** — Sweep findings, doc drift warnings
-5. **Safety** — Block counts, risk pattern frequency
+2. **Throughput** — Tasks/session, plan completion time
+3. **Entropy** — Sweep findings, doc drift warnings
 
 Use sparkline visualization with block characters.
 
@@ -39,9 +29,8 @@ from data that EXISTS; every row prints `n=<sample>` and "insufficient data" bel
 | First-pass GREEN rate | `.claude/metrics/verify.jsonl` (`first_pass`) | rework before review |
 | Re-verify count per plan_id (+ same-`reason` streaks) | `verify.jsonl` | non-converging loops; the Stop hook trips at 3 |
 | Verify→review p50 | `verify.jsonl` + `reviews.jsonl` timestamps | lead-time leak between gates |
-| Gate-block rate (`blocked_by` per 100 edits) | `session-*.jsonl` (needs `hook_results`; prints `present in N of M`, hidden at 0) | constraints catching defects at edit time |
 | Lifecycle coverage | gstack `projects/<slug>/timeline.jsonl` (always-on) | phases skipped |
-| Recurring-failure heatmap | `verify.jsonl` failing-test names across 2+ sessions | `/encode-mistake` targets |
+| Recurring-failure heatmap | `verify.jsonl` `failures[].id` across 2+ sessions (typed) | `/encode-mistake` targets |
 
 Not computed (no data source): change failure rate beyond the deploy/canary `.md` proxy,
 PR revert rate, review-load metrics — name them as gaps, never print a zero.

@@ -88,12 +88,14 @@ Resume across sessions: `/spec-to-task --continue <plan-id>`
 
 Implement tasks from the execution plan. During development:
 
-**oh-my-agents hooks (automatic; canonical list: `hooks/hooks.json`, 7 scripts)**:
-blocking (`arch-check`, `safety-check`, `bash-safety-check`) · advisory, delivered as
-JSON `additionalContext`/`systemMessage` so the MODEL sees them (`plan-validation-check`
-GUIDE + status-enum + completion nudge, `self-verify-check` syntax warn, `doc-drift-check`
-on Stop: drift + gate-state nudge + 3-RED termination sensor, and on SessionStart: gate
-state + active plan injected at session open) · recording (`session-metrics`)
+**oh-my-agents hooks (automatic; canonical list: `hooks/hooks.json`, 6 scripts)**:
+blocking (`arch-check`, `safety-check`, `bash-safety-check`) · advisory
+(`plan-validation-check` GUIDE + status-enum + completion nudge as `additionalContext`;
+`doc-drift-check` on SessionStart: the gate ladder + active plan injected into the model's
+context — also after resume/compact/fork — and on Stop: the same ladder for the human via
+`systemMessage` only, plus drift + the 3-RED termination sensor) · recording
+(`session-metrics`: the per-edit layer). `/harness-init` and `/gstack-sync` are typed by a
+human, never auto-run (`disable-model-invocation: true`).
 
 **gstack hooks (if guard mode active)**:
 - `check-freeze.sh` **blocks** edits outside freeze boundary
@@ -114,10 +116,12 @@ Update task status in the execution plan JSON as you complete each task.
 Runs in order: **lint -> build -> test -> arch guard**
 
 **Decision signal (the gate)**: `/verify` writes `.claude/signals/verify-latest.json`
-with a `decision` enum (`GREEN` / `YELLOW` / `RED`) — the canonical artifact `/lifecycle`
-routes on and the pre-ship convention checks (SIGNALS.md). A missing/stale signal means "re-run `/verify`"
-(mirrors the review gate's default-deny). It also appends each run to
-`.claude/metrics/verify.jsonl` (history for recurring-failure detection + dashboard velocity).
+with a `decision` enum (`GREEN` / `YELLOW` / `RED`) — the canonical artifact the gate ladder
+and `/lifecycle` route on (SIGNALS.md). A missing/stale signal means "re-run `/verify`"
+(mirrors the review gate's default-deny). It also appends each run — with typed
+`failures[]` (`check`, `id`, `task_id`, `message`) — to `.claude/metrics/verify.jsonl`; a RED
+hands the next turn its first failure ids, and `/verify` itself confirms `done` for tasks
+whose command-shaped acceptance ran green.
 
 **gstack context (advisory only)**: prior-review / QA presence is surfaced in the report
 text for `/ship`, never folded into the decision and never blocking.
@@ -155,13 +159,13 @@ Without gstack, `/harness-review` runs the four-pillar harness review only.
 **Input**: Feature branch with all reviews passed
 **Output**: Version bump, CHANGELOG entry, PR created (gstack's own behavior — see its docs)
 
-**Ship gate — our-side CONVENTION (not a verified gstack contract)**: before invoking
-`/ship`, the human (or their project harness config) runs the pre-ship check from
-[docs/SIGNALS.md](SIGNALS.md#pre-ship-check--our-side-convention-not-a-verified-gstack-contract):
-`verify-latest.json` GREEN + `review-latest.json` APPROVE + both `commit` == HEAD + a clean
-working tree (`worktree_dirty`). Verified against gstack v1.79 source: `/ship` reads none of
-our signals (`ASSERTED`); the one bilateral surface is gstack's `bin/gstack-verify-gate`
-reading the `<!-- gstack:verify: cmd -->` line `/harness-init` exports into CLAUDE.md.
+**Ship gate — our-side CONVENTION (not a verified gstack contract)**: the gate ladder's
+APPROVE rung IS the pre-ship check ([docs/SIGNALS.md](SIGNALS.md)): `signal_fresh
+verify-latest.json GREEN --advance && signal_fresh review-latest.json APPROVE --advance` ⇒
+`SHIP GATE: pass — next: gstack /ship`, printed at Stop for the human and at SessionStart for
+the model. Verified against gstack v1.84.1 source: `/ship` reads none of our signals
+(`ASSERTED`); the one bilateral surface is gstack's `bin/gstack-verify-gate` reading the
+`<!-- gstack:verify: cmd -->` line `/harness-init` exports into CLAUDE.md.
 
 **Next**: `/land-and-deploy` or `/retro`
 
@@ -189,7 +193,7 @@ Two complementary retrospective views:
 
 **Unified metrics** (via `/harness-dashboard` gstack integration section):
 - Dual review rate (what % of reviews used both systems)
-- First-pass GREEN rate, re-verify count per plan, gate-block rate (leading indicators)
+- First-pass GREEN rate, re-verify count per plan (leading indicators)
 - Lifecycle phase coverage from gstack's always-on `timeline.jsonl`
 - TASTE rules encoded (honest registry count) + unencoded gbrain candidates
 
@@ -252,6 +256,9 @@ diagram, not two.
 ```
 /entropy-sweep → /retro → /harness-dashboard
 ```
+Before any retirement proposal, run the platform's `/skill-doctor` (per-skill token cost and
+invocation frequency) and paste its table into the council record; `claude plugin eval
+--ablation with-without` is the instrument for a hook/behaviour re-add PR.
 Scheduling is the user's choice, not the plugin's: `/loop 7d /entropy-sweep` in-session,
 or a cloud Routine where available. There is no plugin scheduler. (`/gstack-sync --metrics`
 and `integrated-report.json` were deleted in v3.10.0 — nobody read the file.)
@@ -270,8 +277,9 @@ and `integrated-report.json` were deleted in v3.10.0 — nobody read the file.)
 Constraints should be **rippable** — easy to remove when models improve. Review your harness
 quarterly or with each major model update:
 
-1. **Review hook false-positive rate** — Check `.claude/metrics/` for `blocked_by` events.
-   If a hook blocks more false positives than real violations, simplify or remove it.
+1. **Review hook cost vs value** — `/skill-doctor` for skill cost and use; a `claude plugin
+   eval --ablation with-without` delta for a hook. If a hook blocks more false positives
+   than real violations, simplify or remove it (rule `ablate-per-model`).
 2. **Simplify graduating constraints** — If models reliably handle a pattern (e.g., import
    ordering), remove the lint rule and trust the model. Start with doc rules, graduate to
    lint rules only when models fail repeatedly.

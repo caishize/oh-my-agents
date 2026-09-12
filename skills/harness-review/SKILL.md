@@ -1,6 +1,6 @@
 ---
 name: harness-review
-description: "Four-pillar code review with composition-based gstack integration. Owns architecture/layer/entropy review; delegates deep slop & security to gstack /codex and /cso when available. Auto-deduplicates findings across [HARNESS]/[STRUCTURAL]/[CROSS-MODEL]/[SECURITY]/[UX]/[BOTH+] tags. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
+description: "Four-pillar code review by a SEPARATE built-in Explore judge; the decision (APPROVE/REQUEST_CHANGES/NEEDS_HUMAN) is computed from its typed findings[] and written as the review decision signal. Composes gstack: delegates deep slop & security to /codex and /cso, reads gstack's verdict and typed findings read-only; dedups across [HARNESS]/[STRUCTURAL]/[CROSS-MODEL]/[SECURITY]/[UX]/[BOTH+] tags. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
 user-invocable: true
 argument-hint: "[PR-number or file-path] [--plan <plan-id>] [--no-gstack] [--no-codex] [--no-cso] [--ux]"
 allowed-tools: Read, Glob, Grep, Bash
@@ -35,19 +35,19 @@ Run one per context — don't stack all three on the same diff.
 
 Review the current changes (staged/unstaged diff, or PR via $ARGUMENTS).
 
-### Blind evaluation protocol (Anthropic evaluator-blindness pattern; MANDATORY)
+### Blind evaluation protocol (a SEPARATE skeptical judge; MANDATORY)
 
-Findings and the Decision derive ONLY from: the artifact (diff + files on disk), the
-plan's acceptance criteria, the fixed rubric (docs/LINTING.md slop taxonomy), the decision
-signals, and gstack's read-only artifacts — **NEVER** the generating session's transcript,
-scratch notes, or self-assessment. Where feasible, run behavior (tests, the plan's
-`acceptance` commands) rather than trusting narration. If this review runs in the SAME
-session that generated the change, STATE SO in the output and delegate the judging step to
-a fresh-context read-only subagent — the Agent tool with the built-in `Explore` type
-(cannot Write/Edit; a native primitive, no agent file of ours) — handing it ONLY the diff,
-the plan's acceptance criteria and the rubric, never this session's reasoning or
-self-assessment (the auto-mode classifier strips exactly that so the agent cannot talk the
-judge into a bad call). `/harness-audit` already complies by construction.
+Reviews 1–5 ALWAYS run in a fresh built-in `Explore` subagent via the Agent tool (a native
+primitive, no agent file of ours; Explore has no Bash and skips CLAUDE.md/git status). Hand
+it ONLY: the `git diff` TEXT, the plan's acceptance criteria, the docs/LINTING.md rubric,
+and the FRESH `verify-latest.json` + the last `verify.jsonl` `failures[]` (the tests already
+ran — the judge never re-runs behaviour). It returns `findings[]` in the Review 8 shape plus
+an optional per-finding `needs_human: arch-ambiguity|judgment-slop`. Never hand it this
+session's reasoning or self-assessment. The separation is the lever: LLM judges of code
+agree at κ≈0.16 and grade their own work generously (Anthropic harness-design 2026-03;
+docs/TEAM-DISCUSSION-2026-09-11.md). The in-session part may only APPEND gstack-sourced
+findings (Review 7) — never add, drop or re-grade the judge's. `/harness-audit`
+(`/oh-my-agents:harness-audit`) is the fan-out form of the same judge.
 
 ### Review 1: Say No to Slop
 
@@ -149,9 +149,9 @@ Does this change strengthen or weaken the harness?
 Logic errors, N+1s, race conditions, weak tests and unused dependencies already have
 owners: gstack `/review` (8 specialists — testing, maintainability, security, performance,
 data migration, API contract, design, simplification) and `/cso` per Review 7's matrix,
-and, if available, native `/code-review` (invoke it as `/code-review` — never `/review`,
-whose alias collides with gstack's; it runs in THIS context, not an isolated one). This
-pass does not re-run them; it reads their output and applies the severity ladder:
+and, if available, native `/code-review` (the USER invokes it — as `/code-review`, never
+`/review`, whose alias collides with gstack's; it runs as a forked subagent). This pass
+does not re-run them; it reads their output and applies the severity ladder:
 **P0** blocks merge (logic/data-loss/security/replicable slop) · **P1** should fix ·
 **P2** consider. A skipped delegation is NOT a halt and never reuses `composition-skipped`
 (pinned to `/codex` and `/cso`). With neither gstack nor `/code-review` present, Review 7's
@@ -220,6 +220,10 @@ if [ -x "$GSTACK_PATH/bin/gstack-wtree" ]; then
 fi
 [ "$GSTACK_VERDICT_CURRENCY" = "stale" ] && GSTACK_REVIEW_STATUS="verdict-stale (wtree changed since gstack /review)"
 echo "gstack-verdict: status=${GSTACK_REVIEW_STATUS:-none} currency=${GSTACK_VERDICT_CURRENCY}"
+# TYPED gstack findings (v1.84 records carry `findings`): read tolerantly when current, cap 10,
+# map file:line → our fingerprint, tag [STRUCTURAL] ([BOTH+] when a judge fingerprint matches).
+# A missing/odd field degrades to 'none' — no fixture ever pins gstack's shape.
+[ "$GSTACK_VERDICT_CURRENCY" = "current" ] && GSTACK_FINDINGS=$(printf '%s' "$LAST_REVIEW" | jq -c '[.findings // [] | .[:10][] | {file:(.file // .path // ""), line:(.line // 0), title:(.title // .message // "")}]' 2>/dev/null || echo "[]")
 ```
 
 `decisions.active.json` is NOT read (v3.10.0): it is a bare JSON array and gstack documents
@@ -256,13 +260,12 @@ Every `/harness-review` invocation MUST end with exactly one decision and write
 > ≤500-byte cap, default-deny, and the consumer list (gstack `/ship`, `/lifecycle`,
 > Dynamic Workflow stages, Agent Teams). Conform; do not restate.
 
-**Decision tags (pick one):**
-
-| Tag | Meaning | Lifecycle effect |
-|-----|---------|------------------|
-| `APPROVE` | No P0 issues; P1/P2 may exist but are non-blocking. Safe to ship. | next step: ship |
-| `REQUEST_CHANGES` | At least one P0, OR multiple cross-validated `[BOTH+]` findings. | next step: back to execute |
-| `NEEDS_HUMAN` | Set `needs_human_kind` (below). | halts UNLESS recoverable |
+**Decision — COMPUTED from `findings[]`, never judged** (the same function
+`workflows/harness-audit.js` runs; executed in the signal-writing Bash block below):
+any `P0`, or ≥2 `[BOTH+]` ⇒ `REQUEST_CHANGES` (next: back to execute with the work list);
+any finding carrying `needs_human`, or a gstack divergence (below) ⇒ `NEEDS_HUMAN` with that
+kind; a composition skipped where it is composed by default ⇒ `NEEDS_HUMAN:composition-skipped`;
+else `APPROVE` (next: ship). `merge_recommendation` is computed from file count and paths.
 
 **`needs_human_kind` (mandatory when `decision=NEEDS_HUMAN`; set it HERE, never inferred downstream):**
 
@@ -290,8 +293,10 @@ source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"
 ROOT=$(harness_root)   # never a bare .claude/ path
 mkdir -p "$ROOT/.claude/signals"
 COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
-# Compute fields above, then write JSON (include "commit": "$COMMIT"). Use python3 / jq /
-# printf to ensure valid escaping; do NOT use unquoted heredocs with literal placeholders.
+DECISION=$(printf '%s' "$FINDINGS_JSON" | jq -r 'if any(.[]; .severity=="P0") or ([.[] | select(.tag=="[BOTH+]")] | length) >= 2 then "REQUEST_CHANGES" elif any(.[]; .needs_human != null) then "NEEDS_HUMAN" else "APPROVE" end')
+# Optional wtree stamp: same rule as /verify — gstack-wtree executable AND both ledger dirs
+# gitignored (`git -C "$ROOT" check-ignore -q <path>` per path); omit the field otherwise.
+# Write JSON (include "commit": "$COMMIT") with python3 / jq / printf — never an unquoted heredoc.
 # HISTORY record = the signal object + `findings[]` (below), through the ONE tested writer:
 append_history_record "$ROOT/.claude/metrics" reviews.jsonl "$HISTORY_JSON"
 ```
