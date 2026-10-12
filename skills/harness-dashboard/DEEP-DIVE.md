@@ -1,6 +1,6 @@
 # Deep-Dive Metric Queries
 
-Reference for `/harness-dashboard --query <type>` deep-dive analysis.
+Reference for `$oh-my-agents:harness-dashboard --query <type>` deep-dive analysis.
 
 ## Query: `layer-balance`
 
@@ -13,7 +13,7 @@ Analyze edit distribution across architecture layers:
 ## Query: `trends`
 
 Time-series across three categories (need 3+ data points):
-1. **Legibility** — Score over time, CLAUDE.md coverage
+1. **Legibility** — Score over time, AGENTS.md coverage
 2. **Throughput** — Tasks/session, plan completion time
 3. **Entropy** — Sweep findings, doc drift warnings
 
@@ -26,11 +26,11 @@ from data that EXISTS; every row prints `n=<sample>` and "insufficient data" bel
 
 | Indicator | Source | Why it leads |
 |-----------|--------|--------------|
-| First-pass GREEN rate | `.claude/metrics/verify.jsonl` (`first_pass`) | rework before review |
+| First-pass GREEN rate | `.codex/metrics/verify.jsonl` (`first_pass`) | rework before review |
 | Re-verify count per plan_id (+ same-`reason` streaks) | `verify.jsonl` | non-converging loops; the Stop hook trips at 3 |
 | Verify→review p50 | `verify.jsonl` + `reviews.jsonl` timestamps | lead-time leak between gates |
 | Lifecycle coverage | gstack `projects/<slug>/timeline.jsonl` (always-on) | phases skipped |
-| Recurring-failure heatmap | `verify.jsonl` `failures[].id` across 2+ sessions (typed) | `/encode-mistake` targets |
+| Recurring-failure heatmap | `verify.jsonl` `failures[].id` across 2+ sessions (typed) | `$oh-my-agents:encode-mistake` targets |
 
 Not computed (no data source): change failure rate beyond the deploy/canary `.md` proxy,
 PR revert rate, review-load metrics — name them as gaps, never print a zero.

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Spec To Task"
+  short_description: "Convert an explicit specification into an execution plan with runnable acceptance, context"
+  default_prompt: "Use $oh-my-agents:spec-to-task for this project."
+policy:
+  allow_implicit_invocation: true

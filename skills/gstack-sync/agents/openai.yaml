@@ -1,0 +1,6 @@
+interface:
+  display_name: "Gstack Sync"
+  short_description: "Inspect an optional gstack installation and configure read-only artifact bridges for Codex"
+  default_prompt: "Use $oh-my-agents:gstack-sync for this project."
+policy:
+  allow_implicit_invocation: false

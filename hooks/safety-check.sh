@@ -72,7 +72,7 @@ add_violation() {
     VIOLATIONS="${VIOLATIONS}Security risk: ${risk_type}\n"
     VIOLATIONS="${VIOLATIONS}  File: ${file}\n"
     if [ -n "$pattern" ]; then
-        VIOLATIONS="${VIOLATIONS}  Pattern: ${pattern}\n"
+        VIOLATIONS="${VIOLATIONS}  Pattern: [matched credential redacted]\n"
     fi
     VIOLATIONS="${VIOLATIONS}  Fix: ${fix}\n"
     VIOLATIONS="${VIOLATIONS}  Ref: ${ref}\n\n"
