@@ -1,5 +1,4 @@
 .gstack/
-.codex/metrics/
-.codex/signals/
+.claude/metrics/
+.claude/signals/
 .claude/gstack-rendered/
-__pycache__/

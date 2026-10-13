@@ -42,7 +42,7 @@ CONTENT=$(get_content)
 #   2. Schema drift — top-level keys not defined in templates/execution-plan.json, and
 #      prose-shaped acceptance strings (acceptance must be a runnable command / test name)
 #   3. Plan-completion nudge — every task done/skipped but plan still 'active' and no
-#      FRESH GREEN verify signal exists ⇒ name verify as the next step (names, never
+#      FRESH GREEN verify signal exists ⇒ name /verify as the next step (names, never
 #      invokes — rule no-orchestration; suppressed when a fresh GREEN already covers it)
 TEMPLATE_FILE="${SCRIPT_DIR}/../templates/execution-plan.json"
 
@@ -140,7 +140,7 @@ elif isinstance(m.get("tasks_total"), int) and m.get("tasks_total", 0) > 0:
 if all_done and str(plan.get("status", "")).lower() == "active":
     fresh_green = False
     if project_dir:
-        sig = os.path.join(project_dir, ".codex", "signals", "verify-latest.json")
+        sig = os.path.join(project_dir, ".claude", "signals", "verify-latest.json")
         try:
             with open(sig) as f:
                 s = json.load(f)
@@ -151,7 +151,7 @@ if all_done and str(plan.get("status", "")).lower() == "active":
     if not fresh_green:
         n = len(tasks) or m.get("tasks_total", 0)
         print("COMPLETE")
-        print("  All %d/%d tasks done — next: verify --plan %s" % (n, n, plan.get("id", "?")))
+        print("  All %d/%d tasks done — next: /verify --plan %s" % (n, n, plan.get("id", "?")))
         if not project_dir:
             print("  (project root unresolved — the verify signal was not read, not found GREEN)")
 ' "$TEMPLATE_FILE" "$PROJECT_DIR" "$FILE_PATH" 2>/dev/null || echo "")

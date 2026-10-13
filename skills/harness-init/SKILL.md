@@ -1,40 +1,188 @@
 ---
 name: harness-init
-description: "Prepare an existing project for Codex with AGENTS.md, architecture constraints, verified commands and local quality gates. Use when the user asks to initialize a harness. 初始化、Codex项目设置。"
+description: "Initialize project as agent-ready harness — CLAUDE.md, nested CLAUDE.md per module, docs/ system of record, bootstrap script, pre-commit hooks, architecture tests. Based on OpenAI's four-pillar harness engineering. Aliases: 初始化, 项目初始化, harness初始化, AI开发环境"
+user-invocable: true
+disable-model-invocation: true
+argument-hint: "[project-path] [--quick]"
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Harness Init
 
-Prepare the existing checkout for Codex. Treat the user's request as authorization for
-ordinary setup; preserve existing instructions, hooks and user changes. Never create a
-worktree unless explicitly requested. Arguments are the project path and optional `--quick`
-in the user's message; Codex does not substitute an `$ARGUMENTS` variable.
+Initialize the harness — constraints, documentation, observability, and feedback loops
+that make AI coding agents work reliably.
 
-1. Inspect AGENTS.md files, manifests, lockfiles, scripts, CI, documentation and Git status.
-   Identify working build/test/lint commands by running relevant checks, not guessing them.
-2. Resolve the installed plugin root from this SKILL.md: two parent directories above its
-   skill directory. Assign that absolute path to `PLUGIN_DIR` for command snippets. Read
-   `docs/CODEX.md` for host limitations; plugin root variables are guaranteed only in hooks.
-3. Update root AGENTS.md with a concise commands table, actual layer boundaries, conventions
-   and documentation links. Keep it under 60 lines when practical. Merge rather than replace.
-   Add nested AGENTS.md only where module rules differ; honor the user's authorization and
-   avoid generated repository overviews. Never rename existing user files blindly.
-4. Create only missing project docs: architecture, conventions, testing, lint/TASTE rules,
-   decisions, providers and workflow. Record known facts and unresolved decisions separately.
-5. Adapt `templates/harness-config.json` to `.codex/harness.json`: canonical layer names map
-   to actual directories; `sibling_layers` uses strings such as `service:runtime`.
-   Copy `templates/integration.json` to `.codex/integration.json` only for requested gstack
-   integration. Its external artifacts are optional and read-only.
-6. Ensure `.codex/signals/` and `.codex/metrics/` are ignored. Preserve .gitignore entries.
-7. Install architecture tests appropriate to the project's framework, using the Python or
-   TypeScript references in this skill directory. Replace every placeholder with real
-   assertions. Merge existing pre-commit/CI checks; never replace them or install a passing
-   TODO workflow. A bootstrap script uses pinned tools and frozen lockfiles.
-8. For local Codex installations with trusted hooks, the plugin registers its own checks.
-   Do not copy Claude settings or declare prompt text a security boundary. For skills-only
-   or cloud installations, document explicit checks and CI. See `docs/CODEX.md`.
-9. Run the chosen commands. Report actual outcomes, file changes, remaining decisions and
-   next skill. `--quick` additionally applies legibility scoring and architecture setup
-   within the authorized scope; read those skills before following their procedures.
+## Task
 
-Do not claim initialization is complete while placeholder tests or commands remain.
+Walk through Steps 1–9 (or 1–9 + `/legibility-score` + `/arch-guard` in `--quick`
+mode) to bootstrap the four-pillar harness in the target project: assess state,
+write CLAUDE.md (root + nested per-module), populate `docs/` (ARCHITECTURE,
+CONVENTIONS, TESTING, LINTING, DECISIONS, PROVIDERS, OBSERVABILITY), generate
+`.claude/harness.json`, install pre-commit + architecture-test skeletons, and
+emit a summary with score and recommendations.
+
+## Quick Start Mode
+
+If `$ARGUMENTS` contains `--quick`: run Steps 1-9, then `/legibility-score`, then
+`/arch-guard`. Print a one-paragraph summary with score and top 3 improvements.
+
+## Step 1: Assess Current State
+
+Scan the repository:
+1. Repository structure — directories, package manager, language(s), framework(s)
+2. Module inventory — directories with 5+ source files (candidates for nested CLAUDE.md)
+3. Existing documentation — README, CLAUDE.md, docs/, ADRs
+4. Entry points — do `build`, `test`, `lint`, `run`, `check` commands exist and work?
+5. gstack detection, and the ledger ignores (always — signal/metric ledgers are never source,
+   and gstack's content fingerprint would move the moment an un-ignored signal lands):
+   ```bash
+   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect && echo "GSTACK: yes" || echo "GSTACK: no"
+   for p in .claude/signals/ .claude/metrics/ .claude/gstack-rendered/; do grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore; done
+   ```
+
+Produce a brief assessment before proceeding.
+
+## Step 2: Create Root CLAUDE.md
+
+Must be **≤ 60 lines** (rule `skill-line-cap`; evidence: ETH Zurich 2602.11988 — context files
+raise cost >20% for ~0 gain; HumanLayer <60) — a table of contents, not an encyclopedia. Include:
+- Bootstrap command
+- Commands table (build, test, lint, run, check)
+- Layer model as ONE table (what arch-check enforces) + a link to docs/ARCHITECTURE.md — no prose
+- Top 5 conventions
+- One line listing the nested CLAUDE.md paths (no module map with file counts)
+- Workflow table (adapt based on gstack detection — full lifecycle if gstack present,
+  oh-my-agents-only if not)
+- Documentation links to docs/
+
+Task-specific instructions ONLY — never a generated repository overview: LLM-written context
+prose costs +20–23 % per task for ≤0 success gain (arXiv 2602.11988).
+
+## Step 3: Generate Nested CLAUDE.md Files
+
+For every module with **5+ source files**, create a CLAUDE.md under **50 lines** —
+task-specific instructions only (arXiv 2602.11988: overview prose is the class that costs and
+does not help):
+- Layer rules (layer name, allowed/forbidden imports)
+- Key files table
+- Module conventions ONLY where they cite a TASTE rule id (docs/LINTING.md)
+
+Print every proposed CLAUDE.md and **confirm before writing** (human-gated — the same gate
+`/encode-mistake` uses; this skill is human-invoked, never auto-run).
+
+## Step 4: Create docs/ Directory
+
+```
+docs/
+├── ARCHITECTURE.md    # Layer model, boundaries, dependency rules
+├── CONVENTIONS.md     # Naming, file size limits, patterns
+├── TESTING.md         # Test strategy, structural tests
+├── LINTING.md         # Custom lint rules (TASTE-NNN entries)
+├── DECISIONS.md       # ADRs (Proposed → Accepted → Superseded)
+├── PROVIDERS.md       # Cross-cutting: auth, telemetry, flags
+├── OBSERVABILITY.md   # Logging, metrics, tracing
+├── WORKFLOW.md        # Development lifecycle (adapt to gstack)
+├── design-docs/       # Design documents
+├── exec-plans/        # Execution plans from /spec-to-task
+│   ├── active/
+│   └── completed/
+├── product-specs/
+└── references/
+```
+
+If gstack detected, WORKFLOW.md includes full lifecycle (Ideate → Ship → Retro).
+Otherwise, oh-my-agents-only (Decompose → Execute → Verify → Review → Guard).
+
+Key rules:
+- Structured formats (JSON/YAML) > prose where agents parse rules
+- Everything in the repo — Slack/wikis don't exist for agents
+- ADR lifecycle: `Proposed → Accepted → Superseded/Deprecated`
+- Sibling layers noted separately in ARCHITECTURE.md
+
+## Step 5: Create `.claude/harness.json`
+
+Machine-readable config. Use `templates/harness-config.json` as starting point:
+```json
+{
+  "version": "2.0",
+  "layers": ["types", "config", "repo", "service", "runtime", "ui"],
+  "layer_dirs": { "types": "src/types", "service": "src/services" },
+  "file_size_limit": 300,
+  "nested_claude_md_threshold": 5
+}
+```
+**Layer keys must match actual directory names** (e.g., `"services"` not `"service"`).
+RETIRED key: `self_verify_heavy` (v3.10.0 — the heavy self-verify path was deleted). If an
+existing harness.json carries it, REPORT it as retired; never silently ignore a config key.
+
+## Step 6: Create Bootstrap Script
+
+Create `scripts/bootstrap.sh` — single command from zero to running:
+1. Install dependencies
+2. Set up environment (copy .env.example)
+3. Install pre-commit hooks
+4. Run initial build
+5. Verify setup
+
+Make executable: `chmod +x scripts/bootstrap.sh`
+If hardcoded secrets detected, create `.env.example` with placeholders.
+
+## Step 7: Set Up Pre-Commit Enforcement
+
+Create `.pre-commit-config.yaml` with three tiers:
+1. **Linter + formatter** (~1s)
+2. **Type checker** (~5s)
+3. **Architecture guard** — runs structural tests enforcing TASTE/ARCH rules (~1-2s)
+
+Adapt to project language. See `templates/` for examples.
+
+## Step 7b: Generate Architecture Test Skeleton
+
+Generate the architecture test file if it doesn't already exist:
+- **Python projects**: See [arch-test-python.md](arch-test-python.md)
+- **TypeScript projects**: See [arch-test-typescript.md](arch-test-typescript.md)
+
+Tests include: `test_layer_boundaries`, `test_file_size_limits`, `test_no_circular_imports`.
+Never overwrite existing test files.
+
+## Step 8: Create Task Entry Points
+
+Ensure build, test, lint, run, check commands exist and work. Create using the project's
+build system if missing. Annotate non-functional commands in CLAUDE.md.
+
+**gstack verify-gate export (only here — after the test command is PROVEN to run):** gstack
+v1.65+ ships `bin/gstack-verify-gate`, an opt-in Stop hook that reads ONE line from the
+project's CLAUDE.md — `<!-- gstack:verify: <cmd> -->` — and blocks the turn (exit 2, failure
+text into the agent's context) when the command fails. Capability probe, never a version
+compare: `[ -x "$GSTACK_PATH/bin/gstack-verify-gate" ]`. When present AND the test command
+verified above runs AND the human confirms the exact string, emit exactly one line into the
+generated root CLAUDE.md: `<!-- gstack:verify: <verified test command> -->`. State the three
+facts from the gate's own header: no declaration ⇒ no gate; it never blocks until the user
+runs `gstack-verify-gate --trust`; any edit to the command invalidates trust. Direction is
+ours→gstack (a DERIVED EXPORT of the CLAUDE.md commands table `/verify` reads as primary);
+never emit it unconfirmed, and never emit it when Step 8 could not run the tests.
+
+## Step 9: Report Summary
+
+```
+=== Harness Init Summary ===
+Project: [name] | Language: [lang] | Framework: [fw]
+
+Files Created: [list all created files]
+Entry Points Verified: [pass/fail for each]
+Four Pillars: [score for each]
+gstack: [yes/no]
+
+Next Steps: [top 3 recommendations]
+```
+
+## Rules
+
+- Root CLAUDE.md ≤ 60 lines (rule `skill-line-cap`), nested CLAUDE.md under 50 lines
+- Every command must actually work — verify by running
+- Bootstrap must work from clean checkout
+- All entry points documented and functional
+- Layer keys match directory names in harness.json
+- Pre-commit must include architecture guard
+- Never overwrite existing architecture tests
+- Four pillars must all be addressed

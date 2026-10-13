@@ -1,6 +1,0 @@
-interface:
-  display_name: "Encode Mistake"
-  short_description: "Turn a confirmed recurring mistake or an explicit engineering convention into a tested TAS"
-  default_prompt: "Use $oh-my-agents:encode-mistake for this project."
-policy:
-  allow_implicit_invocation: false

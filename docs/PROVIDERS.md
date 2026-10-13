@@ -39,4 +39,4 @@ export interface Providers {
 3. Register it in the Providers factory
 4. Update this document
 5. Add a structural test verifying no direct access
-6. Run `$oh-my-agents:encode-mistake --proactive` to create a lint rule if needed
+6. Run `/encode-mistake --proactive` to create a lint rule if needed

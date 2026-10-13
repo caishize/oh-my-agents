@@ -1,6 +1,0 @@
-interface:
-  display_name: "Arch Guard"
-  short_description: "Configure and verify architecture layers, sibling exceptions and Providers boundaries in a"
-  default_prompt: "Use $oh-my-agents:arch-guard for this project."
-policy:
-  allow_implicit_invocation: true

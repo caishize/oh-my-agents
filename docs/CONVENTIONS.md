@@ -1,6 +1,6 @@
 # Conventions
 
-Project-level coding conventions. Customize for your project after running `$oh-my-agents:harness-init`.
+Project-level coding conventions. Customize for your project after running `/harness-init`.
 
 ## Naming
 
@@ -10,7 +10,7 @@ Project-level coding conventions. Customize for your project after running `$oh-
 - **Constants**: UPPER_SNAKE (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`)
 - **Test files**: `[module].test.ts` or `test_[module].py`
 
-> Customize above for your project. Enforce via `$oh-my-agents:encode-mistake --proactive`.
+> Customize above for your project. Enforce via `/encode-mistake --proactive`.
 
 ## File Size
 
