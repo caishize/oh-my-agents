@@ -1,6 +1,0 @@
-interface:
-  display_name: "Harness Dashboard"
-  short_description: "Summarize measured verification, review, architecture and legibility health from local led"
-  default_prompt: "Use $oh-my-agents:harness-dashboard for this project."
-policy:
-  allow_implicit_invocation: true

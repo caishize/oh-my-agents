@@ -11,10 +11,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOKS_DIR="${SCRIPT_DIR}/../hooks"
 
-# Tier 1 of get_project_dir reads $HARNESS_PROJECT_DIR. Under a real session it is set to
+# Tier 1 of get_project_dir reads $CLAUDE_PROJECT_DIR. Under a real session it is set to
 # THIS repo, which would win for every fixture below. Unset it; the tier-1 test sets it
 # explicitly for the one case that asserts its precedence.
-unset HARNESS_PROJECT_DIR
+unset CLAUDE_PROJECT_DIR
 
 GIT_Q() { git -c user.email=t@t -c user.name=t "$@"; }
 
@@ -407,7 +407,7 @@ assert_advisory "plan-validation: warns on missing handoff fields" \
     "yes"
 
 # transient-dual-value sunset FIRED v3.11.0: `in_progress` is no longer ACTIVE for the handoff
-# checklist (no nag about fields verify never runs), and the miss is LOUD via the enum GUIDE.
+# checklist (no nag about fields /verify never runs), and the miss is LOUD via the enum GUIDE.
 assert_advisory "plan-validation: in_progress no longer counts as active (sunset FIRED v3.11.0)" \
     '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"p\",\"status\":\"active\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"in_progress\"}]}"}}' \
     "no"
@@ -450,20 +450,19 @@ assert_output "plan-validation: schema GUIDE on prose acceptance" \
 assert_output "plan-validation: completion nudge fires when all tasks done + plan active" \
     "plan-validation-check.sh" \
     '{"tool_input":{"file_path":"docs/exec-plans/active/p.json","content":"{\"id\":\"plan-x\",\"status\":\"active\",\"tasks\":[{\"id\":\"t-1\",\"status\":\"done\",\"acceptance\":\"run-tests\",\"context_files\":[\"a\"],\"failing_tests\":[\"t\"]}]}"}}' \
-    "next: verify --plan plan-x" "yes"
+    "next: /verify --plan plan-x" "yes"
 
 # Suppression: a FRESH GREEN verify signal newer than the plan file suppresses the nudge
 NUDGE_TMP=$(mktemp -d)
-git init -q "$NUDGE_TMP"
-mkdir -p "$NUDGE_TMP/docs/exec-plans/active" "$NUDGE_TMP/.codex/signals"
+mkdir -p "$NUDGE_TMP/docs/exec-plans/active" "$NUDGE_TMP/.claude/signals"
 printf '%s' '{"id":"plan-x","status":"active","tasks":[{"id":"t-1","status":"done","acceptance":"run-tests","context_files":["a"],"failing_tests":["t"]}]}' \
     > "$NUDGE_TMP/docs/exec-plans/active/p.json"
 sleep 0.01 2>/dev/null || sleep 1
-printf '%s' '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"}}' > "$NUDGE_TMP/.codex/signals/verify-latest.json"
+printf '%s' '{"schema_version":1,"decision":"GREEN"}' > "$NUDGE_TMP/.claude/signals/verify-latest.json"
 assert_output "plan-validation: completion nudge suppressed by fresh GREEN" \
     "plan-validation-check.sh" \
     "{\"cwd\":\"$NUDGE_TMP\",\"tool_input\":{\"file_path\":\"$NUDGE_TMP/docs/exec-plans/active/p.json\",\"content\":\"{\\\"id\\\":\\\"plan-x\\\",\\\"status\\\":\\\"active\\\",\\\"tasks\\\":[{\\\"id\\\":\\\"t-1\\\",\\\"status\\\":\\\"done\\\",\\\"acceptance\\\":\\\"run-tests\\\",\\\"context_files\\\":[\\\"a\\\"],\\\"failing_tests\\\":[\\\"t\\\"]}]}\"}}" \
-    "next: verify" "no"
+    "next: /verify" "no"
 rm -rf "$NUDGE_TMP"
 
 # --- v3.9.0: gate-state nudge (doc-drift-check, Stop hook) ---
@@ -473,13 +472,13 @@ echo "--- doc-drift-check.sh gate-state nudge ---"
 if command -v jq >/dev/null 2>&1; then
     GATE_TMP=$(mktemp -d)
     (cd "$GATE_TMP" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init)
-    mkdir -p "$GATE_TMP/.codex/signals"
+    mkdir -p "$GATE_TMP/.claude/signals"
     HEAD_SHA=$(git -C "$GATE_TMP" rev-parse HEAD)
 
     printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$HEAD_SHA" \
-        > "$GATE_TMP/.codex/signals/review-latest.json"
+        > "$GATE_TMP/.claude/signals/review-latest.json"
     # v3.11.0: APPROVE alone never names the irreversible step — the rung IS the pre-ship check
-    assert_output "doc-drift: APPROVE without a GREEN verify at HEAD names verify, not /ship" \
+    assert_output "doc-drift: APPROVE without a GREEN verify at HEAD names /verify, not /ship" \
         "doc-drift-check.sh" \
         "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
         "verify is not GREEN at HEAD" "yes"
@@ -487,35 +486,35 @@ if command -v jq >/dev/null 2>&1; then
         "doc-drift-check.sh" \
         "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
         "/ship" "no"
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$HEAD_SHA" \
-        > "$GATE_TMP/.codex/signals/verify-latest.json"
-    assert_output "doc-drift: GREEN + APPROVE at HEAD on a clean tree ⇒ RELEASE GATE: pass" \
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$HEAD_SHA" \
+        > "$GATE_TMP/.claude/signals/verify-latest.json"
+    assert_output "doc-drift: GREEN + APPROVE at HEAD on a clean tree ⇒ SHIP GATE: pass" \
         "doc-drift-check.sh" \
         "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
-        "RELEASE GATE: pass" "yes"
+        "SHIP GATE: pass" "yes"
     # stop_hook_active: a re-entry episode gets ZERO bytes from this hook
     STOP_ACTIVE_OUT=$(printf '%s' "{\"hook_event_name\":\"Stop\",\"stop_hook_active\":true,\"cwd\":\"$GATE_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true)
     assert_true "doc-drift Stop: stop_hook_active=true emits zero bytes" test -z "$STOP_ACTIVE_OUT"
     STOP_OUT=$(printf '%s' "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true)
     assert_true "doc-drift Stop: envelope is systemMessage-only (never continues the turn)" \
-        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"systemMessage\"].startswith(\"RELEASE GATE\") and \"hookSpecificOutput\" not in d'" _ "$STOP_OUT"
+        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"systemMessage\"].startswith(\"SHIP GATE\") and \"hookSpecificOutput\" not in d'" _ "$STOP_OUT"
 
     printf '{"schema_version":1,"decision":"APPROVE","commit":"stale-sha"}' \
-        > "$GATE_TMP/.codex/signals/review-latest.json"
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"stale-sha"}' \
-        > "$GATE_TMP/.codex/signals/verify-latest.json"
+        > "$GATE_TMP/.claude/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"stale-sha"}' \
+        > "$GATE_TMP/.claude/signals/verify-latest.json"
     assert_output "doc-drift: stale commit yields WARN, never a nudge" \
         "doc-drift-check.sh" \
         "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
         "is stale (stale:commit)" "yes"
 
-    rm -f "$GATE_TMP/.codex/signals/review-latest.json"
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$HEAD_SHA" \
-        > "$GATE_TMP/.codex/signals/verify-latest.json"
-    assert_output "doc-drift: fresh GREEN with no review nudges harness-review" \
+    rm -f "$GATE_TMP/.claude/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$HEAD_SHA" \
+        > "$GATE_TMP/.claude/signals/verify-latest.json"
+    assert_output "doc-drift: fresh GREEN with no review nudges /harness-review" \
         "doc-drift-check.sh" \
         "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GATE_TMP\"}" \
-        "next: harness-review" "yes"
+        "next: /harness-review" "yes"
     rm -rf "$GATE_TMP"
 else
     echo "SKIP: doc-drift gate-state tests (jq not installed; hook degrades silently)"
@@ -524,7 +523,7 @@ fi
 # =============================================
 # Project-root addressing (issue #22)
 #
-# The bug: hooks took the hook input's .cwd as the project root. Codex's Bash tool
+# The bug: hooks took the hook input's .cwd as the project root. Claude Code's Bash tool
 # keeps cwd across calls, so one `cd backend && pytest` left every later hook believing the
 # root was backend/. Two consequences, both silent: the metrics ledger forked per directory,
 # and doc-drift compared repo-root-relative git output against cwd-relative paths, so its
@@ -536,10 +535,10 @@ echo "--- project-root addressing ---"
 # One monorepo fixture, shaped like the report: root .git, backend/pyproject.toml.
 MONO=$(mktemp -d)
 git init -q "$MONO"
-mkdir -p "$MONO/backend/src/api" "$MONO/frontend/lib" "$MONO/.codex/metrics"
+mkdir -p "$MONO/backend/src/api" "$MONO/frontend/lib" "$MONO/.claude/metrics"
 printf '[project]\nname = "be"\n' > "$MONO/backend/pyproject.toml"
 printf '{}\n' > "$MONO/frontend/package.json"
-printf '# backend\n' > "$MONO/backend/AGENTS.md"
+printf '# backend\n' > "$MONO/backend/CLAUDE.md"
 printf 'x = 1\n' > "$MONO/backend/src/api/handler.py"
 for i in 1 2 3 4 5; do printf 'export const a%s = %s\n' "$i" "$i" > "$MONO/frontend/lib/m$i.js"; done
 GIT_Q -C "$MONO" add -A >/dev/null 2>&1
@@ -550,32 +549,32 @@ printf '%s' "{\"tool_name\":\"Edit\",\"cwd\":\"$MONO/backend\",\"tool_input\":{\
     | bash "$HOOKS_DIR/session-metrics.sh" >/dev/null 2>&1 || true
 
 assert_true "session-metrics: records land in the ROOT ledger (cwd was backend/)" \
-    bash -c "ls '$MONO/.codex/metrics/'session-*.jsonl >/dev/null 2>&1"
+    bash -c "ls '$MONO/.claude/metrics/'session-*.jsonl >/dev/null 2>&1"
 assert_true "session-metrics: no forked ledger created under backend/" \
-    bash -c "[ ! -d '$MONO/backend/.codex' ]"
+    bash -c "[ ! -d '$MONO/backend/.claude' ]"
 
 # --- session-metrics: the ledger line is exactly {ts,tool,file,layer} (v3.11.0: the
 # hook_results parse was deleted — the field is not part of the PostToolUse input) ---
 assert_true "session-metrics: emitted line has exactly the keys ts,tool,file,layer" \
-    bash -c "tail -1 '$MONO/.codex/metrics/'session-*.jsonl | python3 -c 'import json,sys; assert sorted(json.load(sys.stdin).keys())==[\"file\",\"layer\",\"tool\",\"ts\"]'"
+    bash -c "tail -1 '$MONO/.claude/metrics/'session-*.jsonl | python3 -c 'import json,sys; assert sorted(json.load(sys.stdin).keys())==[\"file\",\"layer\",\"tool\",\"ts\"]'"
 
-# --- session-metrics: a DERIVED root may not invent a .codex/ home ---
+# --- session-metrics: a DERIVED root may not invent a .claude/ home ---
 LOOSE=$(mktemp -d)
 mkdir -p "$LOOSE/pkg"
 printf '{}\n' > "$LOOSE/pkg/package.json"
 printf 'const x = 1\n' > "$LOOSE/pkg/a.js"
 printf '%s' "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$LOOSE/pkg/a.js\"}}" \
     | bash "$HOOKS_DIR/session-metrics.sh" >/dev/null 2>&1 || true
-assert_true "session-metrics: derived root (build manifest only) creates no .codex/" \
-    bash -c "[ ! -d '$LOOSE/pkg/.codex' ]"
+assert_true "session-metrics: derived root (build manifest only) creates no .claude/" \
+    bash -c "[ ! -d '$LOOSE/pkg/.claude' ]"
 rm -rf "$LOOSE"
 
-# --- \$HARNESS_PROJECT_DIR outranks a git toplevel (tier 1) ---
+# --- \$CLAUDE_PROJECT_DIR outranks a git toplevel (tier 1) ---
 ENVROOT=$(mktemp -d)
-mkdir -p "$ENVROOT/.codex"
-HARNESS_PROJECT_DIR="$ENVROOT" bash -c "printf '%s' '{\"tool_name\":\"Edit\",\"cwd\":\"$MONO/backend\",\"tool_input\":{\"file_path\":\"$MONO/backend/src/api/handler.py\"}}' | bash '$HOOKS_DIR/session-metrics.sh'" >/dev/null 2>&1 || true
-assert_true "get_project_dir: \$HARNESS_PROJECT_DIR wins over the git toplevel" \
-    bash -c "ls '$ENVROOT/.codex/metrics/'session-*.jsonl >/dev/null 2>&1"
+mkdir -p "$ENVROOT/.claude"
+CLAUDE_PROJECT_DIR="$ENVROOT" bash -c "printf '%s' '{\"tool_name\":\"Edit\",\"cwd\":\"$MONO/backend\",\"tool_input\":{\"file_path\":\"$MONO/backend/src/api/handler.py\"}}' | bash '$HOOKS_DIR/session-metrics.sh'" >/dev/null 2>&1 || true
+assert_true "get_project_dir: \$CLAUDE_PROJECT_DIR wins over the git toplevel" \
+    bash -c "ls '$ENVROOT/.claude/metrics/'session-*.jsonl >/dev/null 2>&1"
 rm -rf "$ENVROOT"
 
 # --- doc-drift: the checks that used to be silently unreachable from a subdirectory ---
@@ -584,7 +583,7 @@ mkdir -p "$MONO/newmod"
 for i in 1 2 3 4 5; do printf 'v = %s\n' "$i" > "$MONO/newmod/f$i.py"; done
 GIT_Q -C "$MONO" add -A >/dev/null 2>&1
 
-assert_output "doc-drift: check 4 fires for a nested AGENTS.md when cwd is a subdir" \
+assert_output "doc-drift: check 4 fires for a nested CLAUDE.md when cwd is a subdir" \
     "doc-drift-check.sh" \
     "{\"hook_event_name\":\"Stop\",\"cwd\":\"$MONO/backend\"}" \
     "Source files changed under 'backend/'" "yes"
@@ -592,7 +591,7 @@ assert_output "doc-drift: check 4 fires for a nested AGENTS.md when cwd is a sub
 assert_output "doc-drift: check 6 counts files under the REPO root, not cwd" \
     "doc-drift-check.sh" \
     "{\"hook_event_name\":\"Stop\",\"cwd\":\"$MONO/backend\"}" \
-    "Directory 'newmod/' has 5 files but no AGENTS.md" "yes"
+    "Directory 'newmod/' has 5 files but no CLAUDE.md" "yes"
 
 # --- doc-drift: an unresolvable root is stated, not passed off as a clean run ---
 assert_output "doc-drift: says so when the project root is unresolved" \
@@ -601,8 +600,8 @@ assert_output "doc-drift: says so when the project root is unresolved" \
     "project root unresolved" "yes"
 
 # --- doc-drift: forked ledgers left by earlier versions are named, not left invisible ---
-mkdir -p "$MONO/backend/.codex/metrics"
-printf '{"ts":"2026-08-23T00:00:00Z","tool":"Edit"}\n' > "$MONO/backend/.codex/metrics/session-2026-08-23.jsonl"
+mkdir -p "$MONO/backend/.claude/metrics"
+printf '{"ts":"2026-08-23T00:00:00Z","tool":"Edit"}\n' > "$MONO/backend/.claude/metrics/session-2026-08-23.jsonl"
 assert_output "doc-drift: names a forked metrics ledger" \
     "doc-drift-check.sh" \
     "{\"hook_event_name\":\"Stop\",\"cwd\":\"$MONO/backend\"}" \
@@ -617,13 +616,13 @@ rm -rf "$MONO"
 SYM=$(mktemp -d)
 mkdir -p "$SYM/real"
 git init -q "$SYM/real"
-mkdir -p "$SYM/real/.codex/metrics"
+mkdir -p "$SYM/real/.claude/metrics"
 printf 'a\n' > "$SYM/real/f.txt"
 GIT_Q -C "$SYM/real" add -A >/dev/null 2>&1
 GIT_Q -C "$SYM/real" commit -q -m init >/dev/null 2>&1
 ln -s "$SYM/real" "$SYM/link"
 TOTAL=$((TOTAL + 1))
-SYM_OUT=$(HARNESS_PROJECT_DIR="$SYM/link" bash -c "printf '%s' '{\"hook_event_name\":\"Stop\"}' | bash '$HOOKS_DIR/doc-drift-check.sh'" 2>&1 || true)
+SYM_OUT=$(CLAUDE_PROJECT_DIR="$SYM/link" bash -c "printf '%s' '{\"hook_event_name\":\"Stop\"}' | bash '$HOOKS_DIR/doc-drift-check.sh'" 2>&1 || true)
 if echo "$SYM_OUT" | grep -q "ledger is forked"; then
     FAIL=$((FAIL + 1)); echo "FAIL: doc-drift: symlinked root reported as its own fork"
 else
@@ -634,12 +633,12 @@ rm -rf "$SYM"
 # (b) A sibling git work tree owns its own ledger — worktree-aware, never cross-fire.
 WT=$(mktemp -d)
 git init -q "$WT"
-mkdir -p "$WT/.codex/metrics"
+mkdir -p "$WT/.claude/metrics"
 printf 'a\n' > "$WT/f.txt"
 GIT_Q -C "$WT" add -A >/dev/null 2>&1
 GIT_Q -C "$WT" commit -q -m init >/dev/null 2>&1
 GIT_Q -C "$WT" worktree add -q "$WT/.gstack-worktrees/feat-x" -b feat-x >/dev/null 2>&1 || true
-mkdir -p "$WT/.gstack-worktrees/feat-x/.codex/metrics"
+mkdir -p "$WT/.gstack-worktrees/feat-x/.claude/metrics"
 assert_output "doc-drift: a sibling work tree's ledger is not a fork" \
     "doc-drift-check.sh" \
     "{\"hook_event_name\":\"Stop\",\"cwd\":\"$WT\"}" \
@@ -647,12 +646,12 @@ assert_output "doc-drift: a sibling work tree's ledger is not a fork" \
 
 # ...but a copy inside THIS work tree still is — on a turn that changed files (v3.11.0: the
 # repo walk is skipped on idle Stops, so the gate hand-off can never be lost to a timeout).
-mkdir -p "$WT/sub/.codex/metrics"
+mkdir -p "$WT/sub/.claude/metrics"
 printf 'b\n' >> "$WT/f.txt"
 assert_output "doc-drift: a same-work-tree copy is still reported" \
     "doc-drift-check.sh" \
     "{\"hook_event_name\":\"Stop\",\"cwd\":\"$WT\"}" \
-    "sub/.codex/metrics" "yes"
+    "sub/.claude/metrics" "yes"
 rm -rf "$WT"
 
 # --- find_project_root / find_build_root: the two roots are not the same question ---
@@ -674,11 +673,11 @@ assert_true "find_build_root: nearest build manifest, i.e. the package dir" \
     bash -c "[ '$BUILD_OK' = '0' ]"
 rm -rf "$ROOTS"
 
-# --- no hook may fall back to \$(pwd), and \$HARNESS_PROJECT_DIR must be honoured somewhere ---
+# --- no hook may fall back to \$(pwd), and \$CLAUDE_PROJECT_DIR must be honoured somewhere ---
 assert_true "hooks: no PROJECT_DIR=\$(pwd) guess remains" \
     bash -c "! grep -rn 'PROJECT_DIR=\"\\\$(pwd)\"' '$HOOKS_DIR'"
-assert_true "hooks: \$HARNESS_PROJECT_DIR is consulted" \
-    bash -c "grep -rq 'HARNESS_PROJECT_DIR' '$HOOKS_DIR/lib/common.sh'"
+assert_true "hooks: \$CLAUDE_PROJECT_DIR is consulted" \
+    bash -c "grep -rq 'CLAUDE_PROJECT_DIR' '$HOOKS_DIR/lib/common.sh'"
 
 # =============================================
 # Summary
@@ -739,50 +738,50 @@ echo "--- v3.10.0: doc-drift SessionStart / termination / dirty tree ---"
 if command -v jq >/dev/null 2>&1; then
     DD_TMP=$(mktemp -d)
     (cd "$DD_TMP" && git init -q . && GIT_Q commit -q --allow-empty -m init)
-    mkdir -p "$DD_TMP/.codex/signals" "$DD_TMP/.codex/metrics" "$DD_TMP/docs/exec-plans/active"
+    mkdir -p "$DD_TMP/.claude/signals" "$DD_TMP/.claude/metrics" "$DD_TMP/docs/exec-plans/active"
     DD_SHA=$(git -C "$DD_TMP" rev-parse HEAD)
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$DD_SHA" > "$DD_TMP/.codex/signals/verify-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$DD_SHA" > "$DD_TMP/.claude/signals/verify-latest.json"
     printf '{"id":"plan-s","status":"active","tasks":[]}' > "$DD_TMP/docs/exec-plans/active/plan-s.json"
 
     SS_OUT=$(printf '%s' "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$DD_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true)
     assert_true "doc-drift SessionStart: JSON envelope with gate state + active plan in additionalContext" \
-        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"hookSpecificOutput\"][\"additionalContext\"]; assert \"next: harness-review\" in c and \"plan-s\" in c and d[\"hookSpecificOutput\"][\"hookEventName\"]==\"SessionStart\"'" _ "$SS_OUT"
+        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"hookSpecificOutput\"][\"additionalContext\"]; assert \"next: /harness-review\" in c and \"plan-s\" in c and d[\"hookSpecificOutput\"][\"hookEventName\"]==\"SessionStart\"'" _ "$SS_OUT"
 
-    rm -f "$DD_TMP/.codex/signals/verify-latest.json" "$DD_TMP/docs/exec-plans/active/plan-s.json"
+    rm -f "$DD_TMP/.claude/signals/verify-latest.json" "$DD_TMP/docs/exec-plans/active/plan-s.json"
     SS_CLEAN=$(printf '%s' "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$DD_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true)
     assert_true "doc-drift SessionStart: zero bytes when no signal and no plan" test -z "$SS_CLEAN"
 
-    # termination sensor: 3 consecutive RED with identical reason ⇒ escalation, not another verify
-    printf '%s\n' '{"decision":"RED","reason":"3 tests failed"}' '{"decision":"RED","reason":"3 tests failed"}' '{"decision":"RED","reason":"3 tests failed"}' > "$DD_TMP/.codex/metrics/verify.jsonl"
+    # termination sensor: 3 consecutive RED with identical reason ⇒ escalation, not another /verify
+    printf '%s\n' '{"decision":"RED","reason":"3 tests failed"}' '{"decision":"RED","reason":"3 tests failed"}' '{"decision":"RED","reason":"3 tests failed"}' > "$DD_TMP/.claude/metrics/verify.jsonl"
     assert_output "doc-drift Stop: 3 RED same reason trips the termination sensor" \
         "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
         "not converging" "yes"
-    printf '%s\n' '{"decision":"RED","reason":"a"}' '{"decision":"RED","reason":"b"}' '{"decision":"RED","reason":"a"}' > "$DD_TMP/.codex/metrics/verify.jsonl"
+    printf '%s\n' '{"decision":"RED","reason":"a"}' '{"decision":"RED","reason":"b"}' '{"decision":"RED","reason":"a"}' > "$DD_TMP/.claude/metrics/verify.jsonl"
     assert_output "doc-drift Stop: 3 RED different reasons does NOT trip" \
         "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
         "not converging" "no"
     run_test "doc-drift Stop: termination sensor never blocks (exit 0)" \
         "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" 0
-    rm -f "$DD_TMP/.codex/metrics/verify.jsonl"
+    rm -f "$DD_TMP/.claude/metrics/verify.jsonl"
 
-    # dirty tree at the APPROVE advance point (our own .codex/ state never counts as dirt)
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$DD_SHA" > "$DD_TMP/.codex/signals/verify-latest.json"
-    printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$DD_SHA" > "$DD_TMP/.codex/signals/review-latest.json"
-    assert_output "doc-drift Stop: GREEN + APPROVE on a clean tree (only .codex/ untracked) reports release readiness" \
+    # dirty tree at the APPROVE advance point (our own .claude/ state never counts as dirt)
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$DD_SHA" > "$DD_TMP/.claude/signals/verify-latest.json"
+    printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$DD_SHA" > "$DD_TMP/.claude/signals/review-latest.json"
+    assert_output "doc-drift Stop: GREEN + APPROVE on a clean tree (only .claude/ untracked) nudges /ship" \
         "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
-        "RELEASE GATE: pass" "yes"
+        "next: gstack /ship" "yes"
     printf 'x=1\n' > "$DD_TMP/new-source.py"
     assert_output "doc-drift Stop: APPROVE with an untracked source file WARNs instead" \
         "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" \
         "uncommitted changes since the verdict" "yes"
-    assert_true "worktree_dirty: ignores .codex/ and .gstack/, sees source" \
+    assert_true "worktree_dirty: ignores .claude/ and .gstack/, sees source" \
         bash -c "source '$COMMON_SH'; rm -f '$DD_TMP/new-source.py'; ! worktree_dirty '$DD_TMP' && printf 'y\n' > '$DD_TMP/z.txt' && worktree_dirty '$DD_TMP'"
 
     # the v3.9 handoff writer is gone: a Stop with changed files writes nothing
     (cd "$DD_TMP" && git add z.txt && GIT_Q commit -q -m two && printf 'z\n' >> z.txt)
     printf '%s' "{\"hook_event_name\":\"Stop\",\"cwd\":\"$DD_TMP\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" >/dev/null 2>&1 || true
     assert_true "doc-drift: writes no handoff-<branch>.json (deleted v3.10.0)" \
-        bash -c "! ls '$DD_TMP'/.codex/metrics/handoff-* >/dev/null 2>&1"
+        bash -c "! ls '$DD_TMP'/.claude/metrics/handoff-* >/dev/null 2>&1"
     rm -rf "$DD_TMP"
 else
     echo "SKIP: v3.10.0 doc-drift tests (jq not installed; hook degrades silently)"
@@ -818,7 +817,7 @@ assert_true "hooks.json: session-metrics.sh has no Bash-matcher registration (v3
 assert_true "hooks: no hook parses the undocumented hook_results field" \
     bash -c "! grep -hvE '^[[:space:]]*#' '$HOOKS_DIR'/*.sh | grep -qE 'hook_results|hook_durations|blocked_by'"
 assert_true "hooks.json: doc-drift-check bound to SessionStart" \
-    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/hooks.json\"))[\"hooks\"]; assert any(\"doc-drift-check.sh\" in x[\"command\"] for e in h[\"SessionStart\"] for x in e[\"hooks\"])'"
+    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/hooks.json\"))[\"hooks\"]; assert any(x[\"command\"].endswith(\"doc-drift-check.sh\") for e in h[\"SessionStart\"] for x in e[\"hooks\"])'"
 
 
 # =============================================
@@ -831,18 +830,18 @@ echo "--- v3.11.0: signal_fresh (the ONE freshness predicate) ---"
 
 SF_TMP=$(mktemp -d)
 (cd "$SF_TMP" && git init -q . && GIT_Q commit -q --allow-empty -m init)
-mkdir -p "$SF_TMP/.codex/signals" "$SF_TMP/gs/bin"
-printf '.codex/signals/\n.codex/metrics/\n' > "$SF_TMP/.gitignore"
+mkdir -p "$SF_TMP/.claude/signals" "$SF_TMP/gs/bin"
+printf '.claude/signals/\n.claude/metrics/\n' > "$SF_TMP/.gitignore"
 (cd "$SF_TMP" && git add .gitignore && GIT_Q commit -q -m ignore)
 SF_SHA=$(git -C "$SF_TMP" rev-parse HEAD)
 sf() { bash -c "set -u; source '$COMMON_SH'; GSTACK_PATH='$SF_TMP/gs'; signal_fresh \"\$@\"" _ "$@"; }
 export COMMON_SH SF_TMP; export -f sf   # assert_true runs its condition in a child bash
 assert_true "signal_fresh: absent ⇒ token 'absent', rc 1" \
     bash -c "[ \"\$(sf '$SF_TMP' verify-latest.json)\" = absent ]" 
-printf '{"schema_version":2,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$SF_SHA" > "$SF_TMP/.codex/signals/verify-latest.json"
+printf '{"schema_version":2,"decision":"GREEN","commit":"%s"}' "$SF_SHA" > "$SF_TMP/.claude/signals/verify-latest.json"
 assert_true "signal_fresh: unknown schema_version ⇒ 'schema' (default-deny)" \
     bash -c "[ \"\$(sf '$SF_TMP' verify-latest.json)\" = schema ]"
-printf '{"schema_version":1,"decision":"RED","commit":"%s"}' "$SF_SHA" > "$SF_TMP/.codex/signals/verify-latest.json"
+printf '{"schema_version":1,"decision":"RED","commit":"%s"}' "$SF_SHA" > "$SF_TMP/.claude/signals/verify-latest.json"
 assert_true "signal_fresh: decision mismatch ⇒ 'decision:RED'" \
     bash -c "[ \"\$(sf '$SF_TMP' verify-latest.json GREEN)\" = decision:RED ]"
 assert_true "signal_fresh: fresh RED at HEAD ⇒ rc 0, no token" \
@@ -853,12 +852,12 @@ assert_true "signal_fresh: --advance on a dirty tree ⇒ 'stale:dirty'" \
 assert_true "signal_fresh: without --advance mid-session dirt is not staleness" \
     bash -c "[ -z \"\$(sf '$SF_TMP' verify-latest.json)\" ]"
 rm -f "$SF_TMP/src.py"
-printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"old-sha"}' > "$SF_TMP/.codex/signals/verify-latest.json"
+printf '{"schema_version":1,"decision":"GREEN","commit":"old-sha"}' > "$SF_TMP/.claude/signals/verify-latest.json"
 assert_true "signal_fresh: commit != HEAD and no wtree ⇒ 'stale:commit' (the permanent gstack-absent path)" \
     bash -c "[ \"\$(sf '$SF_TMP' verify-latest.json)\" = stale:commit ]"
 # wtree: a fake gstack-wtree under GSTACK_PATH (signal_fresh calls $GSTACK_PATH/bin/gstack-wtree, never PATH)
 printf '#!/bin/sh\necho H1\n' > "$SF_TMP/gs/bin/gstack-wtree"; chmod +x "$SF_TMP/gs/bin/gstack-wtree"
-printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"old-sha","wtree":"H1"}' > "$SF_TMP/.codex/signals/verify-latest.json"
+printf '{"schema_version":1,"decision":"GREEN","commit":"old-sha","wtree":"H1"}' > "$SF_TMP/.claude/signals/verify-latest.json"
 assert_true "signal_fresh: commit != HEAD but wtree matches the live fingerprint ⇒ fresh" \
     bash -c "[ -z \"\$(sf '$SF_TMP' verify-latest.json GREEN --advance)\" ]"
 printf '#!/bin/sh\necho H2\n' > "$SF_TMP/gs/bin/gstack-wtree"
@@ -868,7 +867,7 @@ rm -f "$SF_TMP/gs/bin/gstack-wtree"
 assert_true "signal_fresh: gstack binary absent ⇒ commit path decides ('stale:commit')" \
     bash -c "[ \"\$(sf '$SF_TMP' verify-latest.json)\" = stale:commit ]"
 assert_true "producers may stamp wtree only when the ledger dirs are gitignored (check-ignore succeeds on a not-yet-existing path)" \
-    bash -c "cd '$SF_TMP' && git check-ignore -q .codex/signals/review-latest.json && git check-ignore -q .codex/metrics/verify.jsonl"
+    bash -c "cd '$SF_TMP' && git check-ignore -q .claude/signals/review-latest.json && git check-ignore -q .claude/metrics/verify.jsonl"
 rm -rf "$SF_TMP"
 
 echo "--- v3.11.0: gate ladder rungs (SessionStart = model, Stop = human) ---"
@@ -876,16 +875,16 @@ echo "--- v3.11.0: gate ladder rungs (SessionStart = model, Stop = human) ---"
 if command -v jq >/dev/null 2>&1; then
     GL=$(mktemp -d)
     (cd "$GL" && git init -q . && GIT_Q commit -q --allow-empty -m init)
-    mkdir -p "$GL/.codex/signals" "$GL/.codex/metrics" "$GL/docs/exec-plans/active"
+    mkdir -p "$GL/.claude/signals" "$GL/.claude/metrics" "$GL/docs/exec-plans/active"
     GL_SHA=$(git -C "$GL" rev-parse HEAD)
     gl_ss() { printf '%s' "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$GL\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true; }
     gl_stop() { printf '%s' "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GL\"}" | bash "$HOOKS_DIR/doc-drift-check.sh" 2>/dev/null || true; }
 
-    # RED verify + NEWER fresh APPROVE review: the pre-WI-05 bug named /ship; now it names verify with the first failure
-    printf '{"schema_version":1,"decision":"RED","commit":"%s","reason":"3 tests failed"}' "$GL_SHA" > "$GL/.codex/signals/verify-latest.json"
-    printf '%s\n' '{"decision":"RED","reason":"3 tests failed","failures":[{"check":"test","id":"test_auth_login","task_id":"task-2","message":"3 tests failed"}]}' > "$GL/.codex/metrics/verify.jsonl"
+    # RED verify + NEWER fresh APPROVE review: the pre-WI-05 bug named /ship; now it names /verify with the first failure
+    printf '{"schema_version":1,"decision":"RED","commit":"%s","reason":"3 tests failed"}' "$GL_SHA" > "$GL/.claude/signals/verify-latest.json"
+    printf '%s\n' '{"decision":"RED","reason":"3 tests failed","failures":[{"check":"test","id":"test_auth_login","task_id":"task-2","message":"3 tests failed"}]}' > "$GL/.claude/metrics/verify.jsonl"
     sleep 0.01 2>/dev/null || sleep 1
-    printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$GL_SHA" > "$GL/.codex/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$GL_SHA" > "$GL/.claude/signals/review-latest.json"
     OUT=$(gl_stop)
     assert_true "ladder: fresh RED + newer fresh APPROVE ⇒ 'verify is not GREEN at HEAD', never /ship" \
         bash -c "printf '%s' \"\$1\" | grep -q 'verify is not GREEN at HEAD' && ! printf '%s' \"\$1\" | grep -q '/ship'" _ "$OUT"
@@ -893,22 +892,22 @@ if command -v jq >/dev/null 2>&1; then
         bash -c "printf '%s' \"\$1\" | grep -q 'test_auth_login'" _ "$OUT"
 
     # RED alone (no newer review) at SessionStart: additionalContext starts with Gate state + failures[0].id
-    rm -f "$GL/.codex/signals/review-latest.json"
+    rm -f "$GL/.claude/signals/review-latest.json"
     OUT=$(gl_ss)
     assert_true "ladder: fresh RED ⇒ SessionStart additionalContext starts with 'Gate state:' and names failures[0].id" \
         bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; c=json.load(sys.stdin)[\"hookSpecificOutput\"][\"additionalContext\"]; assert c.startswith(\"Gate state: verify RED\") and \"test_auth_login\" in c'" _ "$OUT"
 
     # stale RED (commit != HEAD): a WARN, and the failure id never rides a stale signal
-    printf '{"schema_version":1,"decision":"RED","commit":"stale-sha","reason":"3 tests failed"}' > "$GL/.codex/signals/verify-latest.json"
+    printf '{"schema_version":1,"decision":"RED","commit":"stale-sha","reason":"3 tests failed"}' > "$GL/.claude/signals/verify-latest.json"
     OUT=$(gl_stop)
     assert_true "ladder: stale RED ⇒ 'is stale' and no failure id" \
         bash -c "printf '%s' \"\$1\" | grep -q 'is stale' && ! printf '%s' \"\$1\" | grep -q 'test_auth_login'" _ "$OUT"
 
     # REQUEST_CHANGES with typed findings[]: first fixes reach the model at SessionStart, the human at Stop
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$GL_SHA" > "$GL/.codex/signals/verify-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$GL_SHA" > "$GL/.claude/signals/verify-latest.json"
     sleep 0.01 2>/dev/null || sleep 1
-    printf '{"schema_version":1,"decision":"REQUEST_CHANGES","commit":"%s"}' "$GL_SHA" > "$GL/.codex/signals/review-latest.json"
-    printf '%s\n' '{"decision":"REQUEST_CHANGES","findings":[{"fingerprint":"src/a.ts:42:slop","severity":"P0","tag":"[HARNESS]","fix":"dedupe"}]}' > "$GL/.codex/metrics/reviews.jsonl"
+    printf '{"schema_version":1,"decision":"REQUEST_CHANGES","commit":"%s"}' "$GL_SHA" > "$GL/.claude/signals/review-latest.json"
+    printf '%s\n' '{"decision":"REQUEST_CHANGES","findings":[{"fingerprint":"src/a.ts:42:slop","severity":"P0","tag":"[HARNESS]","fix":"dedupe"}]}' > "$GL/.claude/metrics/reviews.jsonl"
     OUT=$(gl_ss)
     assert_true "ladder: REQUEST_CHANGES ⇒ SessionStart names findings[0].fingerprint" \
         bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; c=json.load(sys.stdin)[\"hookSpecificOutput\"][\"additionalContext\"]; assert c.startswith(\"Gate state: review REQUEST_CHANGES\") and \"src/a.ts:42:slop\" in c'" _ "$OUT"
@@ -917,27 +916,27 @@ if command -v jq >/dev/null 2>&1; then
         bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"src/a.ts:42:slop\" in d[\"systemMessage\"] and \"hookSpecificOutput\" not in d'" _ "$OUT"
 
     # hard NEEDS_HUMAN: no automated step named
-    printf '{"schema_version":1,"decision":"NEEDS_HUMAN","needs_human_kind":"arch-ambiguity","commit":"%s"}' "$GL_SHA" > "$GL/.codex/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"NEEDS_HUMAN","needs_human_kind":"arch-ambiguity","commit":"%s"}' "$GL_SHA" > "$GL/.claude/signals/review-latest.json"
     OUT=$(gl_stop)
-    assert_true "ladder: NEEDS_HUMAN (arch-ambiguity) ⇒ 'human decision required', no harness-review or /ship" \
-        bash -c "printf '%s' \"\$1\" | grep -q 'human decision required' && ! printf '%s' \"\$1\" | grep -qE 'harness-review|/ship'" _ "$OUT"
+    assert_true "ladder: NEEDS_HUMAN (arch-ambiguity) ⇒ 'human decision required', no /harness-review or /ship" \
+        bash -c "printf '%s' \"\$1\" | grep -q 'human decision required' && ! printf '%s' \"\$1\" | grep -qE '/harness-review|/ship'" _ "$OUT"
 
     # YELLOW
-    rm -f "$GL/.codex/signals/review-latest.json"
-    printf '{"schema_version":1,"decision":"YELLOW","commit":"%s","reason":"acceptance unconfirmed: task-3"}' "$GL_SHA" > "$GL/.codex/signals/verify-latest.json"
-    assert_output "ladder: fresh YELLOW ⇒ confirm or fix, then verify" \
+    rm -f "$GL/.claude/signals/review-latest.json"
+    printf '{"schema_version":1,"decision":"YELLOW","commit":"%s","reason":"acceptance unconfirmed: task-3"}' "$GL_SHA" > "$GL/.claude/signals/verify-latest.json"
+    assert_output "ladder: fresh YELLOW ⇒ confirm or fix, then /verify" \
         "doc-drift-check.sh" "{\"hook_event_name\":\"Stop\",\"cwd\":\"$GL\"}" "verify YELLOW (acceptance unconfirmed: task-3)" "yes"
 
-    # plan rung: active plan with in-progress work and no verify at HEAD ⇒ verify --plan <id>
-    rm -f "$GL/.codex/signals/"* "$GL/.codex/metrics/"*
+    # plan rung: active plan with in-progress work and no verify at HEAD ⇒ /verify --plan <id>
+    rm -f "$GL/.claude/signals/"* "$GL/.claude/metrics/"*
     printf '{"id":"plan-x","status":"active","tasks":[{"id":"t-1","status":"in-progress"}]}' > "$GL/docs/exec-plans/active/plan-x.json"
     OUT=$(gl_ss)
-    assert_true "ladder: active plan with in-progress tasks and no verify ⇒ 'next: verify --plan plan-x' (execute→verify push)" \
-        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; c=json.load(sys.stdin)[\"hookSpecificOutput\"][\"additionalContext\"]; assert \"next: verify --plan plan-x\" in c and \"continue it or run lifecycle next\" not in c'" _ "$OUT"
+    assert_true "ladder: active plan with in-progress tasks and no verify ⇒ 'next: /verify --plan plan-x' (execute→verify push)" \
+        bash -c "printf '%s' \"\$1\" | python3 -c 'import json,sys; c=json.load(sys.stdin)[\"hookSpecificOutput\"][\"additionalContext\"]; assert \"next: /verify --plan plan-x\" in c and \"continue it or run /lifecycle next\" not in c'" _ "$OUT"
     sleep 0.01 2>/dev/null || sleep 1
-    printf '{"schema_version":1,"decision":"GREEN","scope":"all","checks":{"build":"PASS","test":"PASS","lint":"PASS","arch":"PASS"},"commit":"%s"}' "$GL_SHA" > "$GL/.codex/signals/verify-latest.json"
+    printf '{"schema_version":1,"decision":"GREEN","commit":"%s"}' "$GL_SHA" > "$GL/.claude/signals/verify-latest.json"
     assert_output "ladder: a verify newer than the plan silences the plan rung" \
-        "doc-drift-check.sh" "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$GL\"}" "verify --plan" "no"
+        "doc-drift-check.sh" "{\"hook_event_name\":\"SessionStart\",\"cwd\":\"$GL\"}" "/verify --plan" "no"
     rm -rf "$GL"
 else
     echo "SKIP: v3.11.0 ladder tests (jq not installed; hook degrades silently)"

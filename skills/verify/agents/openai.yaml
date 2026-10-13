@@ -1,6 +1,0 @@
-interface:
-  display_name: "Verify"
-  short_description: "Run project build, tests, lint and architecture checks, then save a GREEN/YELLOW/RED decis"
-  default_prompt: "Use $oh-my-agents:verify for this project."
-policy:
-  allow_implicit_invocation: true

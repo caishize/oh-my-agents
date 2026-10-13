@@ -38,7 +38,7 @@ signal. The bright-line constraint (enforced by the gstack-overlap + native crit
 > decision, never a write to gstack paths. **Agree ⇒ pass through. Diverge ⇒
 > `NEEDS_HUMAN:judgment-slop`.** Absent ⇒ graceful degrade, our signal stands alone.
 
-Contract: [SIGNALS.md](../SIGNALS.md#reconciliation-with-gstack-v1575-native-verdicts).
+Contract: [SIGNALS.md](SIGNALS.md#reconciliation-with-gstack-v1575-native-verdicts).
 `gstack_context` is optional ⇒ `schema_version` stays `1`.
 
 ## Changes shipped (v3.8.0)

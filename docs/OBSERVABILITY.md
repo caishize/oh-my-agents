@@ -1,19 +1,40 @@
 # Observability
 
-The harness records evidence whose readers are explicit:
+Runtime observability configuration for agent-driven development.
 
-| Record | Writer | Reader |
-|---|---|---|
-| .codex/metrics/session-<date>.jsonl | PostToolUse adapter → session-metrics.sh | dashboard layer balance |
-| .codex/metrics/verify.jsonl | accountable $oh-my-agents:verify, locked append | lifecycle, dashboard, recurrence sensor |
-| .codex/metrics/reviews.jsonl | accountable $oh-my-agents:harness-review, locked append | lifecycle, dashboard, typed fixes |
-| .codex/metrics/legibility.jsonl | requested scoring run | dashboard comparisons |
-| .codex/signals/*-latest.json | verifier/reviewer | gate ladder, lifecycle, explicit gate |
+## App Bootstrap
+<!-- How to start the app for verification -->
+```bash
+[startup command]
+```
 
-Session metrics are UTC timestamp/tool/file/layer observations. They cover native patch
-edits only; shell writes and hosts without command hooks are incomplete coverage. Counts
-are not a productivity score. Codex's own telemetry is separate and is never enabled by
-this plugin. Missing or malformed data is unknown, not zero or passing.
+### Health Check
+- URL: [health endpoint]
+- Expected: [response]
+- Startup time target: [ms]
 
-Optional gstack timeline and deployment reports are read-only sources; report approximations
-as proxies with provenance. Do not copy credential values or command payloads into metrics.
+## Logging
+- Logger: [pino/winston/etc]
+- Format: structured JSON
+- Access via Providers interface (never direct console.log)
+
+## Metrics Collection
+Session metrics are automatically collected by the `session-metrics.sh` hook.
+Stored in `.claude/metrics/session-{date}.jsonl` at the **project root** — one ledger per
+project, addressed off the resolved root rather than the session's current directory, so a
+monorepo does not accumulate a per-package copy that no dashboard reads.
+View with `/harness-dashboard` or `/harness-dashboard --query`.
+
+## Verification Patterns
+- API endpoint test: `curl localhost:PORT/health`
+- Visual verification: Use Playwright MCP for screenshots
+- Log verification: `tail -f logs/app.log | grep ERROR`
+
+## Native telemetry vs the harness ledger (decided 2026-09-11)
+
+Tool-level telemetry — tool names, durations, accept/reject decisions, tokens, cost — is
+native OpenTelemetry's (`CLAUDE_CODE_ENABLE_TELEMETRY=1`), exported to a collector the
+repository cannot read. `.claude/metrics/session-*.jsonl` carries only the per-edit
+architecture LAYER classification native has no concept of (`{ts,tool,file,layer}`, Edit|Write
+only); `verify.jsonl` / `reviews.jsonl` carry the typed decision history (`failures[]` /
+`findings[]`). Nothing here duplicates a native metric.

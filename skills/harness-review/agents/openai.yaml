@@ -1,6 +1,0 @@
-interface:
-  display_name: "Harness Review"
-  short_description: "Independently review changes against architecture, documentation, observability and entrop"
-  default_prompt: "Use $oh-my-agents:harness-review for this project."
-policy:
-  allow_implicit_invocation: true

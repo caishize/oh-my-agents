@@ -12,7 +12,7 @@
   },
   "providers_path": null,
   "file_size_limit": 300,
-  "nested_agents_md_threshold": 5,
+  "nested_claude_md_threshold": 5,
   "plan_stale_days": 7,
   "sibling_layers": []
 }

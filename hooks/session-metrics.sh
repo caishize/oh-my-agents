@@ -10,8 +10,8 @@
 # not part of the PostToolUse input contract and never arrived. The Bash-leg registration went
 # with it (it wrote {tool:"Bash",file:"",layer:""} lines nobody read).
 #
-# Input: JSON on stdin from Codex
-# Output: Appends one line to .codex/metrics/session-{date}.jsonl
+# Input: JSON on stdin from Claude Code
+# Output: Appends one line to .claude/metrics/session-{date}.jsonl
 # Always exits 0 (never blocks).
 
 set -euo pipefail
@@ -51,7 +51,7 @@ fi
 # --- Determine metrics directory ---
 # ONE ledger per project, addressed off the project root (common.sh get_project_dir) — never
 # off the session cwd. Addressing off cwd used to fork the ledger: `cd backend` once and this
-# hook created backend/.codex/metrics/, after which the marker walk found that copy first
+# hook created backend/.claude/metrics/, after which the marker walk found that copy first
 # and routed the whole subtree into it. The fork is invisible (all of it gitignored) and
 # self-reinforcing, so the fix is at both ends: address off the root, and create a ledger
 # only under an authoritative root (resolve_metrics_dir).
@@ -72,7 +72,7 @@ METRICS_FILE="${METRICS_DIR}/session-${DATE_PART}.jsonl"
 # Build JSON without jq for speed — exactly {ts,tool,file,layer}
 LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"}"
 
-# Use flock to prevent JSONL corruption from parallel Codex sessions (gstack Conductor)
+# Use flock to prevent JSONL corruption from parallel Claude Code sessions (gstack Conductor)
 LOCK_FILE="${METRICS_FILE}.lock"
 if command -v flock >/dev/null 2>&1; then
     (flock -w 2 200 && echo "$LINE" >> "$METRICS_FILE") 200>"$LOCK_FILE" 2>/dev/null || \

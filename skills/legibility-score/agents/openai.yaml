@@ -1,6 +1,0 @@
-interface:
-  display_name: "Legibility Score"
-  short_description: "Assess how well repository instructions, commands, architecture and evidence support Codex"
-  default_prompt: "Use $oh-my-agents:legibility-score for this project."
-policy:
-  allow_implicit_invocation: true
