@@ -1,0 +1,6 @@
+interface:
+  display_name: "Lifecycle"
+  short_description: "Read execution plans and fresh verification/review decisions, then name the next Codex ski"
+  default_prompt: "Use $oh-my-agents:lifecycle for this project."
+policy:
+  allow_implicit_invocation: true

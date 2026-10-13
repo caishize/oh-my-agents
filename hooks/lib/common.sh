@@ -11,14 +11,14 @@
 #   get_file_path       — extract .tool_input.file_path from $INPUT
 #   get_content         — extract content + new_string from $INPUT
 #   get_command         — extract .tool_input.command from $INPUT (for Bash hooks)
-#   find_harness_json <start-dir> — walk up to find .claude/harness.json
+#   find_harness_json <start-dir> — walk up to find .codex/harness.json
 #   load_harness_config <harness-file> — load providers_path and layer_dirs
 #   resolve_layer <path> — return layer name for a file path (uses harness.json + fallback)
 #   resolve_layer_index <path> — return numeric layer index (0-5, or -1)
 #   layer_name_to_index <name> — convert layer name to index
 #   add_violation <msg>  — append to $VIOLATIONS (caller must declare VIOLATIONS="")
 #   get_project_dir [hint] — SETS PROJECT_DIR + PROJECT_DIR_SOURCE (never addresses off cwd)
-#   find_project_root <path> — walk up to a VCS/.claude/build marker
+#   find_project_root <path> — walk up to a VCS/.codex/build marker
 #   find_build_root <path> — walk up to the nearest build manifest (monorepo package dir)
 #   resolve_metrics_dir <root> <source> — SETS METRICS_DIR; creates only under env|git roots
 #   harness_root        — project root for SKILL.md snippets (no hook stdin); echoes "." last
@@ -30,8 +30,12 @@
 # --- Input ---
 
 read_input() {
-    # Limit stdin to 100KB to prevent hooks from stalling on large Write payloads
-    INPUT=$(head -c 102400)
+    # Match the adapter limit. A truncated JSON payload must never silently skip checks.
+    INPUT=$(head -c 8388609)
+    if [ "${#INPUT}" -gt 8388608 ]; then
+        echo 'Hook input exceeds 8 MiB; split the edit and retry.' >&2
+        exit 2
+    fi
     # Ensure INPUT is never unset (set -u would kill downstream json_get calls)
     INPUT="${INPUT:-}"
 }
@@ -66,8 +70,8 @@ get_content() {
 
 get_command() {
     json_get \
-        '.tool_input.command // ""' \
-        "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))"
+        '.tool_input.command // .tool_input.cmd // ""' \
+        "import sys,json; d=json.load(sys.stdin).get('tool_input',{}); print(d.get('command',d.get('cmd','')))"
 }
 
 get_tool_name() {
@@ -87,21 +91,21 @@ get_cwd() {
 
 # --- Project root resolution ---
 #
-# The hook input's `.cwd` is "wherever the last `cd` left the session" — Claude Code's Bash
+# The hook input's `.cwd` is "wherever the last `cd` left the session" — Codex's Bash
 # tool keeps cwd across calls by design, so one `cd backend && pytest` makes every later hook
 # believe the project root is backend/. Addressing off it forks the metrics ledger and mixes
 # path systems (repo-relative git output vs. cwd-relative paths) into comparisons that then
 # never match. One fixed order instead, most authoritative first:
 #
-#   1. $CLAUDE_PROJECT_DIR       — the harness states the root; nothing beats it
+#   1. $HARNESS_PROJECT_DIR       — the harness states the root; nothing beats it
 #   2. git toplevel of `.cwd`    — a fact about the tree, not about where we stand
-#   3. marker walk from a file   — VCS/.claude first, build manifests last
+#   3. marker walk from a file   — VCS/.codex first, build manifests last
 #   4. empty                     — callers exit 0 (see get_cwd's contract); never guess
 #
 # PROJECT_DIR_SOURCE records WHICH tier answered, because that decides what a caller may
 # create. AUTHORITATIVE: `env` (tier 1) and `git` (tier 2, or a tier-3 walk that hit a real
 # VCS root — the same fact, reached from the file instead of from cwd). DERIVED: `marker`
-# (tier 3 landing on `.claude/` or a bare build manifest) — a build manifest marks a monorepo
+# (tier 3 landing on `.codex/` or a bare build manifest) — a build manifest marks a monorepo
 # *package*, not a project. See resolve_metrics_dir: creating a ledger has to follow from
 # KNOWING the root, never from where the process happens to stand.
 
@@ -109,7 +113,7 @@ PROJECT_DIR="${PROJECT_DIR:-}"
 PROJECT_DIR_SOURCE="${PROJECT_DIR_SOURCE:-}"
 
 # Resolve a directory to its physical path. Roots reached by different routes
-# ($CLAUDE_PROJECT_DIR through a symlink vs. `git rev-parse` through the real path) must
+# ($HARNESS_PROJECT_DIR through a symlink vs. `git rev-parse` through the real path) must
 # compare equal, or the same directory reads as two — which would make a hook report the
 # project's own ledger as a stray copy. Always succeeds; echoes the input on failure.
 _canonical_dir() {
@@ -141,7 +145,7 @@ find_project_root() {
         if [ -z "$vcs" ] && { [ -e "${dir}/.git" ] || [ -d "${dir}/.hg" ] || [ -d "${dir}/.svn" ]; }; then
             vcs="$dir"
         fi
-        if [ -z "$harness" ] && [ -d "${dir}/.claude" ]; then
+        if [ -z "$harness" ] && [ -d "${dir}/.codex" ]; then
             harness="$dir"
         fi
         if [ -z "$build" ] && { [ -f "${dir}/package.json" ] || [ -f "${dir}/pyproject.toml" ] || \
@@ -196,8 +200,8 @@ get_project_dir() {
     PROJECT_DIR=""
     PROJECT_DIR_SOURCE=""
 
-    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
-        _set_project_dir "$CLAUDE_PROJECT_DIR" "env"
+    if [ -n "${HARNESS_PROJECT_DIR:-}" ] && [ -d "${HARNESS_PROJECT_DIR}" ]; then
+        _set_project_dir "$HARNESS_PROJECT_DIR" "env"
         return 0
     fi
 
@@ -232,25 +236,25 @@ get_project_dir() {
 }
 
 # Resolve the metrics ledger directory under a project root.
-# The ledger fork this guards against is self-reinforcing: once `backend/.claude/` exists,
+# The ledger fork this guards against is self-reinforcing: once `backend/.codex/` exists,
 # every later marker walk finds it first and routes that whole subtree into the copy. So:
-#   - an existing ledger (or an existing `.claude/`) is always appended to
+#   - an existing ledger (or an existing `.codex/`) is always appended to
 #   - a missing one is CREATED only under an authoritative root (env|git)
-#   - a derived root with no `.claude/` gets nothing — no home is invented
+#   - a derived root with no `.codex/` gets nothing — no home is invented
 # Sets: METRICS_DIR ("" when the ledger may not be created). Returns 0 on success.
 resolve_metrics_dir() {
     local root="${1:-}"
     local source="${2:-}"
     METRICS_DIR=""
     [ -z "$root" ] && return 1
-    local dir="${root%/}/.claude/metrics"
+    local dir="${root%/}/.codex/metrics"
     if [ -d "$dir" ]; then
         METRICS_DIR="$dir"
         return 0
     fi
     case "$source" in
         env|git) : ;;
-        *) [ -d "${root%/}/.claude" ] || return 1 ;;
+        *) [ -d "${root%/}/.codex" ] || return 1 ;;
     esac
     mkdir -p "$dir" 2>/dev/null || return 1
     METRICS_DIR="$dir"
@@ -258,18 +262,18 @@ resolve_metrics_dir() {
 }
 
 # The project root for callers that have no hook stdin — SKILL.md snippets, and the
-# repo-local probes below (`.claude/skills`, `.claude/integration.json`). Same order as
+# repo-local probes below (`.claude/skills`, `.codex/integration.json`). Same order as
 # get_project_dir minus the hook-input tier: an already-resolved $PROJECT_DIR, then
-# $CLAUDE_PROJECT_DIR, then the git toplevel of the process cwd, then ".". A bare relative
-# `.claude/...` path would resolve against "wherever the last cd left us" — the same bug in
-# miniature, and the reason every skill that writes into `.claude/` anchors on this.
+# $HARNESS_PROJECT_DIR, then the git toplevel of the process cwd, then ".". A bare relative
+# `.codex/...` path would resolve against "wherever the last cd left us" — the same bug in
+# miniature, and the reason every skill that writes into `.codex/` anchors on this.
 harness_root() {
     if [ -n "${PROJECT_DIR:-}" ] && [ -d "${PROJECT_DIR}" ]; then
         echo "${PROJECT_DIR%/}"
         return 0
     fi
-    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
-        echo "${CLAUDE_PROJECT_DIR%/}"
+    if [ -n "${HARNESS_PROJECT_DIR:-}" ] && [ -d "${HARNESS_PROJECT_DIR}" ]; then
+        echo "${HARNESS_PROJECT_DIR%/}"
         return 0
     fi
     local top
@@ -290,15 +294,15 @@ PROVIDERS_PATH=""
 HARNESS_LAYER_DIRS=""
 SIBLING_LAYERS=""
 
-# Walk up from a directory to find .claude/harness.json
+# Walk up from a directory to find .codex/harness.json
 # Sets: HARNESS_FILE, HARNESS_ROOT
 find_harness_json() {
     local search_dir="$1"
     HARNESS_FILE=""
     HARNESS_ROOT=""
     while [ "$search_dir" != "/" ] && [ "$search_dir" != "." ]; do
-        if [ -f "${search_dir}/.claude/harness.json" ]; then
-            HARNESS_FILE="${search_dir}/.claude/harness.json"
+        if [ -f "${search_dir}/.codex/harness.json" ]; then
+            HARNESS_FILE="${search_dir}/.codex/harness.json"
             HARNESS_ROOT="$search_dir"
             return 0
         fi
@@ -322,9 +326,9 @@ load_harness_config() {
         HARNESS_LAYER_DIRS=$(jq -r '.layer_dirs // .target_layer_model.default_layer_dirs // empty' "$harness_file" 2>/dev/null || echo "")
         SIBLING_LAYERS=$(jq -r '(.sibling_layers // []) | .[]' "$harness_file" 2>/dev/null | tr '\n' ',' || echo "")
     elif command -v python3 >/dev/null 2>&1; then
-        PROVIDERS_PATH=$(python3 -c "import json; print(json.load(open('${harness_file}')).get('providers_path',''))" 2>/dev/null || echo "")
-        HARNESS_LAYER_DIRS=$(python3 -c "import json; c=json.load(open('${harness_file}')); d=c.get('layer_dirs') or c.get('target_layer_model',{}).get('default_layer_dirs',{}); print(json.dumps(d) if d else '')" 2>/dev/null || echo "")
-        SIBLING_LAYERS=$(python3 -c "import json; print(','.join(json.load(open('${harness_file}')).get('sibling_layers',[])))" 2>/dev/null || echo "")
+        PROVIDERS_PATH=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("providers_path") or "")' "$harness_file" 2>/dev/null || echo "")
+        HARNESS_LAYER_DIRS=$(python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); d=c.get("layer_dirs") or c.get("target_layer_model",{}).get("default_layer_dirs",{}); print(json.dumps(d) if d else "")' "$harness_file" 2>/dev/null || echo "")
+        SIBLING_LAYERS=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("sibling_layers",[])))' "$harness_file" 2>/dev/null || echo "")
     fi
 }
 
@@ -355,7 +359,7 @@ detect_gstack() {
     local root
     local base
     base=$(harness_root)
-    for root in "$HOME/.claude/skills" "${base}/.claude/skills" "$HOME/.claude/plugins" "${base}/.claude/plugins"; do
+    for root in "$HOME/.agents/skills" "${base}/.agents/skills" "$HOME/.claude/skills" "${base}/.claude/skills"; do
         [ -d "$root" ] || continue
         while IFS= read -r -d '' p; do
             candidates+=("$p")
@@ -369,7 +373,7 @@ detect_gstack() {
 }
 
 # ONE-CALL gstack detection for skills and hooks (the single detection implementation —
-# SKILL.md files source this via ${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh and call it
+# SKILL.md files source this via ${PLUGIN_ROOT}/hooks/lib/common.sh and call it
 # instead of restating their own probe snippets).
 # Sets: GSTACK_PATH, SLUG (and PROJECT_SLUG), GSTACK_PROJECTS, GSTACK_ANALYTICS, plus the
 # gbrain_detect() set (GBRAIN_WT, GBRAIN_LEARNINGS, GBRAIN_CLI, GBRAIN_REMOTE, GSTACK_TIMELINE…).
@@ -433,7 +437,7 @@ resolve_project_slug() {
 # Sets: GSTACK_PROJECTS, GSTACK_ANALYTICS
 resolve_gstack_paths() {
     local integration_json ghome
-    integration_json="$(harness_root)/.claude/integration.json"
+    integration_json="$(harness_root)/.codex/integration.json"
     ghome="$(gstack_home)"
     GSTACK_PROJECTS=""
     GSTACK_ANALYTICS=""
@@ -474,17 +478,18 @@ gbrain_detect() {
 
 # --- Dirty-tree predicate (docs/SIGNALS.md freshness, ADVANCE points only) ---
 # A signal stamped at HEAD says nothing about edits made since. Returns 0 when the working
-# tree has tracked changes or untracked SOURCE files. Our own state dirs (`.claude/`,
-# `.gstack/`) are excluded: on a project that does not gitignore them they would read as
-# permanent dirt, and they are never the code being shipped.
+# tree has tracked changes or untracked source/configuration files. Only state ledgers
+# are excluded; .codex/config.toml and harness.json affect behavior and count as changes.
 worktree_dirty() {
     local root="${1:-.}"
-    git -C "$root" status --porcelain 2>/dev/null | grep -vE '^.. (\.claude/|\.gstack/)' | grep -q .
+    local state
+    state=$(git -C "$root" status --porcelain --untracked-files=all 2>/dev/null) || return 0
+    printf '%s\n' "$state" | grep -vE '^.. (\.codex/(signals|metrics)/|\.gstack/)' | grep -q '[^[:space:]]'
 }
 
 # --- Advisory output (hooks) ---
 #
-# Claude Code reads a hook's stdout as JSON on exit 0; bare text on stdout or stderr at
+# Codex reads a hook's stdout as JSON on exit 0; bare text on stdout or stderr at
 # exit 0 reaches neither the model nor a parsed envelope (stderr reaches the model ONLY on
 # exit 2). Every advisory hook emits through here so the channel is right by construction.
 # Static per-event key table (hooks reference, "Decision control" + "Stop decision control"):
@@ -509,7 +514,7 @@ emit_advisory() {
     [ -n "$(printf '%s' "$text" | tr -d '[:space:]')" ] || return 0
     [ "${GSTACK_SESSION_KIND:-}" = "spawned" ] && return 0
     if [ "${#text}" -gt 400 ]; then
-        text="$(printf '%s' "$text" | cut -c1-360)… (run /entropy-sweep for the full list)"
+        text="$(printf '%s' "$text" | cut -c1-360)… (run entropy-sweep for the full list)"
     fi
     local with_context=0
     case "$event" in PreToolUse|PostToolUse|SessionStart|UserPromptSubmit) with_context=1 ;; esac
@@ -535,6 +540,13 @@ print(json.dumps(out))' 2>/dev/null && return 0
 }
 
 # --- Freshness predicate (docs/SIGNALS.md) — ONE implementation for every consumer ---
+
+verification_complete() {
+    jq -e '(.required_checks // ["build", "test", "lint", "arch"]) as $required |
+        . as $signal | .scope == "all" and ($required | type == "array" and length > 0) and
+        all($required[]; (. == "build" or . == "test" or . == "lint" or . == "arch") and $signal.checks[.] == "PASS")' \
+        "${1%/}/.codex/signals/verify-latest.json" >/dev/null 2>&1
+}
 #
 # signal_fresh <root> <verify-latest.json|review-latest.json> [<expected-decision>] [--advance]
 # Returns 0 and prints nothing when the signal exists, parses, carries a known
@@ -552,15 +564,22 @@ signal_fresh() {
     local root="${1:-.}" base="${2:-}" want="" advance=0 a
     shift 2 2>/dev/null || true
     for a in "$@"; do case "$a" in --advance) advance=1 ;; *) want="$a" ;; esac; done
-    local f="${root%/}/.claude/signals/$base"
+    local f="${root%/}/.codex/signals/$base"
     [ -f "$f" ] || { echo absent; return 1; }
     command -v jq >/dev/null 2>&1 || { echo nojq; return 1; }
+    [ "$(wc -c < "$f")" -le 500 ] || { echo oversized; return 1; }
+    jq -e 'type == "object" and (.schema_version | type == "number")' "$f" >/dev/null 2>&1 \
+        || { echo malformed; return 1; }
     local parsed
     parsed=$(jq -r '[(.schema_version|tostring), (.decision // ""), (.commit // ""), (.wtree // "")] | @tsv' "$f" 2>/dev/null) \
         || { echo malformed; return 1; }
     local sv dec commit wtree
     IFS=$'\t' read -r sv dec commit wtree <<< "$parsed"
     [ "$sv" = "1" ] || { echo schema; return 1; }
+    case "$base:$dec" in
+        verify-latest.json:GREEN|verify-latest.json:YELLOW|verify-latest.json:RED|review-latest.json:APPROVE|review-latest.json:REQUEST_CHANGES|review-latest.json:NEEDS_HUMAN) ;;
+        *) echo decision; return 1 ;;
+    esac
     if [ -n "$want" ] && [ "$dec" != "$want" ]; then echo "decision:${dec:-none}"; return 1; fi
     local head
     head=$(git -C "$root" rev-parse HEAD 2>/dev/null || echo "")
@@ -588,7 +607,7 @@ signal_fresh() {
 
 # --- History-log writer (skills) ---
 #
-# One tested append for `.claude/metrics/verify.jsonl` / `reviews.jsonl` (the Gate API's
+# One tested append for `.codex/metrics/verify.jsonl` / `reviews.jsonl` (the Gate API's
 # history logs), replacing the prose "append the record" instructions. Accountable-writer
 # still holds: the deriving skill calls this from its OWN Bash with the record it derived.
 # The argument must parse as JSON — a corrupt line silently truncates every downstream

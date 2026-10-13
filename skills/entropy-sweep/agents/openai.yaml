@@ -1,0 +1,6 @@
+interface:
+  display_name: "Entropy Sweep"
+  short_description: "Inspect a project for duplicated logic, dead code, documentation drift and unconsumed arti"
+  default_prompt: "Use $oh-my-agents:entropy-sweep for this project."
+policy:
+  allow_implicit_invocation: true

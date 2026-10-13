@@ -1,0 +1,24 @@
+{
+  "name": "oh-my-agents",
+  "author": {
+    "name": "caishize",
+    "url": "https://github.com/caishize"
+  },
+  "homepage": "https://github.com/caishize/oh-my-agents",
+  "repository": "https://github.com/caishize/oh-my-agents",
+  "license": "MIT",
+  "version": "4.0.0-codex.1",
+  "description": "Harness engineering for Codex: architecture and secret checks, project instructions, verification and independent review decision signals.",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Oh My Agents",
+    "shortDescription": "Architecture checks and evidence-based quality gates for Codex",
+    "category": "Developer Tools",
+    "defaultPrompt": [
+      "Use $oh-my-agents:harness-init to prepare this project for Codex.",
+      "Use $oh-my-agents:verify to validate the current changes.",
+      "Use $oh-my-agents:harness-review to independently review this diff."
+    ]
+  }
+}

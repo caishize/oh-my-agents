@@ -1,236 +1,28 @@
 ---
 name: lifecycle
-description: "Full development lifecycle ROUTER (not an executor) — detects state, reads decision signals, and NAMES the next phase + exact remediation skill across Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Never invokes delivery skills or advances a phase; worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
-user-invocable: true
-argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux|--no-ux] [--with-codex] [--with-cso]"
-allowed-tools: Read, Glob, Grep, Bash
+description: "Read execution plans and fresh verification/review decisions, then name the next Codex skill or remediation. Use to decide the next development step; never invokes delivery automatically. 下一步、恢复、开发流程。"
 ---
 
-# Lifecycle — Lifecycle Router (NOT an Orchestrator)
+# Lifecycle
 
-> **Anti-bloat anchor (v3.4+)**: this skill is a **router and reporter**, not an
-> *executor* of workflow logic. gstack owns lifecycle orchestration via `/office-hours`,
-> `/autoplan`, `/ship`, `/land-and-deploy`, `/canary`, `/retro`. We invoke them by name
-> and route on their gates; we never re-implement a phase. If any logic here starts to
-> *plan* or *deploy* on its own, it must be deleted or moved to the relevant gstack skill.
+Read-only router. Arguments are `next` (default), `status` or `recover` in the user's message.
+Resolve project and plugin roots; source the common library. Read `docs/SIGNALS.md` for
+freshness, default denial and release gating. Do not invoke named skills automatically.
 
-Routes through the complete lifecycle: reads decision signals, reports the next phase, and
-names the **exact remediation skill** when a gate fails — so AI-driven flow doesn't stall. It
-never invokes a delivery skill or advances a phase itself.
+1. Read active plans and latest verify/review signals plus history failures/findings.
+2. Missing/malformed/unknown/stale evidence: name `$oh-my-agents:verify` or `$oh-my-agents:harness-review` as appropriate.
+3. REQUEST_CHANGES: name the first concrete fixes in `findings[]`, then `$oh-my-agents:verify` and review.
+4. NEEDS_HUMAN: explain the specific architecture or evaluation decision; recover optional
+   composition skips by rerunning review without making gstack a required dependency.
+5. RED: identify first failures and mapped task ids. After three identical RED reasons,
+   name investigation or `$oh-my-agents:encode-mistake` when a recurring mistake is confirmed.
+6. YELLOW: name unconfirmed acceptance/warnings and the check needed to resolve them.
+7. Full GREEN without fresh independent APPROVE: name `$oh-my-agents:harness-review`.
+8. Full GREEN + APPROVE with tree freshness: run `bash "$PLUGIN_DIR/scripts/gate.sh" "$ROOT"`
+   if an explicit release-gate result is requested, then report readiness for the user's
+   delivery process. Never automatically commit, push, merge, deploy or invoke gstack ship.
+9. An active plan with remaining work names the relevant task; no spec/plan names
+   `$oh-my-agents:spec-to-task`. If multiple plans exist, report candidates without silently choosing one.
 
-```
-IDEATE → PLAN → DECOMPOSE → EXECUTE → VERIFY → REVIEW → SHIP → DEPLOY → CANARY → RETRO → IMPROVE
-(gstk)   (gstk)  (harness)   (hooks)  (harness)  (both)  (gstk)  (gstk)  (gstk)  (both)  (harness)
-```
-
-## Task
-
-Phase from `$ARGUMENTS`: `ideate`, `plan`, `decompose`, `execute`, `verify`, `review`,
-`ship`, `deploy`, `canary`, `retro`, `improve`, `status`, `next`, `recover`
-
-- `next` — Detect state, read the latest decision signal, and NAME the next phase + the
-  exact skill to run. **Router only — it does NOT invoke the skill.** Delivery auto-advance
-  is gstack's; multi-agent coordination is native Agent Teams'.
-- `next --auto` — Project the full remaining gated path (read-only); mark a STOP at the
-  first RED / YELLOW / NEEDS_HUMAN gate with the exact remediation skill. Names, never invokes.
-- `recover` — Diagnose and recover from failed mid-lifecycle state
-
-## Step 0: Detect Environment (worktree-aware)
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
-HARNESS_JSON=""
-[ -f ".claude/harness.json" ] && HARNESS_JSON=".claude/harness.json"
-BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-ACTIVE_PLANS=$(ls docs/exec-plans/active/*.json 2>/dev/null | wc -l | tr -d ' ')
-WORKTREE_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-PARALLEL_WT=0
-[ -d ".gstack-worktrees" ] && PARALLEL_WT=$(ls -1 .gstack-worktrees 2>/dev/null | wc -l | tr -d ' ')
-UI_TOUCHED=$(git diff --name-only 2>/dev/null | grep -Eic '\.(tsx|jsx|vue|svelte|css|html)$' || echo 0)
-echo "GSTACK: ${GSTACK_PATH:-none} | HARNESS: ${HARNESS_JSON:-none} | PLANS: $ACTIVE_PLANS | WT: $WORKTREE_ROOT | PARALLEL: $PARALLEL_WT | UI: $UI_TOUCHED"
-```
-
-If `PARALLEL_WT > 0`, scope all subsequent verify/review/ship operations to **current
-worktree only**; never cross-fire into sibling sprints.
-
-## Phase Router
-
-### `status` — Show lifecycle state and next phase
-
-Show progress per phase based on artifact detection (design docs, plans,
-verify results, review logs, ship/deploy/canary reports). Recommend next phase.
-
-### `next` — Report the next phase (router only)
-
-Detection logic (in order) — output the FIRST match as the recommended next step and STOP.
-This skill NAMES the skill to run; the human, a native Agent Team lead, or gstack runs it:
-1. No design doc + gstack → next: `/office-hours` (ideate)
-2. No design doc + no gstack → next: `/spec-to-task` (decompose)
-3. Design doc, no plan → next: `/spec-to-task` (decompose; auto-imports the design doc)
-4. Plan with incomplete tasks → next: continue execution (show the next task)
-5. All tasks done, no verify signal → next: `/verify`
-6. Verify GREEN, no review → next: `/harness-review`
-7. Review APPROVE + gstack → next: `/ship`
-8. Shipped, no deploy report → next: `/land-and-deploy` (deploy)
-9. Deployed, no canary report (and gstack canary present) → next: `/canary`
-10. Canary GREEN → next: `/retro` + `/harness-dashboard`
-
-With `--auto`: project the remaining path through the gates (read-only); **stop the
-projection at the first RED/YELLOW/NEEDS_HUMAN gate** and print the **exact remediation
-skill** (see Gate Failure Routing). It never advances delivery itself.
-
-**Router invariant: `/lifecycle` NAMES the next skill and reads its decision signal; it
-never invokes a delivery skill, mutates source, or advances a phase. The day it does, that
-logic moves to gstack — anti-bloat rule `no-orchestration` + the SIGNAL-not-ARTIFACT bright line.**
-
-`next` ends with the human-readable `next: /skill args (gates: …)` line. (The machine
-`NEXT:` JSON tail line was retired v3.11.0 — zero consumers in two cycles; executors read
-the signal files, or declare a schema on their own `agent(…, {schema})` call.)
-
-### `ideate` / `plan` → gstack `/office-hours` / `/autoplan`; `decompose` → `/spec-to-task`
-
-Find most recent design doc from `~/.gstack/projects/{SLUG}/`, extract feature
-description, technical decisions, scope. Recommend `/spec-to-task` with that context.
-
-### `execute` — Guide through task execution from active plan
-
-### `verify` — Recommend `/verify --plan {plan-id}`, then read its signal
-
-`/verify` owns the decision and writes `.claude/signals/verify-latest.json` (schema in
-docs/SIGNALS.md). Once `/verify` has run, read the signal and route on `decision` —
-symmetric to the review gate:
-
-- `GREEN` → proceed.
-- `RED` → stop; route per Gate Failure table.
-- `YELLOW` → ask the user (can mean contract-unmet: an `acceptance` command unconfirmed).
-- signal missing / malformed JSON / **unknown `schema_version`** → **default-deny**: treat as
-  "re-run `/verify`"; do NOT advance under `--auto` (symmetric to the review gate; docs/SIGNALS.md).
-- **stale / dirty (the ONE freshness predicate: `signal_fresh` in hooks/lib/common.sh;
-  docs/SIGNALS.md)** — `stale:commit` / `stale:wtree` routes as if the signal were absent,
-  with a WARN naming the token; under `--auto` the ADVANCE read adds `--advance`, so a dirty
-  tree is `stale:dirty`. A stale `GREEN` never advances. Mid-session dirt is a WARN, never a halt.
-
-### `review` — Composition-aware; reads decision signal
-
-Recommend `/harness-review --plan {plan-id}`. Then conditionally:
-- If `UI_TOUCHED > 0` and gstack present and not `--no-ux` → recommend `/design-review` (or invoke if `--ux`); `/devex-review` for DX-heavy changes
-- If `--with-codex` and gstack present → recommend invoking `/codex` for cross-model audit
-- If `--with-cso` and gstack present → recommend invoking `/cso` for deep security
-- Merge findings via `/harness-review`'s dedup tags
-
-After `/harness-review` has run, read `.claude/signals/review-latest.json` and route on
-the **decision tag** (schema in docs/SIGNALS.md) — the flow-efficiency lever that
-compresses "未决态":
-
-```bash
-SIGNAL=".claude/signals/review-latest.json"
-# Default-deny: validate schema_version too, not just decision (docs/SIGNALS.md). An
-# unrecognized version is treated as a hard halt, exactly like a missing/malformed signal.
-KNOWN_SCHEMA=1
-DECISION="NEEDS_HUMAN"   # default-deny: missing / malformed / unknown-version (rule default-deny; docs/SIGNALS.md)
-if [ -f "$SIGNAL" ]; then
-  DECISION=$(python3 -c "import json,sys; s=json.load(open('$SIGNAL')); sys.exit(1) if s.get('schema_version')!=$KNOWN_SCHEMA else print(s['decision'])" 2>/dev/null) || DECISION="NEEDS_HUMAN"
-fi
-echo "review-decision: $DECISION"
-```
-
-**Routing rules (the agent reading this router must obey):**
-
-- `APPROVE` → the projected next step is `ship` (gstack `/ship`). Report it; do not invoke it.
-  (A failing `signal_fresh review-latest.json APPROVE --advance` routes as absent, with a WARN.)
-- `REQUEST_CHANGES` → **end the projection**; surface the typed `findings[]` of the last
-  `.claude/metrics/reviews.jsonl` record (`fingerprint` · `severity` · `fix`, ≤10 items —
-  docs/SIGNALS.md § history logs) as the work list for the next `execute` turn (after the
-  user confirms). A count is not a work item; a missing `findings[]` is reported as such.
-- `NEEDS_HUMAN` → branch on `needs_human_kind` (set by `/harness-review`; see docs/SIGNALS.md):
-  - `composition-skipped` → **auto-recoverable**: the next step is to re-run the skipped
-    composition (`/codex` or `/cso`), NOT a human halt. Report it and continue the projection.
-  - `arch-ambiguity` | `judgment-slop` (or `needs_human_kind` absent) → **halt unconditionally**;
-    print the verbose review summary and yield to the user, regardless of `--auto`.
-- signal absent / malformed JSON / unknown `schema_version` → **default-deny**: treat as a
-  hard `NEEDS_HUMAN` halt (per docs/SIGNALS.md). Never advance on a missing/unreadable signal.
-
-### `ship` — Requires gstack → `/ship` (or guide manual PR)
-
-The pre-ship check IS the gate ladder's APPROVE rung (`hooks/doc-drift-check.sh`):
-`signal_fresh verify-latest.json GREEN --advance && signal_fresh review-latest.json APPROVE
---advance` ⇒ `SHIP GATE: pass`. Name `/ship` only on that line. gstack `/ship` adds
-`Closes #N` itself from the `/spec` archive (`projects/<slug>/specs/*.md`, `spec_branch`
-frontmatter); whether gstack reads OUR signals stays `VERIFIED | ASSERTED` — never assumed.
-
-### `deploy` / `retro` → gstack `/land-and-deploy`; `/retro` + `/harness-dashboard`
-
-### `canary` — Requires gstack → `/canary` (post-deploy monitoring window)
-
-If absent in gstack version → skip with notice; not a gate failure.
-
-### `improve` — Guide through feedback encoding
-
-Build the unencoded-candidate queue from gstack's DURABLE observation artifacts (read-only
-globs — never gstack CLIs beyond `gbrain doctor`; that policy call is unmade):
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true   # sets GBRAIN_WT, GBRAIN_LEARNINGS
-ls $GBRAIN_LEARNINGS "$GSTACK_PROJECTS"/decisions.jsonl 2>/dev/null
-```
-
-Parse `decisions.jsonl` SCHEMA-TOLERANTLY (its event schema is unverified upstream):
-extract candidate lines defensively; on parse failure degrade LOUD to
-`gbrain-only candidates (decisions.jsonl unparsed)` — never silently compute a wrong
-candidate list. Cross-reference candidates against the `docs/LINTING.md` rule index to
-compute the genuinely-unencoded set; suggest `/encode-mistake --from-gbrain` for each
-(human-gated, always). Graceful skip when gbrain/gstack absent.
-
-`investigations.jsonl` is NOT the candidate source — it is the encode PROVENANCE LEDGER
-(written only by `/encode-mistake` itself; scanning it for candidates was circular).
-
-### `recover` — Diagnose failed state (always safe)
-
-Check for: orphaned VERSION bumps, uncommitted changes, failed verify signal,
-stalled plans (7+ days), worktree drift. On a RED verify the retry target is
-`failures[].task_id` from the last `verify.jsonl` line (docs/SIGNALS.md), falling back to
-`reason`. Recommend recovery actions; never destructive.
-
-## Gate Failure Routing (flow-efficiency table)
-
-When a gate fails in `next --auto`, print **exactly one** of these next-step lines
-so the developer (or the next agent invocation) doesn't have to search:
-
-| Failed gate | Symptom | Remediation skill |
-|-------------|---------|-------------------|
-| verify (lint) | lint errors | run formatter; if recurring → `/encode-mistake` |
-| verify (build) | build broken | fix; if env issue → `/investigate` (gstack) |
-| verify (test) | test red | fix; if flaky → `/encode-mistake` for retry policy |
-| verify (arch) | layer violation | refactor per `/arch-guard` output |
-| verify (no decision) | `verify-latest.json` missing / malformed / unknown `schema_version` | default-deny: re-run `/verify`; never advance under `--auto` (docs/SIGNALS.md) |
-| review (slop) | duplicates / over-engineering | refactor; if pattern → `/encode-mistake --proactive` |
-| review (security) | secrets / OWASP issue | run `/cso` (gstack) for deep audit; fix root cause |
-| review (UX) | UI quality flag | run `/design-review` (gstack); apply suggestions |
-| review (cross-model) | `/codex` disagrees | reconcile; if model preference issue → discuss in `/retro` |
-| ship (CI red) | PR build failed | `/investigate` (gstack); then re-`/verify` |
-| deploy | smoke failed | `/canary` (gstack) if available; rollback decision |
-| canary | regression detected | `/investigate` → `/encode-mistake` to prevent recurrence |
-| any (unknown) | phase state unreadable / contradictory | halt the projection; report what was probed and what was missing — never guess a route |
-| review (no decision) | signal missing / malformed / unknown `schema_version` | default-deny: hard `NEEDS_HUMAN` halt; never advance (docs/SIGNALS.md) |
-| review (`NEEDS_HUMAN`: `composition-skipped`) | `/codex` or `/cso` was skipped | auto-recoverable: next step is re-run the skipped composition; not a human halt |
-| review (`NEEDS_HUMAN`: `arch-ambiguity` / `judgment-slop`) | architectural ambiguity or judgment-dependent slop | halt; surface verbose `reviews.jsonl` for user |
-
-## Rules
-
-- Phase ordering is advisory — users can skip, but warn about gaps
-- Artifact handoffs are automatic — design docs flow into spec-to-task; verify writes signal
-- Both plugins optional — adapts to what's installed
-- NAME, don't invoke — `next` reports the next skill + reads its signal; it never runs a
-  delivery skill or advances a phase (the one place this plugin used to actually orchestrate)
-- `--auto` projects the remaining gated path (read-only); **stop the projection on the first
-  RED/YELLOW/NEEDS_HUMAN** and emit the Gate Failure routing line
-- `recover` is always safe — diagnoses only, never destructive
-- **Worktree-aware**: never operate across `.gstack-worktrees/` siblings
-- **Composition over duplication**: defer slop-deep / security-deep / UX to gstack skills
-- **Capability detection over version pinning**: probe artifact presence, not version strings
-- **Router, never executor**: this skill names the next skill to run; if it starts
-  *implementing* a phase (e.g. drafting a CHANGELOG), that logic belongs in gstack
-- **Review decision signal is mandatory**: `next` will not auto-advance past `review`
-  without `.claude/signals/review-latest.json`; missing signal ⇒ `NEEDS_HUMAN`
-- **Freshness predicate applies to every routing read** — `signal_fresh` (docs/SIGNALS.md):
-  a non-fresh signal routes as if absent, with a WARN naming the reason token
+Skills-only/cloud hosts use this explicit router because command hooks are not guaranteed.
+An advisory message or a score never substitutes for actual executed tests and review.

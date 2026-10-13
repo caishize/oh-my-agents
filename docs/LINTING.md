@@ -1,10 +1,10 @@
 # Linting
 
-Custom lint rules and their rationale. Fill in when running `/encode-mistake --proactive`.
+Custom lint rules and their rationale. Fill in when running `$oh-my-agents:encode-mistake --proactive`.
 
 ## Rule Index
 
-<!-- Add rules as they are encoded via /encode-mistake --proactive -->
+<!-- Add rules as they are encoded via $oh-my-agents:encode-mistake --proactive -->
 
 | ID | Rule | Severity | Enforced By | Added |
 |----|------|----------|-------------|-------|
@@ -12,16 +12,15 @@ Custom lint rules and their rationale. Fill in when running `/encode-mistake --p
 
 ## How to Add a Rule
 
-1. Run `/encode-mistake --proactive <pattern-description>`
+1. Run `$oh-my-agents:encode-mistake --proactive <pattern-description>`
 2. The skill will create the enforcement (lint rule, structural test, or hook)
 3. Add an entry to this table with a TASTE-NNN ID
 4. Include test coverage (both positive and negative cases)
 
-**Provenance**: `.claude/metrics/investigations.jsonl` is the encode PROVENANCE LEDGER —
-every TASTE rule is traceable to the failure that motivated it (Osmani ratchet). It is
-written only by `/encode-mistake`; candidate discovery lives in `/lifecycle improve`
-(gbrain learnings + gstack decisions.jsonl, read-only globs). This Rule Index is the
-honest "TASTE rules encoded" count `/harness-dashboard` reports.
+**Provenance**: Each TASTE rule records its triggering failure or user-stated convention,
+source evidence and checker/tests in this Rule Index. Imported gbrain learning ids are
+read-only references. No background process creates or promotes rules automatically.
+The index is the source of the dashboard's encoded-rule count.
 
 ## Rule Template
 
@@ -48,8 +47,8 @@ honest "TASTE rules encoded" count `/harness-dashboard` reports.
 ## Slop taxonomy (canonical)
 
 Single source of truth for "slop" — technically-correct code that degrades quality.
-`/harness-review` (Review 1, per-PR), `/entropy-sweep` (Sweep 1, weekly), and
-`/harness-audit` (slop dimension, governance) all classify against THIS list — same
+`$oh-my-agents:harness-review` (per-PR), `$oh-my-agents:entropy-sweep` (weekly), and
+`$oh-my-agents:harness-review --audit` (slop dimension, governance) all classify against THIS list — same
 definition, different trigger. Edit here, not in three places.
 
 | Category | What it is | Highest-signal tell |

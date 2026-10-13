@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Execution Plan v2",
-  "description": "Schema for oh-my-agents execution plans used by /spec-to-task and tracked by /harness-dashboard.",
+  "description": "Schema for oh-my-agents execution plans used by $spec-to-task and tracked by /harness-dashboard.",
   "type": "object",
   "required": ["id", "feature", "status", "created", "tasks"],
   "properties": {
@@ -43,15 +43,15 @@
     },
     "spec_ref": {
       "type": "string",
-      "description": "DEPRECATED alias of spec_source — read for backward compatibility, never written by /spec-to-task v2+"
+      "description": "DEPRECATED alias of spec_source — read for backward compatibility, never written by $spec-to-task v2+"
     },
     "gstack_design_doc": {
       "type": "string",
-      "description": "Read-only pointer into ~/.gstack (design doc this plan was derived from), never written to. Consumers: /harness-review context, /lifecycle."
+      "description": "Read-only pointer into ~/.gstack (design doc this plan was derived from), never written to. Consumers: $harness-review context, /lifecycle."
     },
     "metrics": {
       "type": "object",
-      "description": "Progress counters maintained by /spec-to-task on every task-status change. Consumers: plan-completion nudge in hooks/plan-validation-check.sh, /lifecycle routing.",
+      "description": "Progress counters maintained by $spec-to-task on every task-status change. Consumers: plan-completion nudge in hooks/plan-validation-check.sh, $lifecycle routing.",
       "properties": {
         "tasks_total": { "type": "integer" },
         "tasks_done": { "type": "integer" },
@@ -108,7 +108,7 @@
           },
           "acceptance": {
             "type": "string",
-            "description": "A runnable command or named test proving the task is done — never prose. /verify runs it (unconfirmed acceptance caps the decision at YELLOW, fail-any, no averaging)."
+            "description": "A runnable command or named test proving the task is done — never prose. $verify runs it (unconfirmed acceptance caps the decision at YELLOW, fail-any, no averaging)."
           },
           "context_files": {
             "type": "array",
