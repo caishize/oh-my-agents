@@ -56,7 +56,7 @@ run_test() {
     fi
 
     if [ -n "$expected_stderr_pattern" ] && [ "$expected_exit" = "2" ]; then
-        if ! echo "$stderr_output" | grep -qE "$expected_stderr_pattern"; then
+        if ! grep -qE "$expected_stderr_pattern" <<< "$stderr_output"; then
             FAIL=$((FAIL + 1))
             echo "FAIL: $name"
             echo "  Expected stderr matching: $expected_stderr_pattern"
@@ -961,6 +961,202 @@ printf 'b\n' >> "$IW/f.txt"
 printf '%s' "{\"hook_event_name\":\"Stop\",\"cwd\":\"$IW\"}" | PATH="$SHIM:$PATH" bash "$HOOKS_DIR/doc-drift-check.sh" >/dev/null 2>&1 || true
 assert_true "doc-drift Stop: a changed file ⇒ the walk runs" test -e "$MARK"
 rm -rf "$IW" "$SHIM"
+
+echo ""
+echo "--- Claude plugin hooks quoting & structured validator (validate-claude-plugin.py) ---"
+
+CLAUDE_HOOKS_JSON="${SCRIPT_DIR}/../.claude-plugin/hooks.json"
+CLAUDE_VALIDATOR="${SCRIPT_DIR}/validate-claude-plugin.py"
+
+assert_true ".claude-plugin/hooks.json: all 7 hook commands quote \${CLAUDE_PLUGIN_ROOT}" python3 -c '
+import json, sys
+h = json.load(open(sys.argv[1]))["hooks"]
+cmds = [x["command"] for es in h.values() for e in es for x in e["hooks"]]
+assert len(cmds) == 7, f"expected 7 hook commands, got {len(cmds)}"
+for c in cmds:
+    assert c.startswith("\"${CLAUDE_PLUGIN_ROOT}\"/hooks/"), f"unquoted command: {c!r}"
+' "$CLAUDE_HOOKS_JSON"
+
+SPACE_TMP=$(mktemp -d)
+SPACE_PLUGIN="$SPACE_TMP/claude plugin root with spaces"
+SPACE_PROJ="$SPACE_TMP/project with spaces"
+mkdir -p "$SPACE_PLUGIN" "$SPACE_PROJ/src/types" "$SPACE_PROJ/.claude/metrics"
+cp -r "$HOOKS_DIR" "${SCRIPT_DIR}/../templates" "$SPACE_PLUGIN/"
+(cd "$SPACE_PROJ" && git init -q . && GIT_Q commit -q --allow-empty -m init)
+
+assert_true ".claude-plugin/hooks.json: all 7 hook commands execute via shell when CLAUDE_PLUGIN_ROOT contains spaces" python3 -c '
+import json, os, subprocess, sys
+hooks_json, plugin_root, proj_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+h = json.load(open(hooks_json))["hooks"]
+env = os.environ.copy()
+env["CLAUDE_PLUGIN_ROOT"] = plugin_root
+benign_inputs = {
+    "PreToolUse": json.dumps({"tool_name": "Edit", "cwd": proj_dir, "tool_input": {"file_path": proj_dir + "/src/types/a.ts", "new_string": "export type A = string;", "command": "echo ok"}}),
+    "PostToolUse": json.dumps({"tool_name": "Edit", "cwd": proj_dir, "tool_input": {"file_path": proj_dir + "/src/types/a.ts"}}),
+    "Stop": json.dumps({"hook_event_name": "Stop", "cwd": proj_dir}),
+    "SessionStart": json.dumps({"hook_event_name": "SessionStart", "cwd": proj_dir}),
+}
+count = 0
+for event, groups in h.items():
+    for group in groups:
+        for hook in group["hooks"]:
+            cmd = hook["command"]
+            res = subprocess.run(["bash", "-c", cmd], input=benign_inputs[event], text=True, capture_output=True, env=env)
+            assert res.returncode == 0, f"{event} ({cmd}) failed with rc={res.returncode}: {res.stderr}"
+            count += 1
+assert count == 7
+# Also verify blocking gate still exits 2 on layer violation under spaced CLAUDE_PLUGIN_ROOT
+arch_cmd = h["PreToolUse"][0]["hooks"][0]["command"]
+bad_input = json.dumps({"tool_name": "Edit", "cwd": proj_dir, "tool_input": {"file_path": proj_dir + "/src/types/a.ts", "new_string": "import { Btn } from \"../ui/btn\";"}})
+bad_res = subprocess.run(["bash", "-c", arch_cmd], input=bad_input, text=True, capture_output=True, env=env)
+assert bad_res.returncode == 2 and "Layer violation" in bad_res.stderr, f"expected rc=2 Layer violation, got rc={bad_res.returncode}: {bad_res.stderr}"
+' "$CLAUDE_HOOKS_JSON" "$SPACE_PLUGIN" "$SPACE_PROJ"
+rm -rf "$SPACE_TMP"
+
+assert_true "validate-claude-plugin.py: positive & negative structured fixtures" python3 -c '
+import copy, json, subprocess, sys
+
+validator = sys.argv[1]
+root_warn_msg = (
+    "CLAUDE.md at the plugin root is not loaded as project context. "
+    "To ship context with your plugin, use a skill (skills/<name>/SKILL.md) instead."
+)
+
+def run_val(rc, payload):
+    raw = payload if isinstance(payload, str) else json.dumps(payload)
+    p = subprocess.run(
+        [sys.executable, validator, "--exit-code", str(rc), "--json-file", "-"],
+        input=raw,
+        text=True,
+        capture_output=True,
+    )
+    return p.returncode, p.stdout + p.stderr
+
+base_known_warn = {
+    "success": False,
+    "strict": True,
+    "target": "/repo/.claude-plugin/plugin.json",
+    "manifest": {
+        "file": "/repo/.claude-plugin/plugin.json",
+        "type": "plugin",
+        "errors": [],
+        "warnings": [],
+        "notes": [],
+        "gatingHooks": [],
+    },
+    "contents": [
+        {
+            "file": "/repo/CLAUDE.md",
+            "type": "plugin",
+            "errors": [],
+            "warnings": [{"path": "root", "message": root_warn_msg, "code": None}],
+            "notes": [],
+            "gatingHooks": [],
+        }
+    ],
+    "advice": [],
+    "directory": {
+        "profile": None,
+        "findings": [
+            {
+                "code": "ICON_MISSING",
+                "title": "No icon",
+                "severity": "warning",
+                "blocking": False,
+                "hold": False,
+                "file": ".claude-plugin/plugin.json",
+                "field": "icon",
+                "message": "No icon found in the plugin.",
+            }
+        ],
+        "undecided": [],
+        "incomplete": False,
+        "failure": None,
+        "notes": [],
+    },
+}
+
+# Positive 1: exact documented root-CLAUDE.md warning + nonblocking ICON_MISSING
+rc, out = run_val(1, base_known_warn)
+assert rc == 0, f"expected allow on exact root-CLAUDE.md warning, got rc={rc}: {out}"
+
+# Positive 2: clean strict pass (exit 0, success true, 0 warnings)
+clean = copy.deepcopy(base_known_warn)
+clean["success"] = True
+clean["contents"] = []
+rc, out = run_val(0, clean)
+assert rc == 0, f"expected allow on clean success, got rc={rc}: {out}"
+
+# Negative 1: root-CLAUDE.md warning PLUS unquoted hook warning
+with_hook_warn = copy.deepcopy(base_known_warn)
+with_hook_warn["contents"].append({
+    "file": "/repo/.claude-plugin/hooks.json",
+    "type": "hooks",
+    "errors": [],
+    "warnings": [{"path": "hooks.PreToolUse", "message": "Shell command uses ${CLAUDE_PLUGIN_ROOT} without quotes", "code": None}],
+})
+rc, _ = run_val(1, with_hook_warn)
+assert rc != 0, "must deny when hook warning is also present"
+
+# Negative 2: single hook warning only
+only_hook_warn = copy.deepcopy(base_known_warn)
+only_hook_warn["contents"] = [with_hook_warn["contents"][1]]
+rc, _ = run_val(1, only_hook_warn)
+assert rc != 0, "must deny single hook warning"
+
+# Negative 3: wrong warning path or wrong warning file
+wrong_path = copy.deepcopy(base_known_warn)
+wrong_path["contents"][0]["warnings"][0]["path"] = "hooks.PreToolUse"
+assert run_val(1, wrong_path)[0] != 0, "must deny wrong warning path"
+
+wrong_file = copy.deepcopy(base_known_warn)
+wrong_file["contents"][0]["file"] = "/repo/docs/CLAUDE.md"
+assert run_val(1, wrong_file)[0] != 0, "must deny non-root CLAUDE.md file"
+
+missing_code = copy.deepcopy(base_known_warn)
+del missing_code["contents"][0]["warnings"][0]["code"]
+assert run_val(1, missing_code)[0] != 0, "must deny warning object missing explicit code key"
+
+# Negative 4: real error in manifest or contents
+with_manifest_err = copy.deepcopy(base_known_warn)
+with_manifest_err["manifest"]["errors"] = [{"path": "hooks", "message": "invalid"}]
+assert run_val(1, with_manifest_err)[0] != 0, "must deny manifest error"
+
+with_content_err = copy.deepcopy(base_known_warn)
+with_content_err["contents"][0]["errors"] = [{"path": "root", "message": "broken"}]
+assert run_val(1, with_content_err)[0] != 0, "must deny content error"
+
+# Negative 5: known root warning PLUS directory blocking=true / failure / incomplete / undecided
+dir_blocking = copy.deepcopy(base_known_warn)
+dir_blocking["directory"]["findings"][0]["blocking"] = True
+assert run_val(1, dir_blocking)[0] != 0, "must deny blocking directory finding"
+
+dir_failure = copy.deepcopy(base_known_warn)
+dir_failure["directory"]["failure"] = "scanner failed"
+assert run_val(1, dir_failure)[0] != 0, "must deny directory.failure"
+
+dir_incomplete = copy.deepcopy(base_known_warn)
+dir_incomplete["directory"]["incomplete"] = True
+assert run_val(1, dir_incomplete)[0] != 0, "must deny directory.incomplete"
+
+dir_undecided = copy.deepcopy(base_known_warn)
+dir_undecided["directory"]["undecided"] = ["pending"]
+assert run_val(1, dir_undecided)[0] != 0, "must deny directory.undecided"
+
+# Negative 6: invalid/empty JSON, missing fields, unknown schema, strict=false
+assert run_val(0, "")[0] != 0, "must deny empty payload"
+assert run_val(0, "{not valid json")[0] != 0, "must deny invalid JSON"
+assert run_val(0, {"unknown": 1})[0] != 0, "must deny unknown schema"
+non_strict = copy.deepcopy(clean)
+non_strict["strict"] = False
+assert run_val(0, non_strict)[0] != 0, "must deny strict=false"
+
+# Negative 7: abnormal CLI exit codes and incoherent exit/status combinations
+assert run_val(2, base_known_warn)[0] != 0, "must deny exit code 2"
+assert run_val(127, clean)[0] != 0, "must deny exit code 127"
+assert run_val(1, clean)[0] != 0, "must deny nonzero exit without known warning"
+assert run_val(0, base_known_warn)[0] != 0, "must deny exit 0 with success=false / warnings"
+' "$CLAUDE_VALIDATOR"
 
 
 echo ""

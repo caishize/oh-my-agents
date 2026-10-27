@@ -56,19 +56,4 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
       - name: Validate Claude plugin manifest (strict; real failure propagation)
-        run: |
-          rc=0
-          out=$(claude plugin validate .claude-plugin/plugin.json --strict 2>&1) || rc=$?
-          printf '%s\n' "$out"
-          if [ "$rc" -eq 0 ]; then
-            exit 0
-          fi
-          warnings=$(printf '%s\n' "$out" | grep -c '^  > ' || true)
-          if [ "$warnings" -eq 1 ] \
-             && printf '%s\n' "$out" | grep -q 'root: CLAUDE.md at the plugin root' \
-             && ! printf '%s\n' "$out" | grep -qiE '(^|[[:space:]])error:'; then
-            echo "only the expected root-CLAUDE.md warning — pass"
-            exit 0
-          fi
-          echo "claude plugin validate failed (exit=$rc)"
-          exit 1
+        run: python3 tests/validate-claude-plugin.py .claude-plugin/plugin.json
