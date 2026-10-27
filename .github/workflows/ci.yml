@@ -3,22 +3,21 @@
 # Until v3.11.0 every "CI-enforced" claim in CLAUDE.md / docs/INTEGRATION.md described
 # tests nobody ran automatically: this repository had no .github/ directory at all.
 # Two jobs, no secrets:
-#   tests     — tests/test-hooks.sh + tests/test-skills.sh (bash + jq + python3 + node)
-#   validate  — `claude plugin validate --strict` on the manifest. The ONE expected warning
-#               ("root: CLAUDE.md at the plugin root is not loaded as project context") is
-#               allow-listed: that file is contributor context for THIS repo, never shipped
-#               to installers. Any other warning fails the job.
+#   tests     — tests/test-hooks.sh + tests/test-skills.sh + tests/test-antigravity.sh + node --check
+#   validate  — Antigravity manifest/hook/rule strict validation (plus `agy plugin validate --strict`
+#               when `agy` v1.4.7+ is present on the runner) and `claude plugin validate --strict`
+#               with real failure propagation.
 
 name: plugin-tests
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, gemini]
 
 jobs:
   tests:
-    name: hook + skill tests
+    name: hook + skill + antigravity tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,27 +29,46 @@ jobs:
         run: bash tests/test-hooks.sh
       - name: Skill + constitution tests
         run: bash tests/test-skills.sh
+      - name: Antigravity adapter & distribution tests
+        run: bash tests/test-antigravity.sh
       - name: Workflow parses
         run: node --check workflows/harness-audit.js
 
   validate:
-    name: claude plugin validate --strict
+    name: plugin validate --strict (Antigravity + Claude Code)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Antigravity plugin layout (tested against agy 1.4.7)
+        run: |
+          if command -v agy >/dev/null 2>&1; then
+            out=$(agy plugin validate . --strict --json)
+            printf '%s\n' "$out"
+            python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["findings"]==[], d["findings"]' "$out"
+          else
+            echo "agy CLI not pre-installed on runner; running strict structural & adapter checks via test-antigravity.sh"
+            bash tests/test-antigravity.sh
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
-      - name: Validate plugin manifest (strict; one allow-listed warning)
+      - name: Validate Claude plugin manifest (strict; real failure propagation)
         run: |
-          out=$(claude plugin validate .claude-plugin/plugin.json --strict 2>&1 || true)
+          rc=0
+          out=$(claude plugin validate .claude-plugin/plugin.json --strict 2>&1) || rc=$?
           printf '%s\n' "$out"
-          warnings=$(printf '%s\n' "$out" | grep -c '^  > ' || true)
-          if [ "$warnings" -eq 0 ]; then exit 0; fi
-          if [ "$warnings" -eq 1 ] && printf '%s\n' "$out" | grep -q 'root: CLAUDE.md at the plugin root'; then
-            echo "only the expected root-CLAUDE.md warning — pass"; exit 0
+          if [ "$rc" -eq 0 ]; then
+            exit 0
           fi
-          echo "unexpected validate warnings/errors"; exit 1
+          warnings=$(printf '%s\n' "$out" | grep -c '^  > ' || true)
+          if [ "$warnings" -eq 1 ] \
+             && printf '%s\n' "$out" | grep -q 'root: CLAUDE.md at the plugin root' \
+             && ! printf '%s\n' "$out" | grep -qiE '(^|[[:space:]])error:'; then
+            echo "only the expected root-CLAUDE.md warning — pass"
+            exit 0
+          fi
+          echo "claude plugin validate failed (exit=$rc)"
+          exit 1

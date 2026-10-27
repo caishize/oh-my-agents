@@ -1,9 +1,9 @@
 # oh-my-agents `v3.11.0`
 
-Lean Claude Code plugin implementing **Harness Engineering** — the discipline of
-designing environments, constraints, and feedback loops that make AI coding agents
-work reliably at scale. **Composition-based** integration with
-[gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.84.1.0 current — source-verified) for
+Lean **Antigravity CLI** (`agy` `1.4.7` verified) and **Claude Code** plugin implementing
+**Harness Engineering** — the discipline of designing environments, constraints, and
+feedback loops that make AI coding agents work reliably at scale. **Composition-based**
+integration with [gstack](https://github.com/garrytan/gstack.git) (v1.46+ floor, v1.84.1.0 current — source-verified) for
 full-lifecycle coverage (slop-deep, security-deep, and UX audits delegated to gstack;
 GBrain memory + the always-on `timeline.jsonl` consumed as read-only sensors; gstack's own
 content-addressed review verdicts **reconciled** read-only by `/harness-review`; architecture,
@@ -30,14 +30,56 @@ disclosure is an implementation practice gstack now ships too — kept, but not 
 
 ## Installation
 
+### Antigravity CLI (`gemini` branch — tested on `agy 1.4.7`)
+
+> **Important**: Always clone or check out the **`gemini`** branch when installing for Antigravity CLI so you do not accidentally install `main`.
+
 ```bash
-# Via plugin system (recommended)
+# 1. Clone the gemini branch explicitly
+git clone -b gemini https://github.com/caishize/oh-my-agents.git
+cd oh-my-agents
+
+# 2. Validate strict Antigravity plugin compatibility (0 errors, 0 warnings)
+agy plugin validate . --strict --json
+
+# 3. Install into Antigravity CLI (~/.gemini/config/plugins/oh-my-agents)
+agy plugin install .
+agy plugin list --json
+
+# Alternative: workspace-scoped plugin discovery
+mkdir -p /path/to/your-project/.agents/plugins
+cp -R . /path/to/your-project/.agents/plugins/oh-my-agents
+```
+
+### Claude Code
+
+```bash
+# Via plugin system
 /plugin marketplace add caishize/oh-my-agents
 /plugin install oh-my-agents
 
 # Manual
 git clone https://github.com/caishize/oh-my-agents.git ~/.claude/skills/oh-my-agents
 ```
+
+### Compatibility Verification
+
+```bash
+bash tests/test-hooks.sh
+bash tests/test-skills.sh
+bash tests/test-antigravity.sh
+node --check workflows/harness-audit.js
+agy plugin validate . --strict --json
+```
+
+### Antigravity CLI Runtime Contract & Limitations (`agy 1.4.7`)
+
+- **Slash Skills**: Invoked directly as `/<skill-name>` (e.g., `/harness-init`, `/verify`, `/harness-review`, `/lifecycle`), not automatically namespaced as `/oh-my-agents:<skill-name>`.
+- **Plugin Root `hooks.json` & Tool Matchers**: Antigravity CLI loads plugin hooks strictly from root [`hooks.json`](hooks.json) (not `hooks/hooks.json` or global `settings.json`). [`hooks/antigravity-adapter.py`](hooks/antigravity-adapter.py) bridges both observed native CLI tool calls (`write_file`, `edit_file`, `run_command`) and documented variants (`write_to_file`, `replace_file_content`, `multi_replace_file_content`) to the 6 canonical shell scripts in `hooks/*.sh`.
+- **Fail-Closed & Redacted PreToolUse**: Malformed payloads, oversized inputs (`> 8 MiB`), paths outside `workspacePaths`, or ambiguous execution-plan edits fail closed (`{"decision": "deny", ...}`). Matched secret literals from `safety-check.sh` / `bash-safety-check.sh` are stripped from `reason` and never echoed. Never emits `auto_approve` or `permissionOverrides`.
+- **Stop & SessionStart**: `SessionStart` injects the gate ladder via `injectSteps`. Antigravity's `Stop` contract only consumes `reason` when `decision` is `"continue"`; because `oh-my-agents` never forces turn continuation (`no-orchestration`), `Stop` returns `{}` and does not claim human-facing Stop banner rendering in Antigravity CLI.
+- **Rules**: Shipped in [`rules/AGENTS.md`](rules/AGENTS.md) with `trigger: always_on` YAML frontmatter (plugin-root `AGENTS.md`/`GEMINI.md` is not loaded as a plugin rule by `agy`).
+- **Governance Audit (`harness-audit`)**: [`workflows/harness-audit.js`](workflows/harness-audit.js) is a Claude Code Dynamic Workflow and is **not** loaded as a native Antigravity CLI slash workflow. In Antigravity CLI, run `/harness-review` (which uses `invoke_subagent` with read-only `research` subagents for independent or multi-pillar fan-out verification) and persist verdicts only via the accountable-writer recipe in [`docs/SIGNALS.md`](docs/SIGNALS.md).
 
 ## Quick Start
 
@@ -73,7 +115,7 @@ the built-in `Explore` subagent is used — no agent file of ours to maintain.
 
 ## Hooks
 
-**Canonical list: [`hooks/hooks.json`](hooks/hooks.json)** (6 scripts, 7 registrations). One
+**Canonical list: [`hooks.json`](hooks.json) (Antigravity) & [`.claude-plugin/hooks.json`](.claude-plugin/hooks.json) (Claude Code)** (6 scripts, 7 registrations). One
 line each: `arch-check` (blocks layer violations) · `safety-check` (blocks secrets) ·
 `plan-validation-check` (exec-plan GUIDE + status-enum + plan-completion nudge) ·
 `bash-safety-check` (blocks credential leaks) · `session-metrics` (per-edit layer ledger,
@@ -252,7 +294,11 @@ bridge + six retirements).
 ## Project Structure
 
 ```
-.claude-plugin/plugin.json         # Plugin manifest (v3.10.0)
+plugin.json                        # Antigravity CLI plugin manifest (v3.11.0)
+hooks.json                         # Antigravity CLI named hook bindings (root hooks.json)
+rules/AGENTS.md                    # Antigravity CLI plugin rule (trigger: always_on)
+.claude-plugin/plugin.json         # Claude Code plugin manifest (v3.11.0)
+.claude-plugin/hooks.json          # Claude Code hook event bindings
 skills/                            # 11 user-invocable slash commands
 ├── harness-init/                  # Init (progressive disclosure refs)
 │   ├── SKILL.md
@@ -262,14 +308,14 @@ skills/                            # 11 user-invocable slash commands
 │   ├── SKILL.md
 │   └── DEEP-DIVE.md              # Query format reference
 ├── <other-skills>/SKILL.md        # One dir per skill
-hooks/                             # 6 event-driven shell scripts, 7 registrations (canonical: hooks.json)
-├── hooks.json                     # Hook event bindings (PreToolUse/PostToolUse/Stop/SessionStart) — timeouts in seconds
+hooks/                             # 6 event-driven shell scripts + Antigravity adapter
+├── antigravity-adapter.py         # Thin Antigravity CLI hook payload/response adapter
 ├── lib/common.sh                  # Shared utilities (gstack_detect, gbrain_detect, emit_advisory, signal_fresh, append_history_record)
-workflows/harness-audit.js         # 1 Dynamic Workflow (rule `single-workflow`) — plugin root ⇒ /oh-my-agents:harness-audit
-.github/workflows/ci.yml           # Runs tests/*.sh, node --check, claude plugin validate --strict
+workflows/harness-audit.js         # 1 Claude Code Dynamic Workflow (rule `single-workflow`; in Antigravity use /harness-review)
+.github/workflows/ci.yml           # Runs tests/*.sh, node --check, and strict plugin validation on [main, gemini]
 docs/                              # Progressive disclosure references (SIGNALS.md = the Gate API)
 templates/                         # Config templates
-tests/                             # Plugin self-tests
+tests/                             # Plugin self-tests (test-hooks.sh, test-skills.sh, test-antigravity.sh)
 ```
 
 ## Configuration (`.claude/harness.json`)

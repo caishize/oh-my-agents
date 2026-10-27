@@ -3,7 +3,7 @@ name: encode-mistake
 description: "Convert agent mistakes or expert preferences into permanent guardrails — lint rules, structural tests, hooks. Two modes: reactive (from failures) and proactive (from patterns you dislike). Aliases: 编码错误, 固化规则, 错误学习, 品味编码, 规则编码"
 user-invocable: true
 argument-hint: "<description> [--proactive] [--hook-output] [--from-investigation <id>] [--from-gbrain [type] [n]]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, view_file, write_to_file, replace_file_content, multi_replace_file_content, find_by_name, grep_search, run_command
 ---
 
 # Encode Mistake
@@ -70,7 +70,8 @@ as `TYPE` (default `learning`), and the next token as `LIMIT` (default `5`).
 The deprecated alias `--from-gstack-learnings <n>` sets `TYPE=learning, LIMIT=<n>`.
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true   # sets SLUG, GBRAIN_WT, GBRAIN_LEARNINGS, GBRAIN_CLI
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+gstack_detect || true   # sets SLUG, GBRAIN_WT, GBRAIN_LEARNINGS, GBRAIN_CLI
 TYPE="${TYPE:-learning}"       # learning | eureka | retro | all (set by parsing above)
 LIMIT="${LIMIT:-5}"
 

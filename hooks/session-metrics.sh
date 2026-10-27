@@ -69,17 +69,36 @@ TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 DATE_PART=$(date -u +"%Y-%m-%d")
 METRICS_FILE="${METRICS_DIR}/session-${DATE_PART}.jsonl"
 
-# Build JSON without jq for speed — exactly {ts,tool,file,layer}
-LINE="{\"ts\":\"${TS}\",\"tool\":\"${TOOL_NAME}\",\"file\":\"${FILE_PATH}\",\"layer\":\"${LAYER}\"}"
+# Build JSON without jq for speed — exactly {ts,tool,file,layer}, escaping \ and "
+_json_esc() {
+    local s="${1:-}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+LINE="{\"ts\":\"$(_json_esc "$TS")\",\"tool\":\"$(_json_esc "$TOOL_NAME")\",\"file\":\"$(_json_esc "$FILE_PATH")\",\"layer\":\"$(_json_esc "$LAYER")\"}"
 
 # Use flock to prevent JSONL corruption from parallel Claude Code sessions (gstack Conductor)
+if [ -e "$METRICS_FILE" ] && [ ! -w "$METRICS_FILE" ]; then
+    echo "session-metrics: metrics file is not writable: $METRICS_FILE" >&2
+    exit 0
+fi
 LOCK_FILE="${METRICS_FILE}.lock"
 if command -v flock >/dev/null 2>&1; then
     (flock -w 2 200 && echo "$LINE" >> "$METRICS_FILE") 200>"$LOCK_FILE" 2>/dev/null || \
-        echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
+        echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || {
+            echo "session-metrics: failed to write metrics file: $METRICS_FILE" >&2
+            exit 0
+        }
 else
     # macOS: flock not available, use atomic append (>> is typically atomic for small writes)
-    echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || true
+    echo "$LINE" >> "$METRICS_FILE" 2>/dev/null || {
+        echo "session-metrics: failed to write metrics file: $METRICS_FILE" >&2
+        exit 0
+    }
 fi
 
 # --- Log rotation: remove JSONL files older than 30 days ---

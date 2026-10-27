@@ -475,7 +475,7 @@ assert_true "SIGNALS: native TaskCompleted consumer recipe (≤12 lines, no hard
 assert_true "harness-init: no generated overview prose (arXiv 2602.11988); confirm before writing" \
     "! grep -q 'Architecture summary' '${SKILLS_DIR}/harness-init/SKILL.md' && ! grep -q 'Common patterns' '${SKILLS_DIR}/harness-init/SKILL.md' && ! grep -q 'Purpose (1-2 sentences)' '${SKILLS_DIR}/harness-init/SKILL.md' && grep -q '2602.11988' '${SKILLS_DIR}/harness-init/SKILL.md' && grep -qi 'confirm before writ' '${SKILLS_DIR}/harness-init/SKILL.md'"
 assert_true "hooks.json: timeouts are seconds (every value ≤ 60)" \
-    "python3 -c 'import json; h=json.load(open(\"${SCRIPT_DIR}/../hooks/hooks.json\"))[\"hooks\"]; assert all(x.get(\"timeout\",0)<=60 for es in h.values() for e in es for x in e[\"hooks\"])'"
+    "python3 -c 'import json; h=json.load(open(\"${SCRIPT_DIR}/../.claude-plugin/hooks.json\"))[\"hooks\"]; ah=json.load(open(\"${SCRIPT_DIR}/../hooks.json\"))[\"oh-my-agents\"]; assert all(x.get(\"timeout\",0)<=60 for es in h.values() for e in es for x in e[\"hooks\"]); assert all(x.get(\"timeout\",0)<=60 for es in ah.values() for e in es for x in (e[\"hooks\"] if isinstance(e,dict) and \"hooks\" in e else [e]))'"
 
 TOTAL=$((TOTAL + 1))
 if [ ! -d "${SCRIPT_DIR}/../agents" ]; then

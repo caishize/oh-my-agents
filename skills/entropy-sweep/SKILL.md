@@ -3,7 +3,7 @@ name: entropy-sweep
 description: "Scan for and fix codebase entropy across all four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Covers slop, doc drift, arch violations, dead code, missing enforcement, exec plan health, and nested CLAUDE.md drift. Aliases: 熵扫描, 代码清理, 死代码清理, 代码垃圾回收, 代码腐化检查, 文档过期检查"
 user-invocable: true
 argument-hint: "[scope: full|docs|slop|arch|dead-code|plans|claude-md]"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, view_file, find_by_name, grep_search, run_command
 ---
 
 # Entropy Sweep
@@ -249,8 +249,8 @@ counts per category, timestamp, commit) AND append the same record as one line t
 `.claude/metrics/entropy.jsonl` (trend history — `/harness-dashboard` reads both):
 
 ```bash
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
-mkdir -p "$ROOT/.claude/metrics"
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) && ensure_harness_dir "$ROOT" metrics || exit 1
 python3 -c "import json,subprocess,datetime,sys; R=sys.argv[1]; s={'findings':{'slop':N1,'docs':N2,'arch':N3,'dead':N4,'enforcement':N5,'plans':N6,'claude_md':N7},'total':T,'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','-C',R,'rev-parse','HEAD'],text=True).strip()}; open(R+'/.claude/metrics/entropy-latest.json','w').write(json.dumps(s)); open(R+'/.claude/metrics/entropy.jsonl','a').write(json.dumps(s)+'\n')" "$ROOT"
 ```
 

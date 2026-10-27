@@ -3,7 +3,7 @@ name: lifecycle
 description: "Full development lifecycle ROUTER (not an executor) — detects state, reads decision signals, and NAMES the next phase + exact remediation skill across Research→Plan→Execute→Verify→Review→Ship→Deploy→Retro→Improve, adapting to installed plugins. Never invokes delivery skills or advances a phase; worktree-aware. Aliases: 生命周期, 全流程, 开发流程"
 user-invocable: true
 argument-hint: "<phase> [--from-design <path>] [--plan <plan-id>] [--auto] [--ux|--no-ux] [--with-codex] [--with-cso]"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, view_file, find_by_name, grep_search, run_command
 ---
 
 # Lifecycle — Lifecycle Router (NOT an Orchestrator)
@@ -38,7 +38,8 @@ Phase from `$ARGUMENTS`: `ideate`, `plan`, `decompose`, `execute`, `verify`, `re
 ## Step 0: Detect Environment (worktree-aware)
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+gstack_detect || true
 HARNESS_JSON=""
 [ -f ".claude/harness.json" ] && HARNESS_JSON=".claude/harness.json"
 BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
@@ -170,7 +171,8 @@ Build the unencoded-candidate queue from gstack's DURABLE observation artifacts 
 globs — never gstack CLIs beyond `gbrain doctor`; that policy call is unmade):
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true   # sets GBRAIN_WT, GBRAIN_LEARNINGS
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+gstack_detect || true   # sets GBRAIN_WT, GBRAIN_LEARNINGS
 ls $GBRAIN_LEARNINGS "$GSTACK_PROJECTS"/decisions.jsonl 2>/dev/null
 ```
 

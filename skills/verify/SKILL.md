@@ -3,7 +3,7 @@ name: verify
 description: "Post-execution verification — runs build, test, lint, and architecture checks, then writes a GREEN/YELLOW/RED decision signal (.claude/signals/verify-latest.json) plus typed failures[] that the gate ladder and /lifecycle route on (the ladder's APPROVE rung is the pre-ship check); confirms done for tasks whose acceptance ran green. Use after completing a task before /harness-review. Aliases: 验证, 验收, 构建检查, 测试验证, 全量检查"
 user-invocable: true
 argument-hint: "[scope: all|build|test|lint|arch] [--plan <plan-id>]"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, view_file, find_by_name, grep_search, run_command
 ---
 
 # Verify
@@ -131,8 +131,8 @@ Decision from the check results:
 - **RED** — any in-scope check FAILED
 
 ```bash
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
-mkdir -p "$ROOT/.claude/signals" "$ROOT/.claude/metrics"
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) && ensure_harness_dir "$ROOT" signals metrics || exit 1
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
 BRANCH=$(git -C "$ROOT" branch --show-current 2>/dev/null || echo unknown)
 COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
@@ -163,7 +163,8 @@ verbatim, so the Stop termination sensor (`tail -3` on `.reason`) and the RED ga
 (`failures[].id`) share one key.
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) && ensure_harness_dir "$ROOT" metrics || exit 1
 append_history_record "$ROOT/.claude/metrics" verify.jsonl "$RECORD_JSON"   # validates JSON, flock; LOUD on failure
 ```
 

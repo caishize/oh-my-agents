@@ -34,5 +34,6 @@
     "signal-fresh",
     "typed-handoff"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./.claude-plugin/hooks.json"
 }

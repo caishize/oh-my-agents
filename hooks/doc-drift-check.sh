@@ -58,7 +58,8 @@ git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 REPO_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "")
 [ -z "$REPO_ROOT" ] && exit 0
 REPO_ROOT=$(_canonical_dir "$REPO_ROOT")   # same physical path as PROJECT_DIR, so they compare
-resolve_metrics_dir "$PROJECT_DIR" "$PROJECT_DIR_SOURCE" || METRICS_DIR=""
+METRICS_DIR=""
+[ -d "$PROJECT_DIR/.claude/metrics" ] && METRICS_DIR="$PROJECT_DIR/.claude/metrics"
 
 # --- Gate ladder (advisory; the transition mapping source is docs/SIGNALS.md) ---
 # Order: stale WARNs → recoverable composition skip → APPROVE (= pre-ship check) →

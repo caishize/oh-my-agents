@@ -2,6 +2,19 @@
 
 Test strategy and structural tests. Fill in when running `/harness-init`.
 
+## Plugin Self-Tests & Compatibility Verification
+
+```bash
+# Canonical hook, skill, and Antigravity adapter regression suites
+bash tests/test-hooks.sh
+bash tests/test-skills.sh
+bash tests/test-antigravity.sh
+node --check workflows/harness-audit.js
+
+# Native Antigravity CLI strict plugin validation (tested on agy 1.4.7)
+agy plugin validate . --strict --json
+```
+
 ## Test Commands
 
 ```bash

@@ -1,0 +1,62 @@
+{
+  "oh-my-agents": {
+    "PreToolUse": [
+      {
+        "matcher": "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./hooks/antigravity-adapter.py PreToolUse arch-check.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ./hooks/antigravity-adapter.py PreToolUse safety-check.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 ./hooks/antigravity-adapter.py PreToolUse plan-validation-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./hooks/antigravity-adapter.py PreToolUse bash-safety-check.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./hooks/antigravity-adapter.py PostToolUse session-metrics.sh",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/antigravity-adapter.py Stop doc-drift-check.sh",
+        "timeout": 8
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/antigravity-adapter.py SessionStart doc-drift-check.sh",
+        "timeout": 3
+      }
+    ]
+  }
+}

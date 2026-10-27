@@ -27,11 +27,35 @@
 #   signal_fresh <root> <signal.json> [<decision>] [--advance] — the Gate API freshness predicate
 #   append_history_record <dir> <file.jsonl> <json> — validated, locked append (verify/reviews history)
 
-# --- Input ---
+# --- Plugin root & Input ---
+# Derive the physical plugin root from BASH_SOURCE[0] first so empty, "/" or stale
+# CLAUDE_PLUGIN_ROOT / AGY_PLUGIN_ROOT values in the environment cannot misroute hooks.
+_OH_MY_AGENTS_SELF_ROOT=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    _OH_MY_AGENTS_SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd -P || echo "")"
+fi
+if [ -n "$_OH_MY_AGENTS_SELF_ROOT" ] && [ -f "$_OH_MY_AGENTS_SELF_ROOT/hooks/lib/common.sh" ]; then
+    OH_MY_AGENTS_ROOT="$_OH_MY_AGENTS_SELF_ROOT"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ "${CLAUDE_PLUGIN_ROOT}" != "/" ] && [ -f "${CLAUDE_PLUGIN_ROOT%/}/hooks/lib/common.sh" ]; then
+    OH_MY_AGENTS_ROOT="$(cd "${CLAUDE_PLUGIN_ROOT}" 2>/dev/null && pwd -P)"
+elif [ -n "${AGY_PLUGIN_ROOT:-}" ] && [ "${AGY_PLUGIN_ROOT}" != "/" ] && [ -f "${AGY_PLUGIN_ROOT%/}/hooks/lib/common.sh" ]; then
+    OH_MY_AGENTS_ROOT="$(cd "${AGY_PLUGIN_ROOT}" 2>/dev/null && pwd -P)"
+else
+    OH_MY_AGENTS_ROOT=""
+fi
+if [ -n "$OH_MY_AGENTS_ROOT" ]; then
+    export OH_MY_AGENTS_ROOT
+    export CLAUDE_PLUGIN_ROOT="$OH_MY_AGENTS_ROOT"
+    export AGY_PLUGIN_ROOT="$OH_MY_AGENTS_ROOT"
+fi
 
 read_input() {
-    # Limit stdin to 100KB to prevent hooks from stalling on large Write payloads
-    INPUT=$(head -c 102400)
+    # Match the adapter limit (8 MiB). A truncated JSON payload must never silently skip checks.
+    INPUT=$(head -c 8388609)
+    if [ "${#INPUT}" -gt 8388608 ]; then
+        echo "Hook input exceeds 8 MiB; split the edit and retry." >&2
+        exit 2
+    fi
     # Ensure INPUT is never unset (set -u would kill downstream json_get calls)
     INPUT="${INPUT:-}"
 }
@@ -79,8 +103,8 @@ get_tool_name() {
 get_cwd() {
     local result
     result=$(json_get \
-        '.cwd // ""' \
-        "import sys,json; print(json.load(sys.stdin).get('cwd',''))")
+        '.cwd // .workspacePaths[0] // ""' \
+        "import sys,json; d=json.load(sys.stdin); ws=d.get('workspacePaths') or []; print(d.get('cwd') or (ws[0] if isinstance(ws,list) and ws and isinstance(ws[0],str) else '') or '')")
     # Return empty on bad input — callers must check and exit 0, not guess
     echo "$result"
 }
@@ -118,7 +142,62 @@ _canonical_dir() {
         echo ""
         return 0
     fi
+    if [ "$d" = "/" ]; then
+        echo "/"
+        return 0
+    fi
     ( cd "$d" 2>/dev/null && pwd -P ) || echo "${d%/}"
+}
+
+# Return 0 if <dir> is an existing directory, not "/", not $HOME, and not a read-only
+# or external plugin install directory.
+_is_usable_project_root() {
+    local d="${1:-}" ref="${2:-}"
+    [ -n "$d" ] && [ -d "$d" ] || return 1
+    local canon
+    canon=$(_canonical_dir "$d")
+    [ -n "$canon" ] && [ "$canon" != "/" ] || return 1
+    if [ -n "${HOME:-}" ] && [ -d "${HOME}" ]; then
+        local home_canon
+        home_canon=$(_canonical_dir "$HOME")
+        [ "$canon" = "$home_canon" ] && return 1
+    fi
+    if [ -n "${OH_MY_AGENTS_ROOT:-}" ] && [ "$canon" = "$OH_MY_AGENTS_ROOT" ]; then
+        [ -w "$canon" ] || return 1
+        if [ -n "$ref" ]; then
+            local ref_dir="$ref"
+            [ -d "$ref_dir" ] || ref_dir=$(dirname "$ref_dir")
+            local ref_canon
+            ref_canon=$(_canonical_dir "$ref_dir")
+            case "$ref_canon/" in
+                "$canon/"*) ;;
+                *) return 1 ;;
+            esac
+        fi
+    fi
+    return 0
+}
+
+_is_valid_env_project_dir() {
+    local cand="${1:-}" ref="${2:-}"
+    _is_usable_project_root "$cand" "$ref" || return 1
+    local canon
+    canon=$(_canonical_dir "$cand")
+    if [ -n "$ref" ]; then
+        local ref_dir="$ref"
+        [ -d "$ref_dir" ] || ref_dir=$(dirname "$ref_dir")
+        if [ -d "$ref_dir" ]; then
+            local ref_canon
+            ref_canon=$(_canonical_dir "$ref_dir")
+            case "$ref_canon/" in
+                "$canon/"*) return 0 ;;
+            esac
+            if [ ! -d "$canon/.claude" ] && [ ! -e "$canon/.git" ]; then
+                return 1
+            fi
+        fi
+    fi
+    return 0
 }
 
 _set_project_dir() {
@@ -135,10 +214,20 @@ find_project_root() {
         echo ""
         return 1
     fi
+    local orig="$dir"
     [ -d "$dir" ] || dir=$(dirname "$dir")
+    local home_canon=""
+    [ -n "${HOME:-}" ] && [ -d "${HOME}" ] && home_canon=$(_canonical_dir "$HOME")
     local vcs="" harness="" build="" candidate=""
     while [ -n "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ]; do
-        if [ -z "$vcs" ] && { [ -e "${dir}/.git" ] || [ -d "${dir}/.hg" ] || [ -d "${dir}/.svn" ]; }; then
+        local cur_canon
+        cur_canon=$(_canonical_dir "$dir")
+        [ -n "$home_canon" ] && [ "$cur_canon" = "$home_canon" ] && break
+        if ! _is_usable_project_root "$dir" "$orig"; then
+            dir=$(dirname "$dir")
+            continue
+        fi
+        if [ -z "$vcs" ] && { [ -f "${dir}/.git/HEAD" ] || [ -f "${dir}/.git" ] || [ -d "${dir}/.hg" ] || [ -d "${dir}/.svn" ]; }; then
             vcs="$dir"
         fi
         if [ -z "$harness" ] && [ -d "${dir}/.claude" ]; then
@@ -196,36 +285,50 @@ get_project_dir() {
     PROJECT_DIR=""
     PROJECT_DIR_SOURCE=""
 
-    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+    local cwd hint ref_path
+    cwd=$(get_cwd)
+    hint="${1:-}"
+    [ -z "$hint" ] && hint=$(get_file_path)
+    ref_path="${hint:-$cwd}"
+
+    if _is_valid_env_project_dir "${CLAUDE_PROJECT_DIR:-}" "$ref_path"; then
         _set_project_dir "$CLAUDE_PROJECT_DIR" "env"
         return 0
     fi
+    if _is_valid_env_project_dir "${AGY_PROJECT_DIR:-}" "$ref_path"; then
+        _set_project_dir "$AGY_PROJECT_DIR" "env"
+        return 0
+    fi
 
-    local cwd top
-    cwd=$(get_cwd)
+    local top
     if [ -n "$cwd" ] && [ -d "$cwd" ]; then
         top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || echo "")
-        if [ -n "$top" ] && [ -d "$top" ]; then
+        if [ -n "$top" ] && _is_usable_project_root "$top" "$ref_path"; then
             _set_project_dir "$top" "git"
             return 0
         fi
     fi
 
-    local hint="${1:-}"
-    [ -z "$hint" ] && hint=$(get_file_path)
     if [ -n "$hint" ]; then
         top=$(find_project_root "$hint" || echo "")
-        if [ -n "$top" ]; then
+        if [ -n "$top" ] && _is_usable_project_root "$top" "$hint"; then
             # A VCS root found by the walk is the same fact `git rev-parse` reports, just
             # reached from the file instead of from cwd — authoritative. A bare build
             # manifest is not: in a monorepo it marks a package, so it stays DERIVED.
-            if [ -e "${top}/.git" ] || [ -d "${top}/.hg" ] || [ -d "${top}/.svn" ]; then
+            if [ -f "${top}/.git/HEAD" ] || [ -f "${top}/.git" ] || [ -d "${top}/.hg" ] || [ -d "${top}/.svn" ]; then
                 _set_project_dir "$top" "git"
             else
                 _set_project_dir "$top" "marker"
             fi
             return 0
         fi
+    fi
+
+    local ws0
+    ws0=$(json_get '.workspacePaths[0] // ""' "import sys,json; ws=json.load(sys.stdin).get('workspacePaths') or []; print(ws[0] if isinstance(ws,list) and ws and isinstance(ws[0],str) else '')")
+    if [ -n "$ws0" ] && _is_usable_project_root "$ws0" "$ref_path"; then
+        _set_project_dir "$ws0" "env"
+        return 0
     fi
 
     return 1
@@ -242,17 +345,26 @@ resolve_metrics_dir() {
     local root="${1:-}"
     local source="${2:-}"
     METRICS_DIR=""
-    [ -z "$root" ] && return 1
-    local dir="${root%/}/.claude/metrics"
+    _is_usable_project_root "$root" || return 1
+    local canon
+    canon=$(_canonical_dir "$root")
+    local dir="${canon}/.claude/metrics"
     if [ -d "$dir" ]; then
+        if [ ! -w "$dir" ]; then
+            echo "session-metrics: metrics directory is not writable: $dir" >&2
+            return 1
+        fi
         METRICS_DIR="$dir"
         return 0
     fi
     case "$source" in
         env|git) : ;;
-        *) [ -d "${root%/}/.claude" ] || return 1 ;;
+        *) [ -d "${canon}/.claude" ] || return 1 ;;
     esac
-    mkdir -p "$dir" 2>/dev/null || return 1
+    if ! mkdir -p "$dir" 2>/dev/null || [ ! -w "$dir" ]; then
+        echo "session-metrics: cannot create or write metrics directory: $dir" >&2
+        return 1
+    fi
     METRICS_DIR="$dir"
     return 0
 }
@@ -260,25 +372,79 @@ resolve_metrics_dir() {
 # The project root for callers that have no hook stdin — SKILL.md snippets, and the
 # repo-local probes below (`.claude/skills`, `.claude/integration.json`). Same order as
 # get_project_dir minus the hook-input tier: an already-resolved $PROJECT_DIR, then
-# $CLAUDE_PROJECT_DIR, then the git toplevel of the process cwd, then ".". A bare relative
-# `.claude/...` path would resolve against "wherever the last cd left us" — the same bug in
-# miniature, and the reason every skill that writes into `.claude/` anchors on this.
+# $CLAUDE_PROJECT_DIR, then the git toplevel of the process cwd, then marker walk / cwd.
+# Fails closed (return 1) rather than returning "" or "/" or $HOME or a read-only plugin root.
 harness_root() {
-    if [ -n "${PROJECT_DIR:-}" ] && [ -d "${PROJECT_DIR}" ]; then
-        echo "${PROJECT_DIR%/}"
-        return 0
-    fi
-    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
-        echo "${CLAUDE_PROJECT_DIR%/}"
-        return 0
-    fi
-    local top
+    local pwd_real top
+    pwd_real=$(pwd -P 2>/dev/null || echo "")
     top=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
-    if [ -n "$top" ] && [ -d "$top" ]; then
-        echo "${top%/}"
+
+    if [ -n "${PROJECT_DIR:-}" ] && _is_valid_env_project_dir "${PROJECT_DIR}" "$pwd_real"; then
+        echo "$(_canonical_dir "$PROJECT_DIR")"
         return 0
     fi
-    echo "."
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _is_valid_env_project_dir "${CLAUDE_PROJECT_DIR}" "$pwd_real"; then
+        local c_canon
+        c_canon=$(_canonical_dir "$CLAUDE_PROJECT_DIR")
+        if [ -z "$top" ] || ! _is_usable_project_root "$top" "$pwd_real" || [ "$c_canon" = "$(_canonical_dir "$top")" ]; then
+            echo "$c_canon"
+            return 0
+        fi
+    fi
+    if [ -n "${AGY_PROJECT_DIR:-}" ] && _is_valid_env_project_dir "${AGY_PROJECT_DIR}" "$pwd_real"; then
+        local a_canon
+        a_canon=$(_canonical_dir "$AGY_PROJECT_DIR")
+        if [ -z "$top" ] || ! _is_usable_project_root "$top" "$pwd_real" || [ "$a_canon" = "$(_canonical_dir "$top")" ]; then
+            echo "$a_canon"
+            return 0
+        fi
+    fi
+    if [ -n "$top" ] && _is_usable_project_root "$top" "$pwd_real"; then
+        echo "$(_canonical_dir "$top")"
+        return 0
+    fi
+    if [ -n "$pwd_real" ]; then
+        local marker_root
+        marker_root=$(find_project_root "$pwd_real" || echo "")
+        if [ -n "$marker_root" ] && _is_usable_project_root "$marker_root" "$pwd_real"; then
+            echo "$(_canonical_dir "$marker_root")"
+            return 0
+        fi
+        if _is_usable_project_root "$pwd_real" "$pwd_real"; then
+            echo "$(_canonical_dir "$pwd_real")"
+            return 0
+        fi
+    fi
+    echo "harness_root: cannot establish a safe project root from '${pwd_real:-<empty>}'" >&2
+    return 1
+}
+
+# Validate <root> and create/verify writable state directory(ies) under <root>/.claude/<subpath>.
+# Fails loudly (return 1) before any write if <root> is empty, "/", $HOME, read-only plugin root, or unwritable.
+ensure_harness_dir() {
+    local root="${1:-}"
+    shift 2>/dev/null || true
+    if ! _is_usable_project_root "$root"; then
+        echo "ensure_harness_dir: invalid or unsafe project root '${root:-<empty>}'" >&2
+        return 1
+    fi
+    local canon sub target
+    canon=$(_canonical_dir "$root")
+    if [ "$#" -eq 0 ]; then
+        set -- ""
+    fi
+    for sub in "$@"; do
+        if [ -n "$sub" ]; then
+            target="${canon}/.claude/${sub#/}"
+        else
+            target="${canon}/.claude"
+        fi
+        if ! mkdir -p "$target" 2>/dev/null || [ ! -w "$target" ]; then
+            echo "ensure_harness_dir: state directory is not writable: $target" >&2
+            return 1
+        fi
+    done
+    return 0
 }
 
 # --- Harness config loading ---
@@ -294,10 +460,16 @@ SIBLING_LAYERS=""
 # Sets: HARNESS_FILE, HARNESS_ROOT
 find_harness_json() {
     local search_dir="$1"
+    local orig="$search_dir"
     HARNESS_FILE=""
     HARNESS_ROOT=""
-    while [ "$search_dir" != "/" ] && [ "$search_dir" != "." ]; do
-        if [ -f "${search_dir}/.claude/harness.json" ]; then
+    local home_canon=""
+    [ -n "${HOME:-}" ] && [ -d "${HOME}" ] && home_canon=$(_canonical_dir "$HOME")
+    while [ -n "$search_dir" ] && [ "$search_dir" != "/" ] && [ "$search_dir" != "." ]; do
+        local cur_canon
+        cur_canon=$(_canonical_dir "$search_dir")
+        [ -n "$home_canon" ] && [ "$cur_canon" = "$home_canon" ] && break
+        if _is_usable_project_root "$search_dir" "$orig" && [ -f "${search_dir}/.claude/harness.json" ]; then
             HARNESS_FILE="${search_dir}/.claude/harness.json"
             HARNESS_ROOT="$search_dir"
             return 0
@@ -601,6 +773,22 @@ append_history_record() {
         echo "append_history_record: dir, basename and json are all required" >&2
         return 1
     fi
+    case "$dir" in
+        "/"|"/.claude"|/.claude/*)
+            echo "append_history_record: refusing to write to root path '$dir'" >&2
+            return 1
+            ;;
+    esac
+    if [ -n "${HOME:-}" ] && [ -d "${HOME}" ]; then
+        local home_canon
+        home_canon=$(_canonical_dir "$HOME")
+        case "$dir" in
+            "$home_canon/.claude"|"$home_canon/.claude/"*|"$HOME/.claude"|"$HOME/.claude/"*)
+                echo "append_history_record: refusing to write to HOME config path '$dir'" >&2
+                return 1
+                ;;
+        esac
+    fi
     local ok=1
     if command -v python3 >/dev/null 2>&1; then
         printf '%s' "$json" | python3 -c 'import json,sys; json.loads(sys.stdin.read())' 2>/dev/null && ok=0
@@ -615,7 +803,12 @@ append_history_record() {
         return 1
     fi
     mkdir -p "$dir" 2>/dev/null || { echo "append_history_record: cannot create $dir" >&2; return 1; }
+    [ -w "$dir" ] || { echo "append_history_record: directory is not writable: $dir" >&2; return 1; }
     local file="${dir%/}/$base" line
+    if [ -e "$file" ] && [ ! -w "$file" ]; then
+        echo "append_history_record: file is not writable: $file" >&2
+        return 1
+    fi
     line=$(printf '%s' "$json" | tr -d '\n')
     if command -v flock >/dev/null 2>&1; then
         ( flock -w 2 200 && printf '%s\n' "$line" >> "$file" ) 200>"$file.lock" 2>/dev/null \

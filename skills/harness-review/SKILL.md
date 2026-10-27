@@ -3,7 +3,7 @@ name: harness-review
 description: "Four-pillar code review by a SEPARATE built-in Explore judge; the decision (APPROVE/REQUEST_CHANGES/NEEDS_HUMAN) is computed from its typed findings[] and written as the review decision signal. Composes gstack: delegates deep slop & security to /codex and /cso, reads gstack's verdict and typed findings read-only; dedups across [HARNESS]/[STRUCTURAL]/[CROSS-MODEL]/[SECURITY]/[UX]/[BOTH+] tags. Aliases: harness审查, 统一评审, 双重评审, 四支柱审查"
 user-invocable: true
 argument-hint: "[PR-number or file-path] [--plan <plan-id>] [--no-gstack] [--no-codex] [--no-cso] [--ux]"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, view_file, find_by_name, grep_search, run_command, invoke_subagent
 ---
 
 # Harness Review
@@ -37,8 +37,9 @@ Review the current changes (staged/unstaged diff, or PR via $ARGUMENTS).
 
 ### Blind evaluation protocol (a SEPARATE skeptical judge; MANDATORY)
 
-Reviews 1–5 ALWAYS run in a fresh built-in `Explore` subagent via the Agent tool (a native
-primitive, no agent file of ours; Explore has no Bash and skips CLAUDE.md/git status). Hand
+Reviews 1–5 ALWAYS run in a fresh built-in `Explore` subagent via the Agent tool (in Claude
+Code) or read-only `research` subagent via `invoke_subagent` (in Antigravity CLI — a native
+read-only primitive, no agent file of ours; Explore has no Bash and skips CLAUDE.md/git status). Hand
 it ONLY: the `git diff` TEXT, the plan's acceptance criteria, the docs/LINTING.md rubric,
 and the FRESH `verify-latest.json` + the last `verify.jsonl` `failures[]` (the tests already
 ran — the judge never re-runs behaviour). It returns `findings[]` in the Review 8 shape plus
@@ -47,7 +48,9 @@ session's reasoning or self-assessment. The separation is the lever: LLM judges 
 agree at κ≈0.16 and grade their own work generously (Anthropic harness-design 2026-03;
 docs/TEAM-DISCUSSION-2026-09-11.md). The in-session part may only APPEND gstack-sourced
 findings (Review 7) — never add, drop or re-grade the judge's. `/harness-audit`
-(`/oh-my-agents:harness-audit`) is the fan-out form of the same judge.
+(`/oh-my-agents:harness-audit` in Claude Code; in Antigravity CLI `workflows/*.js` is not a
+native CLI slash workflow, so fan out read-only `research` subagents across the 6 dimensions
+in `workflows/harness-audit.js` via `/harness-review`) is the fan-out form of the same judge.
 
 ### Review 1: Say No to Slop
 
@@ -162,7 +165,8 @@ structural fallback checklist covers the floor.
 Unless `--no-gstack` is passed, probe gstack and compose its complementary reviews:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+gstack_detect || true
 echo "GSTACK: ${GSTACK_PATH:-not_found}"
 UI_TOUCHED=$(git diff --name-only 2>/dev/null | grep -Eic '\.(tsx|jsx|vue|svelte|css|html)$' || true)
 ```
@@ -289,9 +293,8 @@ derived from OUR four pillars; gstack's verdict is advisory (full rule: docs/SIG
 - Never aggregate, never rewrite our decision mechanically, never write gstack paths.
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"
-ROOT=$(harness_root)   # never a bare .claude/ path
-mkdir -p "$ROOT/.claude/signals"
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) && ensure_harness_dir "$ROOT" signals metrics || exit 1
 COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)   # freshness predicate stamp
 DECISION=$(printf '%s' "$FINDINGS_JSON" | jq -r 'if any(.[]; .severity=="P0") or ([.[] | select(.tag=="[BOTH+]")] | length) >= 2 then "REQUEST_CHANGES" elif any(.[]; .needs_human != null) then "NEEDS_HUMAN" else "APPROVE" end')
 # Optional wtree stamp: same rule as /verify — gstack-wtree executable AND both ledger dirs

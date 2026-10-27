@@ -4,7 +4,7 @@ description: "Initialize project as agent-ready harness — CLAUDE.md, nested CL
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "[project-path] [--quick]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, view_file, write_to_file, replace_file_content, multi_replace_file_content, find_by_name, grep_search, run_command
 ---
 
 # Harness Init
@@ -36,7 +36,8 @@ Scan the repository:
 5. gstack detection, and the ledger ignores (always — signal/metric ledgers are never source,
    and gstack's content fingerprint would move the moment an un-ignored signal lands):
    ```bash
-   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect && echo "GSTACK: yes" || echo "GSTACK: no"
+   _t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+   gstack_detect && echo "GSTACK: yes" || echo "GSTACK: no"
    for p in .claude/signals/ .claude/metrics/ .claude/gstack-rendered/; do grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore; done
    ```
 

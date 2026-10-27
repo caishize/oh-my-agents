@@ -3,7 +3,7 @@ name: harness-dashboard
 description: "Harness health overview and metric analysis — per-edit layer balance, plan progress, verify/review velocity, entropy and legibility trends, gstack lifecycle coverage. Supports deep-dive queries (layer-balance, trends, velocity, export); every row names a file source. Aliases: 仪表盘, 看板, 运行状态, 指标查询, 度量分析"
 user-invocable: true
 argument-hint: "[--days N] [--plan plan-id] [--json] [--query layer-balance|trends|velocity|export]"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, view_file, find_by_name, grep_search, run_command
 ---
 
 # Harness Dashboard
@@ -53,8 +53,9 @@ See [DEEP-DIVE.md](DEEP-DIVE.md) for query formats and output templates.
    probe is presence-based — never required.
 
    ```bash
-   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
-   ROOT=$(harness_root)   # `.gstack/…` globs are rooted here, never at the shell cwd
+   _t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+   gstack_detect || true
+   ROOT=$(harness_root) || exit 1   # `.gstack/…` globs are rooted here, never at the shell cwd
 
    # Usage: projects/<slug>/timeline.jsonl is ALWAYS written by gstack-skill-start/-end
    # ({skill,event:started|completed,branch,outcome,duration_s,ts}); skill-usage.jsonl is

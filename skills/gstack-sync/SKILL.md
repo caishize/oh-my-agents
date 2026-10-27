@@ -4,7 +4,7 @@ description: "Detect gstack installation, configure read-only artifact bridges, 
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "[--status] [--setup] [--contract-check]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, view_file, write_to_file, replace_file_content, multi_replace_file_content, find_by_name, grep_search, run_command
 ---
 
 # gstack-sync — Plugin Integration Hub
@@ -25,7 +25,8 @@ consumers, triple-dead upstream inputs; everything wanted lives in `/harness-das
 ### Step 0: Detect gstack (loose match)
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+gstack_detect || true
 [ -z "$GSTACK_PATH" ] && echo "NOT_FOUND" && exit 0
 GSTACK_VERSION=$(cat "$GSTACK_PATH/VERSION" 2>/dev/null || echo "unknown")
 GSTACK_MAJOR_MINOR=$(echo "$GSTACK_VERSION" | cut -d. -f1-2)
@@ -84,7 +85,8 @@ hand-rolled skill enumeration. It is gstack's authoritative index of skills/comm
 
 ```bash
 # Compare detected version to integration.json's min_supported
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) || exit 1
 MIN_SUPPORTED=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]+"/.claude/integration.json"))["gstack"]["min_supported"])' "$ROOT" 2>/dev/null)
 ver_lt() { [ "$(printf '%s\n%s' "$1" "$2" | sort -V | head -1)" = "$1" ] && [ "$1" != "$2" ]; }
 [ -n "$MIN_SUPPORTED" ] && ver_lt "$GSTACK_VERSION" "$MIN_SUPPORTED" && \
@@ -161,7 +163,7 @@ Output this structure (Markdown):
 
 1. Ensure `$ROOT/.claude/integration.json` exists. It is NOT created by `/harness-init`; when
    absent, copy the plugin's own manifest as the template —
-   `cp "${CLAUDE_PLUGIN_ROOT}/.claude/integration.json" "$ROOT/.claude/integration.json"` —
+   `ensure_harness_dir "$ROOT" && cp "${CLAUDE_PLUGIN_ROOT}/.claude/integration.json" "$ROOT/.claude/integration.json"` —
    it carries `{SLUG}` placeholders (substituted at read time by `resolve_gstack_paths`,
    never baked) and `policies.review_contract_quarter`, which the overdue nudge needs. Set
    `project.slug` to `$SLUG`. If older, migrate.
@@ -171,7 +173,7 @@ Output this structure (Markdown):
    enclave, v1.57.9+ — gstack writes rendered docs there; we never track or flag it).
 4. Create the signals directory at the **project root** for verify + review decision
    signals (`verify-latest.json`, `review-latest.json`):
-   `ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root); mkdir -p "$ROOT/.claude/signals"`.
+   `ROOT=$(harness_root) && ensure_harness_dir "$ROOT" signals`.
 5. Print summary; do not modify gstack files.
 
 ### Step 4: Contract Check (--contract-check)

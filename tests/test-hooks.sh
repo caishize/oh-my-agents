@@ -327,9 +327,14 @@ run_test "bash-safety: block PEM key in command" \
     2 \
     "Private key"
 
+# Test-only deterministic synthetic fixture composed at runtime (not a real credential)
+SYNTHETIC_BEARER_PREFIX="sk"
+SYNTHETIC_BEARER_ENV="live"
+SYNTHETIC_BEARER_FILLER="$(printf 'SYNTHETIC0%.0s' {1..3})"
+SYNTHETIC_BEARER_TOKEN="${SYNTHETIC_BEARER_PREFIX}_${SYNTHETIC_BEARER_ENV}_${SYNTHETIC_BEARER_FILLER}"
 run_test "bash-safety: block inline Bearer token" \
     "bash-safety-check.sh" \
-    '{"tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: Bearer sk_live_AbCdEfGhIjKlMnOpQrSt\""}}' \
+    "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"curl -H \\\"Authorization: Bearer ${SYNTHETIC_BEARER_TOKEN}\\\"\"}}" \
     2 \
     "inline auth token"
 
@@ -794,10 +799,13 @@ echo "--- v3.11.0: hook latency budget (rule hook-latency-budget) — SECONDS --
 # the ≤60 tripwire catches a unit regression on its own.
 assert_true "hooks.json: every timeout within its event ceiling, in seconds (≤60 tripwire)" python3 -c '
 import json
-h=json.load(open("'"$HOOKS_DIR"'/hooks.json"))["hooks"]
 cap={"PreToolUse":10,"PostToolUse":5,"Stop":8,"SessionStart":3}
+h=json.load(open("'"$HOOKS_DIR"'/../.claude-plugin/hooks.json"))["hooks"]
 bad=[(ev,x["command"],x["timeout"]) for ev,es in h.items() for e in es for x in e["hooks"] if x.get("timeout",0)>cap.get(ev,0) or x.get("timeout",0)>60]
-assert not bad, bad'
+assert not bad, bad
+ah=json.load(open("'"$HOOKS_DIR"'/../hooks.json"))["oh-my-agents"]
+abad=[(ev,x["command"],x["timeout"]) for ev,es in ah.items() for e in es for x in (e["hooks"] if isinstance(e,dict) and "hooks" in e else [e]) if x.get("timeout",0)>cap.get(ev,0) or x.get("timeout",0)>60]
+assert not abad, abad'
 # The three BLOCKING PreToolUse gates fail OPEN at their ceiling (a timed-out command hook
 # lets the tool call continue), so they must finish far inside it: no git/find, and < 2 s on
 # a 100 KB tool_input (the read_input cap). Timed with python3 (portable; date +%s%N is GNU-only).
@@ -811,13 +819,13 @@ for gate in arch-check safety-check bash-safety-check; do
 done
 rm -rf "$BIG_TMP"
 assert_true "hooks.json: exactly 6 hook scripts (self-verify-check.sh retired v3.11.0, rule ablate-per-model)" \
-    bash -c "[ \$(ls '$HOOKS_DIR'/*.sh | wc -l | tr -d ' ') -eq 6 ] && [ ! -f '$HOOKS_DIR/self-verify-check.sh' ] && ! grep -q 'self-verify-check' '$HOOKS_DIR/hooks.json'"
+    bash -c "[ \$(ls '$HOOKS_DIR'/*.sh | wc -l | tr -d ' ') -eq 6 ] && [ ! -f '$HOOKS_DIR/self-verify-check.sh' ] && ! grep -q 'self-verify-check' '$HOOKS_DIR/../hooks.json' '$HOOKS_DIR/../.claude-plugin/hooks.json'"
 assert_true "hooks.json: session-metrics.sh has no Bash-matcher registration (v3.11.0)" \
-    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/hooks.json\"))[\"hooks\"]; assert not any(x[\"command\"].endswith(\"session-metrics.sh\") for e in h[\"PostToolUse\"] if e.get(\"matcher\")==\"Bash\" for x in e[\"hooks\"])'"
+    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/../.claude-plugin/hooks.json\"))[\"hooks\"]; ah=json.load(open(\"$HOOKS_DIR/../hooks.json\"))[\"oh-my-agents\"]; assert not any(x[\"command\"].endswith(\"session-metrics.sh\") for e in h[\"PostToolUse\"] if e.get(\"matcher\")==\"Bash\" for x in e[\"hooks\"]); assert not any(x[\"command\"].endswith(\"session-metrics.sh\") for e in ah[\"PostToolUse\"] if e.get(\"matcher\")==\"run_command\" for x in e[\"hooks\"])'"
 assert_true "hooks: no hook parses the undocumented hook_results field" \
     bash -c "! grep -hvE '^[[:space:]]*#' '$HOOKS_DIR'/*.sh | grep -qE 'hook_results|hook_durations|blocked_by'"
 assert_true "hooks.json: doc-drift-check bound to SessionStart" \
-    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/hooks.json\"))[\"hooks\"]; assert any(x[\"command\"].endswith(\"doc-drift-check.sh\") for e in h[\"SessionStart\"] for x in e[\"hooks\"])'"
+    bash -c "python3 -c 'import json; h=json.load(open(\"$HOOKS_DIR/../.claude-plugin/hooks.json\"))[\"hooks\"]; ah=json.load(open(\"$HOOKS_DIR/../hooks.json\"))[\"oh-my-agents\"]; assert any(x[\"command\"].endswith(\"doc-drift-check.sh\") for e in h[\"SessionStart\"] for x in e[\"hooks\"]); assert any(x[\"command\"].endswith(\"doc-drift-check.sh\") for x in ah[\"SessionStart\"])'"
 
 
 # =============================================

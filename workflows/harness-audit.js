@@ -1,7 +1,10 @@
 // harness-audit — the ONE sanctioned oh-my-agents Dynamic Workflow (anti-bloat rule `single-workflow`).
-// Distributed from the plugin root (`workflows/` — the platform's default directory, no manifest
-// field needed) as `/oh-my-agents:harness-audit` on every install; a dev session loads it via
+// Distributed from the plugin root (`workflows/` — Claude Code's default directory, no manifest
+// field needed) as `/oh-my-agents:harness-audit` in Claude Code; a dev session loads it via
 // `claude --plugin-dir .`. Never re-create `.claude/workflows/` (CI asserts its absence).
+// In Antigravity CLI (v1.4.7), `workflows/*.js` is NOT loaded as a native CLI slash workflow;
+// use `/harness-review` (with `invoke_subagent` `research` fan-out when auditing all pillars)
+// and persist only via the accountable-writer recipe in `docs/SIGNALS.md`.
 //
 // WHAT: a read-only, fan-out, four-pillar governance audit. Many Explore agents audit the
 // repo in parallel, each finding is adversarially verified (skeptic tries to REFUTE it),
@@ -34,7 +37,8 @@ export const meta = {
   ],
 }
 
-const SCOPE = (args && args.scope) ? `\nScope hint: ${args.scope}` : '';
+export default await (async () => {
+  const SCOPE = (typeof args !== 'undefined' && args && args.scope) ? `\nScope hint: ${args.scope}` : '';
 
 const CTX = `You are auditing the repository in the current working directory (a codebase using
 the oh-my-agents harness). Use Read/Glob/Grep and read-only Bash to inspect REAL files. Report
@@ -89,20 +93,29 @@ const DIMENSIONS = [
 
 // ---------------------------------------------------------------------------
 phase('Audit');
-const audits = await parallel(DIMENSIONS.map((d) => () =>
-  agent(`${CTX}\n\n${d.prompt}`, { agentType: 'Explore', schema: AUDIT_SCHEMA, label: `audit:${d.key}`, phase: 'Audit' })
-)).then((r) => r.filter(Boolean));
+const rawAudits = await parallel(DIMENSIONS.map((d) => () =>
+  Promise.resolve().then(() =>
+    agent(`${CTX}\n\n${d.prompt}`, { agentType: 'Explore', schema: AUDIT_SCHEMA, label: `audit:${d.key}`, phase: 'Audit' })
+  ).catch(() => null)
+));
+const audits = (rawAudits || []).filter((a) => a && Array.isArray(a.findings));
+const auditIncomplete = !Array.isArray(rawAudits) || audits.length !== DIMENSIONS.length;
 
 const raw = audits.flatMap((a) => (a.findings || []).map((f) => ({ ...f, dimension: a.dimension })));
 
 // ---------------------------------------------------------------------------
 phase('Verify');
-const verified = await parallel(raw.map((f) => () =>
-  agent(
-    `${CTX}\n\nROLE: adversarial skeptic. Try HARD to REFUTE this finding by checking the actual file(s) and any external source of truth. Default real=false if you cannot independently confirm it on disk. Finding:\n${JSON.stringify(f, null, 2)}`,
-    { agentType: 'Explore', schema: VERDICT_SCHEMA, label: `verify:${f.dimension}:${f.id}`, phase: 'Verify' }
-  ).then((v) => ({ ...f, verdict: v })).catch(() => null)
-)).then((r) => r.filter(Boolean));
+const rawVerified = await parallel(raw.map((f) => () =>
+  Promise.resolve().then(() =>
+    agent(
+      `${CTX}\n\nROLE: adversarial skeptic. Try HARD to REFUTE this finding by checking the actual file(s) and any external source of truth. Default real=false if you cannot independently confirm it on disk. Finding:\n${JSON.stringify(f, null, 2)}`,
+      { agentType: 'Explore', schema: VERDICT_SCHEMA, label: `verify:${f.dimension}:${f.id}`, phase: 'Verify' }
+    )
+  ).then((v) => (v && typeof v.real === 'boolean' ? { ...f, verdict: v } : null)).catch(() => null)
+));
+const verified = (rawVerified || []).filter(Boolean);
+const verifyIncomplete = !Array.isArray(rawVerified) || verified.length !== raw.length;
+const incomplete = auditIncomplete || verifyIncomplete;
 
 const confirmed = verified.filter((f) => f.verdict && f.verdict.real);
 const refuted = verified.filter((f) => f.verdict && !f.verdict.real);
@@ -113,9 +126,11 @@ const p0 = confirmed.filter((f) => f.severity === 'P0').length;
 const p1 = confirmed.filter((f) => f.severity === 'P1').length;
 const p2 = confirmed.filter((f) => f.severity === 'P2').length;
 
-// Deterministic decision (computed here, NOT by a model). Conservative by design.
-const decision = p0 > 0 ? 'REQUEST_CHANGES' : (p1 > 0 ? 'NEEDS_HUMAN' : 'APPROVE');
+// Deterministic decision (computed here, NOT by a model). Conservative fail-closed by design:
+// incomplete audit or verification fan-out never yields APPROVE.
+const decision = p0 > 0 ? 'REQUEST_CHANGES' : ((p1 > 0 || incomplete) ? 'NEEDS_HUMAN' : 'APPROVE');
 const needs_human_kind = decision === 'NEEDS_HUMAN' ? 'judgment-slop' : null;
+const reasonSuffix = incomplete ? '; incomplete audit/verify fan-out' : '';
 
 // review-latest.json shape (docs/SIGNALS.md). RETURNED, not written — see header invariant 3.
 // Persistence: docs/SIGNALS.md § "Persisting a /harness-audit result" is the ONLY sanctioned
@@ -125,12 +140,12 @@ const signal = {
   schema_version: 1,
   decision,
   needs_human_kind,
-  merge_recommendation: p0 > 0 ? 'COMPLEX' : (p1 > 0 ? 'STANDARD' : 'TRIVIAL'),
+  merge_recommendation: p0 > 0 ? 'COMPLEX' : ((p1 > 0 || incomplete) ? 'STANDARD' : 'TRIVIAL'),
   p0_count: p0, p1_count: p1, p2_count: p2,
   tags_present: ['[HARNESS]'],
   gstack_composed: false,
   plan_id: null,
-  reason: `harness-audit: ${p0} P0 / ${p1} P1 / ${p2} P2 confirmed (fan-out+verify)`.slice(0, 120),
+  reason: `harness-audit: ${p0} P0 / ${p1} P1 / ${p2} P2 confirmed (fan-out+verify${reasonSuffix})`.slice(0, 120),
   _persistence: 'RETURNED, not written (accountable-writer). Persist via the one-liner recipe in docs/SIGNALS.md — it stamps timestamp + commit (freshness predicate) and tags reason with source:harness-audit.',
 };
 
@@ -143,3 +158,4 @@ return {
   refuted: refuted.map((f) => ({ title: f.title, why: f.verdict.reason })),
   stats: { dimensions: DIMENSIONS.length, raw: raw.length, confirmed: confirmed.length, refuted: refuted.length },
 };
+})();

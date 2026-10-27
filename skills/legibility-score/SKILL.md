@@ -3,7 +3,7 @@ name: legibility-score
 description: "Assess the 10-metric Agent Legibility Score for a repository — measures how ready a codebase is for AI agent-driven development across four pillars: Architecture as Guardrails, Documentation as System of Record, Observability & Legibility, Entropy Management. Aliases: 可读性评分, Agent就绪度, 代码可读性, AI友好度评估, 代码评分"
 user-invocable: true
 argument-hint: "[project-path]"
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, view_file, find_by_name, grep_search, run_command
 ---
 
 # Agent Legibility Score
@@ -251,8 +251,8 @@ per-pillar subtotals, timestamp, commit) AND append the same record as one line 
 `.claude/metrics/legibility.jsonl` (trend history — `/harness-dashboard` reads both):
 
 ```bash
-ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)   # never a bare .claude/ path
-mkdir -p "$ROOT/.claude/metrics"
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) && ensure_harness_dir "$ROOT" metrics || exit 1
 python3 -c "import json,subprocess,datetime,sys; R=sys.argv[1]; s={'score':TOTAL,'pillars':{'arch':A,'docs':D,'observ':O},'timestamp':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'commit':subprocess.check_output(['git','-C',R,'rev-parse','HEAD'],text=True).strip()}; open(R+'/.claude/metrics/legibility-latest.json','w').write(json.dumps(s)); open(R+'/.claude/metrics/legibility.jsonl','a').write(json.dumps(s)+'\n')" "$ROOT"
 ```
 

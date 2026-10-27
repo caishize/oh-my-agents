@@ -3,7 +3,7 @@ name: spec-to-task
 description: "Convert feature specs into agent-executable tasks with a layer-aware execution plan — failing tests first, explicit context per task, JSON progress tracking, and full plan lifecycle management. Turn any idea into a structured, dependency-ordered plan that agents can execute reliably. Aliases: 需求拆分, 任务分解, 规格转任务, 拆解需求, 创建执行计划"
 user-invocable: true
 argument-hint: "<spec-description or issue-url> [--continue <plan-id>] [--status]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, view_file, write_to_file, replace_file_content, multi_replace_file_content, find_by_name, grep_search, run_command
 ---
 
 # Spec to Task v2.0
@@ -41,7 +41,8 @@ managed execution plan.
    `/spec-to-task` is the clean DOWNSTREAM that turns a spec into a layer-aware exec-plan
    JSON. Probe for any of them (glob — gstack reorganizes; absence = graceful degrade):
    ```bash
-   source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && gstack_detect || true
+   _t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+   gstack_detect || true
    BRANCH=$(git branch --show-current 2>/dev/null)
    # /spec ALWAYS archives the sanitized spec locally: projects/<slug>/specs/<ts>-<pid>-<title>.md with
    # frontmatter spec_issue_number / spec_issue_url / spec_branch — select by branch, the rule /ship uses.

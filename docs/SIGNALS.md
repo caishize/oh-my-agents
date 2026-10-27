@@ -41,8 +41,8 @@ So they are promoted to a versioned **Gate API** consumed by:
 5. **Atomic-ish write.** Write the signal even on early exit. Producers compute fields
    with `python3`/`jq`/`printf` (correct escaping) — never an unquoted heredoc.
 5b. **Rooted at the project root, never the shell cwd** (`project-root`). Every path in this
-   document is relative to the project root. Producers and consumers resolve it explicitly —
-   `ROOT=$(source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh" && harness_root)` — because a
+   document is relative to the project root. Producers and consumers resolve it explicitly via
+   `hooks/lib/common.sh` (`ROOT=$(harness_root) && ensure_harness_dir "$ROOT" signals metrics`) — because a
    build or test step may have left the session in a subdirectory. A signal written to
    `backend/.claude/signals/` is one no consumer looks for, and under `default-deny` that
    reads as *absent* ⇒ blocking. Silent, and indistinguishable from a signal that said OK.
@@ -252,7 +252,8 @@ writes ONLY `signal` to the signal file (≤500 bytes), and `signal` + `findings
 `confirmed`, mapped to the history-log shape above) to the history log:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib/common.sh"; ROOT=$(harness_root)   # rule project-root
+_t=$(git rev-parse --show-toplevel 2>/dev/null || echo ""); _r=""; for _p in "${CLAUDE_PLUGIN_ROOT:-}" "${AGY_PLUGIN_ROOT:-}" "$_t" "${_t:+$_t/.agents/plugins/oh-my-agents}" . .agents/plugins/oh-my-agents .. ../.agents/plugins/oh-my-agents "${HOME:+$HOME/.gemini/config/plugins/oh-my-agents}" "${HOME:+$HOME/.gemini/antigravity-cli/config/plugins/oh-my-agents}"; do [ -n "$_p" ] && [ "$_p" != "/" ] && [ -f "$_p/hooks/lib/common.sh" ] && { _r="$_p"; break; }; done; [ -n "$_r" ] && source "$_r/hooks/lib/common.sh" || { echo "ERROR: oh-my-agents common.sh not found" >&2; exit 1; }
+ROOT=$(harness_root) && ensure_harness_dir "$ROOT" signals metrics || exit 1   # rule project-root
 worktree_dirty "$ROOT" && { echo "refusing: uncommitted changes since the audit"; exit 1; }
 python3 -c '
 import json, subprocess, sys, datetime

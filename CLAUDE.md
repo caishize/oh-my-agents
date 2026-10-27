@@ -1,10 +1,10 @@
-# Oh-My-Agents — Harness Engineering Plugin for Claude Code
+# Oh-My-Agents — Harness Engineering Plugin (Antigravity CLI & Claude Code)
 
 **v3.11.0** — Mechanical quality constraints + entropy management for AI-driven dev.
 **Composition-based** integration with [gstack](https://github.com/garrytan/gstack.git)
 (v1.46+ floor, v1.84.1.0 current, source-verified 2026-09-11); we own *architecture /
 entropy / observability* and **never orchestrate delivery**. Coordination is native
-(Agent Teams + Dynamic Workflows); our durable anchor is the read-only audit + the
+(Agent Teams / subagents + workflows); our durable anchor is the read-only audit + the
 versioned decision-signal **Gate API** ([docs/SIGNALS.md](docs/SIGNALS.md)).
 
 ## Differentiation anchor
@@ -21,9 +21,9 @@ versioned decision-signal **Gate API** ([docs/SIGNALS.md](docs/SIGNALS.md)).
 `legibility-score`, `spec-to-task`, `verify`, `encode-mistake`, `arch-guard`,
 `entropy-sweep`, `harness-review`, `harness-dashboard`, `gstack-sync`, `lifecycle`
 (`harness-init` + `gstack-sync` are human-typed: `disable-model-invocation`). 6 hooks
-(canonical: `hooks/hooks.json`, timeouts in SECONDS; advisory `additionalContext` on
-PreToolUse/PostToolUse/SessionStart; Stop is `systemMessage` only — never a continuation).
-0 agents. 1 workflow at the plugin root: `/oh-my-agents:harness-audit`. CI: `.github/workflows/ci.yml`.
+(canonical: root `hooks.json` via `hooks/antigravity-adapter.py` + `.claude-plugin/hooks.json`,
+timeouts in SECONDS; advisory `additionalContext`/`injectSteps` on PreToolUse/SessionStart; Stop
+never continues). 0 agents. 1 Claude workflow (`workflows/harness-audit.js`; in Antigravity use `/harness-review`). CI: `.github/workflows/ci.yml`.
 
 ## Workflow (TL;DR)
 
