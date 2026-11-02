@@ -24,7 +24,7 @@ Safety invariants:
   workspacePaths without ambient CLAUDE_PROJECT_DIR contamination.
 - Delivers execution-plan feedforward advisories to the model via PostToolUse ->
   PreInvocation ephemeralMessage, and renders human-facing turn-end gate/drift
-  summaries via PostInvocation metadata.user_markdown (never forcing continuation).
+  summaries via PostInvocation systemMessage (omitting metadata map to avoid agy 1.4.12 ScrubInternalFields panic, never forcing continuation).
 - Never emits permissionOverrides, auto_approve, overwrite, or bypass settings.
 - Stop returns {} and never emits {"decision": "continue"} (rule no-orchestration).
 """
@@ -1419,18 +1419,16 @@ def handle_post_invocation(scripts: List[str]) -> int:
         if adv:
             messages.append(adv)
 
-    # Render human-facing gate ladder / doc-drift summary inline via user_markdown
-    # with empty model systemMessage ("") and default terminationBehavior (never force_continue).
+    # Surface turn-end gate ladder / doc-drift summary via systemMessage.systemMessage
+    # with default terminationBehavior (never force_continue). Omit systemMessage.metadata
+    # because agy 1.4.12 utils.ScrubInternalFields panics on non-empty map<string, string>.
     if messages:
         return emit_json(
             {
                 "injectSteps": [
                     {
                         "systemMessage": {
-                            "systemMessage": "",
-                            "metadata": {
-                                "user_markdown": "\n\n".join(messages),
-                            },
+                            "systemMessage": "\n\n".join(messages),
                         }
                     }
                 ]
@@ -1441,7 +1439,7 @@ def handle_post_invocation(scripts: List[str]) -> int:
 
 def handle_stop(_scripts: List[str]) -> int:
     # Turn-end human-facing doc-drift-check.sh output is surfaced via PostInvocation
-    # (metadata.user_markdown). Antigravity's Stop contract only consumes reason when
+    # (injectSteps.systemMessage). Antigravity's Stop contract only consumes reason when
     # decision=="continue", and rule no-orchestration forbids continuing the turn,
     # so validate stdin and return safe empty JSON {} without duplicate git/find I/O.
     read_hook_stdin("Stop")

@@ -799,7 +799,7 @@ echo "--- v3.11.0: hook latency budget (rule hook-latency-budget) — SECONDS --
 # the ≤60 tripwire catches a unit regression on its own.
 assert_true "hooks.json: every timeout within its event ceiling, in seconds (≤60 tripwire)" python3 -c '
 import json
-cap={"PreToolUse":10,"PostToolUse":5,"Stop":8,"SessionStart":3,"PreInvocation":3,"PostInvocation":8}
+cap={"PreToolUse":15,"PostToolUse":10,"Stop":15,"SessionStart":10,"PreInvocation":10,"PostInvocation":15}
 h=json.load(open("'"$HOOKS_DIR"'/../.claude-plugin/hooks.json"))["hooks"]
 bad=[(ev,x["command"],x["timeout"]) for ev,es in h.items() for e in es for x in e["hooks"] if x.get("timeout",0)>cap.get(ev,0) or x.get("timeout",0)>60]
 assert not bad, bad

@@ -692,14 +692,13 @@ printf '%s\n' '{"step_index":3,"type":"PLANNER_RESPONSE","status":"DONE","conten
 PI_FINAL=$(run_adapter PostInvocation \
     "{\"conversationId\":\"c1\",\"workspacePaths\":[\"$LIFE_WS\"],\"transcriptPath\":\"$MOCK_TRANSCRIPT\"}" \
     doc-drift-check.sh)
-assert_true "PostInvocation: emits human-only metadata.user_markdown (systemMessage=='', no force_continue) at turn end" python3 -c '
+assert_true "PostInvocation: emits systemMessage without metadata map (avoids agy 1.4.12 ScrubInternalFields panic, no force_continue) at turn end" python3 -c '
 import json, sys
 d = json.loads(sys.argv[1])
 assert d.get("terminationBehavior", "") == "", f"unexpected terminationBehavior: {d}"
 sm = d["injectSteps"][0]["systemMessage"]
-assert sm["systemMessage"] == "", f"model systemMessage must be empty: {sm}"
-md = sm["metadata"]["user_markdown"]
-assert "SHIP GATE: pass" in md, md
+assert "metadata" not in sm, f"metadata map must be omitted for agy 1.4.12 compatibility: {sm}"
+assert "SHIP GATE: pass" in sm["systemMessage"], sm
 ' "$PI_FINAL"
 rm -f "$MOCK_TRANSCRIPT"
 

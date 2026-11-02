@@ -2,3 +2,5 @@
 .claude/metrics/
 .claude/signals/
 .claude/gstack-rendered/
+__pycache__/
+*.py[cod]

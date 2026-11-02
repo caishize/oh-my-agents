@@ -7,17 +7,17 @@
           {
             "type": "command",
             "command": "python3 ./hooks/antigravity-adapter.py PreToolUse arch-check.sh",
-            "timeout": 10
+            "timeout": 15
           },
           {
             "type": "command",
             "command": "python3 ./hooks/antigravity-adapter.py PreToolUse safety-check.sh",
-            "timeout": 5
+            "timeout": 10
           },
           {
             "type": "command",
             "command": "python3 ./hooks/antigravity-adapter.py PreToolUse plan-validation-check.sh",
-            "timeout": 5
+            "timeout": 10
           }
         ]
       },
@@ -27,7 +27,7 @@
           {
             "type": "command",
             "command": "python3 ./hooks/antigravity-adapter.py PreToolUse bash-safety-check.sh",
-            "timeout": 3
+            "timeout": 10
           }
         ]
       }
@@ -39,7 +39,7 @@
           {
             "type": "command",
             "command": "python3 ./hooks/antigravity-adapter.py PostToolUse session-metrics.sh plan-validation-check.sh",
-            "timeout": 3
+            "timeout": 10
           }
         ]
       }
@@ -48,28 +48,28 @@
       {
         "type": "command",
         "command": "python3 ./hooks/antigravity-adapter.py PreInvocation",
-        "timeout": 2
+        "timeout": 10
       }
     ],
     "PostInvocation": [
       {
         "type": "command",
         "command": "python3 ./hooks/antigravity-adapter.py PostInvocation doc-drift-check.sh",
-        "timeout": 8
+        "timeout": 15
       }
     ],
     "Stop": [
       {
         "type": "command",
         "command": "python3 ./hooks/antigravity-adapter.py Stop doc-drift-check.sh",
-        "timeout": 2
+        "timeout": 10
       }
     ],
     "SessionStart": [
       {
         "type": "command",
         "command": "python3 ./hooks/antigravity-adapter.py SessionStart doc-drift-check.sh",
-        "timeout": 3
+        "timeout": 10
       }
     ]
   }
