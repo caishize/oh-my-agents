@@ -74,12 +74,15 @@ echo ""
 echo "--- Manifests & Native Validation ---"
 
 assert_true "manifest: root plugin.json exists and is valid Antigravity schema" python3 -c '
-import json, sys
+import json, os, sys
 p = json.load(open(sys.argv[1]))
+repo_root = os.path.dirname(os.path.abspath(sys.argv[1]))
 allowed = {"name", "description", "version", "displayName", "logo", "suggestedPrompts", "disabled", "skills"}
 unknown = set(p.keys()) - allowed
 assert not unknown, f"unknown keys in plugin.json: {unknown}"
 assert p["name"] == "oh-my-agents"
+assert p.get("logo") == "assets/logo.svg" and os.path.isfile(os.path.join(repo_root, p["logo"]))
+assert isinstance(p.get("suggestedPrompts"), list) and 1 <= len(p["suggestedPrompts"]) <= 3
 ' "$REPO_ROOT/plugin.json"
 
 assert_true "manifest: root hooks.json uses Antigravity named-hook map and matches native + docs tools" python3 -c '
@@ -88,6 +91,8 @@ h = json.load(open(sys.argv[1]))
 assert "hooks" not in h, "root hooks.json must not use legacy top-level hooks key"
 spec = h["oh-my-agents"]
 assert isinstance(spec["SessionStart"], list) and "command" in spec["SessionStart"][0]
+assert isinstance(spec["PreInvocation"], list) and "command" in spec["PreInvocation"][0]
+assert isinstance(spec["PostInvocation"], list) and "command" in spec["PostInvocation"][0]
 assert isinstance(spec["Stop"], list) and "command" in spec["Stop"][0]
 expected_edit_matcher = "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content"
 pre_matchers = {g["matcher"] for g in spec["PreToolUse"]}
@@ -341,6 +346,59 @@ assert_pre_decision "plan-validation: multi_replace_file_content with range-scop
     "{\"conversationId\":\"c1\",\"workspacePaths\":[\"$PLAN_WS\"],\"toolCall\":{\"name\":\"multi_replace_file_content\",\"args\":{\"TargetFile\":\"docs/exec-plans/active/p.json\",\"ReplacementChunks\":[{\"StartLine\":5,\"EndLine\":12,\"TargetContent\":\"\\\"status\\\": \\\"pending\\\"\",\"ReplacementContent\":\"\\\"status\\\": \\\"done\\\"\"},{\"StartLine\":13,\"EndLine\":16,\"TargetContent\":\"\\\"status\\\": \\\"pending\\\"\",\"ReplacementContent\":\"\\\"status\\\": \\\"in-progress\\\"\"}]}}}" \
     plan-validation-check.sh
 
+# PostToolUse -> PreInvocation feedforward delivery (Antigravity CLI ignores reason on PreToolUse allow)
+cat << 'EOF' > "$PLAN_WS/docs/exec-plans/active/p-adv.json"
+{
+  "id": "plan-adv",
+  "status": "active",
+  "tasks": [
+    {
+      "id": "t-2",
+      "status": "in-progress"
+    }
+  ]
+}
+EOF
+run_adapter PostToolUse \
+    "{\"conversationId\":\"conv-plan-adv-1\",\"workspacePaths\":[\"$PLAN_WS\"],\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$PLAN_WS/docs/exec-plans/active/p-adv.json\",\"Content\":\"\"}}}" \
+    session-metrics.sh plan-validation-check.sh >/dev/null
+PRE_INV_1=$(run_adapter PreInvocation "{\"conversationId\":\"conv-plan-adv-1\",\"workspacePaths\":[\"$PLAN_WS\"]}")
+PRE_INV_2=$(run_adapter PreInvocation "{\"conversationId\":\"conv-plan-adv-1\",\"workspacePaths\":[\"$PLAN_WS\"]}")
+assert_true "plan-validation: PostToolUse queues guidance and PreInvocation delivers ephemeralMessage once" python3 -c '
+import json, sys
+first = json.loads(sys.argv[1])
+second = json.loads(sys.argv[2])
+msg = first["injectSteps"][0]["ephemeralMessage"]
+assert "Plan handoff checklist" in msg and "task t-2 [in-progress]: missing acceptance" in msg, msg
+assert first.get("terminationBehavior", "") == ""
+assert second == {}, f"expected empty second PreInvocation, got {second}"
+' "$PRE_INV_1" "$PRE_INV_2"
+
+run_adapter PostToolUse \
+    "{\"conversationId\":\"conv-plan-adv-2\",\"workspacePaths\":[\"$PLAN_WS\"],\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$PLAN_WS/docs/exec-plans/active/p-adv.json\",\"Content\":\"\"}}}" \
+    plan-validation-check.sh >/dev/null
+cat << 'EOF' > "$PLAN_WS/docs/exec-plans/active/p-adv.json"
+{
+  "id": "plan-adv",
+  "status": "active",
+  "tasks": [
+    {
+      "id": "t-2",
+      "status": "in-progress",
+      "acceptance": "pytest tests/test_two.py",
+      "context_files": ["src/two.py"],
+      "failing_tests": ["tests/test_two.py"]
+    }
+  ]
+}
+EOF
+run_adapter PostToolUse \
+    "{\"conversationId\":\"conv-plan-adv-2\",\"workspacePaths\":[\"$PLAN_WS\"],\"toolCall\":{\"name\":\"edit_file\",\"args\":{\"Path\":\"$PLAN_WS/docs/exec-plans/active/p-adv.json\",\"Target\":\"x\",\"Replacement\":\"y\"}}}" \
+    plan-validation-check.sh >/dev/null
+PRE_INV_CLEARED=$(run_adapter PreInvocation "{\"conversationId\":\"conv-plan-adv-2\",\"workspacePaths\":[\"$PLAN_WS\"]}")
+assert_true "plan-validation: fixing under-specified plan before PreInvocation clears queued guidance" \
+    bash -c "[ '$PRE_INV_CLEARED' = '{}' ]"
+
 rm -rf "$PLAN_WS"
 
 # =============================================
@@ -410,6 +468,57 @@ assert len(files) == 1
 lines = [json.loads(line) for line in open(files[0])]
 assert lines[-1]["file"].endswith(rel), lines[-1]
 ' "$WS1" "$WEIRD_REL"
+
+# Conversation artifactDirectoryPath support (brain/<conv-id> outside project workspacePaths)
+ART_DIR="$MW_BASE/brain/conv-art-1"
+mkdir -p "$ART_DIR/scratch"
+assert_pre_decision "artifactDirectoryPath: allows write_file inside brain dir while workspacePaths points to project" \
+    "allow" "" \
+    "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"$ART_DIR\",\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$ART_DIR/implementation_plan.md\",\"Content\":\"# Plan\\n\",\"Overwrite\":true}}}" \
+    arch-check.sh safety-check.sh plan-validation-check.sh
+
+assert_pre_decision "artifactDirectoryPath: skips project arch-check.sh on scratch files inside brain dir" \
+    "allow" "" \
+    "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"$ART_DIR\",\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$ART_DIR/src/types/scratch.ts\",\"Content\":\"import { Btn } from '../ui/btn';\\n\"}}}" \
+    arch-check.sh safety-check.sh
+
+SYNTH_ART_AWS_PREFIX="AKIA"
+SYNTH_ART_AWS_SUFFIX="ARTIFACTTEST9999"
+SYNTH_ART_AWS_KEY="${SYNTH_ART_AWS_PREFIX}${SYNTH_ART_AWS_SUFFIX}"
+ART_SECRET_OUT=$(printf '%s' "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"$ART_DIR\",\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$ART_DIR/scratch/debug.py\",\"Content\":\"KEY = '${SYNTH_ART_AWS_KEY}'\\n\"}}}" \
+    | python3 "$ADAPTER" PreToolUse safety-check.sh 2>&1)
+assert_true "artifactDirectoryPath: safety-check.sh still blocks and redacts secrets in artifact/scratch files" python3 -c '
+import json, sys
+out, marker = sys.argv[1], sys.argv[2]
+assert marker not in out, f"leaked artifact secret marker in {out}"
+d = json.loads(out)
+assert d["decision"] == "deny" and "AWS Access Key" in d["reason"], d
+' "$ART_SECRET_OUT" "$SYNTH_ART_AWS_KEY"
+
+assert_pre_decision "artifactDirectoryPath: run_command Cwd inside artifactDirectoryPath is allowed when safe" \
+    "allow" "" \
+    "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"$ART_DIR\",\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"python3 -V\",\"Cwd\":\"$ART_DIR\"}}}" \
+    bash-safety-check.sh
+
+assert_pre_decision "artifactDirectoryPath: ../ traversal escaping brain dir is denied fail-closed" \
+    "deny" "outside approved workspacePaths" \
+    "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"$ART_DIR\",\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$ART_DIR/../other-conv/plan.md\",\"Content\":\"x\"}}}" \
+    arch-check.sh safety-check.sh
+
+assert_pre_decision "artifactDirectoryPath: root '/' is rejected fail-closed" \
+    "deny" "artifactDirectoryPath" \
+    "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"/\",\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"/tmp/x.md\",\"Content\":\"x\"}}}" \
+    arch-check.sh
+
+ART_POST_OUT=$(run_adapter PostToolUse \
+    "{\"conversationId\":\"c-art\",\"workspacePaths\":[\"$WS0\"],\"artifactDirectoryPath\":\"$ART_DIR\",\"toolCall\":{\"name\":\"write_file\",\"args\":{\"Path\":\"$ART_DIR/implementation_plan.md\",\"Content\":\"# Plan\\n\"}}}" \
+    session-metrics.sh plan-validation-check.sh)
+assert_true "artifactDirectoryPath: PostToolUse skips project metrics ledger for artifact files" python3 -c '
+import glob, json, sys
+ws0, out = sys.argv[1], sys.argv[2]
+assert json.loads(out) == {}
+assert glob.glob(ws0 + "/.claude/metrics/session-*.jsonl") == []
+' "$WS0" "$ART_POST_OUT"
 
 rm -rf "$MW_BASE"
 
@@ -567,6 +676,33 @@ assert "Gate state:" in msg and "/harness-review" in msg, msg
 ' "$SS_GREEN"
 
 printf '{"schema_version":1,"decision":"APPROVE","commit":"%s"}' "$HEAD_SHA" > "$LIFE_WS/.claude/signals/review-latest.json"
+MOCK_TRANSCRIPT="$LIFE_WS/.claude/mock-transcript.jsonl"
+printf '%s\n' '{"step_index":1,"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[{"name":"read_file"}]}' > "$MOCK_TRANSCRIPT"
+PI_MID_CALL=$(run_adapter PostInvocation \
+    "{\"conversationId\":\"c1\",\"workspacePaths\":[\"$LIFE_WS\"],\"transcriptPath\":\"$MOCK_TRANSCRIPT\"}" \
+    doc-drift-check.sh)
+printf '%s\n' '{"step_index":2,"type":"GENERIC","status":"DONE","content":"file body"}' >> "$MOCK_TRANSCRIPT"
+PI_MID_GENERIC=$(run_adapter PostInvocation \
+    "{\"conversationId\":\"c1\",\"workspacePaths\":[\"$LIFE_WS\"],\"transcriptPath\":\"$MOCK_TRANSCRIPT\"}" \
+    doc-drift-check.sh)
+assert_true "PostInvocation: skips doc-drift-check.sh on intermediate tool-calling steps" \
+    bash -c "[ '$PI_MID_CALL' = '{}' ] && [ '$PI_MID_GENERIC' = '{}' ]"
+
+printf '%s\n' '{"step_index":3,"type":"PLANNER_RESPONSE","status":"DONE","content":"Turn complete."}' >> "$MOCK_TRANSCRIPT"
+PI_FINAL=$(run_adapter PostInvocation \
+    "{\"conversationId\":\"c1\",\"workspacePaths\":[\"$LIFE_WS\"],\"transcriptPath\":\"$MOCK_TRANSCRIPT\"}" \
+    doc-drift-check.sh)
+assert_true "PostInvocation: emits human-only metadata.user_markdown (systemMessage=='', no force_continue) at turn end" python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+assert d.get("terminationBehavior", "") == "", f"unexpected terminationBehavior: {d}"
+sm = d["injectSteps"][0]["systemMessage"]
+assert sm["systemMessage"] == "", f"model systemMessage must be empty: {sm}"
+md = sm["metadata"]["user_markdown"]
+assert "SHIP GATE: pass" in md, md
+' "$PI_FINAL"
+rm -f "$MOCK_TRANSCRIPT"
+
 STOP_OUT=$(run_adapter Stop \
     "{\"conversationId\":\"c1\",\"workspacePaths\":[\"$LIFE_WS\"],\"terminationReason\":\"NO_TOOL_CALL\",\"fullyIdle\":true}" \
     doc-drift-check.sh)
@@ -634,6 +770,7 @@ WS_A="$ENV_TEST_BASE/ws alpha"
 WS_B="$ENV_TEST_BASE/ws beta"
 mkdir -p "$RO_PLUGIN" "$FAKE_HOME2/.claude" "$UNREL_CWD" "$WRONG_PROJ" "$WS_A/packages/sub mod/src/service" "$WS_B/src/service"
 cp -r "$REPO_ROOT/hooks" "$REPO_ROOT/templates" "$REPO_ROOT/plugin.json" "$REPO_ROOT/hooks.json" "$RO_PLUGIN/"
+rm -rf "$RO_PLUGIN/hooks/__pycache__"
 git init -q "$WS_A"
 git init -q "$WS_B"
 

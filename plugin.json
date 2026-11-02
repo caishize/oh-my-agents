@@ -3,12 +3,11 @@
   "displayName": "oh-my-agents",
   "version": "3.11.0",
   "description": "Lean harness-engineering plugin for Antigravity CLI and Claude Code: four pillars (architecture, documentation, observability, entropy) enforced as repo-local mechanical constraints with versioned verify/review Gate API signals.",
+  "logo": "assets/logo.svg",
   "skills": "./skills",
   "suggestedPrompts": [
     "/harness-init",
     "/lifecycle status",
-    "/spec-to-task",
-    "/verify",
-    "/harness-review"
+    "/verify"
   ]
 }

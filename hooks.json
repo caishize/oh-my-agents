@@ -38,17 +38,31 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ./hooks/antigravity-adapter.py PostToolUse session-metrics.sh",
-            "timeout": 2
+            "command": "python3 ./hooks/antigravity-adapter.py PostToolUse session-metrics.sh plan-validation-check.sh",
+            "timeout": 3
           }
         ]
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/antigravity-adapter.py PreInvocation",
+        "timeout": 2
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/antigravity-adapter.py PostInvocation doc-drift-check.sh",
+        "timeout": 8
       }
     ],
     "Stop": [
       {
         "type": "command",
         "command": "python3 ./hooks/antigravity-adapter.py Stop doc-drift-check.sh",
-        "timeout": 8
+        "timeout": 2
       }
     ],
     "SessionStart": [
