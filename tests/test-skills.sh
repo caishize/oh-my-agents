@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
-python3 -m unittest test_codex.PackageTests -v
+python3 -m unittest test_codex.PackageTests test_history_lock -v
