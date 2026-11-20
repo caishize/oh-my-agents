@@ -811,10 +811,44 @@ append_history_record() {
     fi
     line=$(printf '%s' "$json" | tr -d '\n')
     if command -v flock >/dev/null 2>&1; then
-        ( flock -w 2 200 && printf '%s\n' "$line" >> "$file" ) 200>"$file.lock" 2>/dev/null \
-            || printf '%s\n' "$line" >> "$file" 2>/dev/null || { echo "append_history_record: write to $file failed" >&2; return 1; }
+        # Open the sidecar without truncation and never unlink it: concurrent writers
+        # (including the Python backend) must lock the same inode.
+        if ( flock -w 2 200 && printf '%s\n' "$line" >> "$file" ) 2>/dev/null 200>>"$file.lock"; then
+            return 0
+        else
+            echo "append_history_record: could not lock or append to $file" >&2
+            return 1
+        fi
+    elif command -v python3 >/dev/null 2>&1; then
+        # macOS does not ship the flock CLI; fcntl.flock takes the same advisory lock.
+        if ! printf '%s\n' "$line" | python3 -c '
+import errno
+import fcntl
+import sys
+import time
+
+path = sys.argv[1]
+data = sys.stdin.buffer.read()
+with open(path + ".lock", "ab") as lock:
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError as exc:
+            remaining = deadline - time.monotonic()
+            if exc.errno not in (errno.EACCES, errno.EAGAIN) or remaining <= 0:
+                raise
+            time.sleep(min(0.05, remaining))
+    with open(path, "ab") as ledger:
+        ledger.write(data)
+' "$file" 2>/dev/null; then
+            echo "append_history_record: could not lock or append to $file" >&2
+            return 1
+        fi
     else
-        printf '%s\n' "$line" >> "$file" 2>/dev/null || { echo "append_history_record: write to $file failed" >&2; return 1; }
+        echo "append_history_record: no lock backend available (flock or Python 3)" >&2
+        return 1
     fi
     return 0
 }
