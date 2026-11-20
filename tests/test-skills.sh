@@ -314,6 +314,8 @@ else
     FAIL=$((FAIL + 1)); echo "FAIL: append_history_record refuses invalid JSON"
 fi
 rm -rf "$AHR_TMP"
+assert_true "history lock is required across backends" \
+    'python3 "$SCRIPT_DIR/test_history_lock.py"'
 
 # Slug identity: gstack-slug prints `SLUG=…` + `BRANCH=…` — only the SLUG= line is the slug,
 # and GSTACK_PROJECTS resolves under $GSTACK_HOME/projects/<slug> ({SLUG} templated).
